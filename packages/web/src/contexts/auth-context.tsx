@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Call the API signup endpoint which creates the Supabase user + profile
       await apiClient("/auth/signup", {
         method: "POST",
-        body: JSON.stringify({ email, password, displayName }),
+        body: JSON.stringify({ email, password, display_name: displayName }),
       });
 
       // Auto sign in after signup

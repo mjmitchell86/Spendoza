@@ -4,6 +4,7 @@ import { uploadBankStatementSchema } from "@spendoza/shared";
 import { createSupabaseClient } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { computeFileHash } from "../services/bank-statement.service";
+import { processBankStatement } from "../services/ai-pipeline.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -80,7 +81,10 @@ router.post(
       return res.status(400).json({ error: error.message });
     }
 
-    // TODO: Trigger async AI processing (Task 18)
+    // Trigger async AI processing (fire-and-forget)
+    processBankStatement(data.id).catch((err) =>
+      console.error("AI pipeline failed for statement", data.id, err)
+    );
 
     return res.status(201).json(data);
   }
@@ -151,7 +155,10 @@ router.post("/:id/reprocess", async (req, res: Response) => {
     return res.status(404).json({ error: "Statement not found" });
   }
 
-  // TODO: Trigger async AI processing (Task 18)
+  // Trigger async AI reprocessing (fire-and-forget)
+  processBankStatement(data.id).catch((err) =>
+    console.error("AI pipeline reprocess failed for statement", data.id, err)
+  );
 
   return res.status(200).json({ message: "Reprocessing started" });
 });

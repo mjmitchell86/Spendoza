@@ -102,7 +102,7 @@ export async function processBankStatement(
         .select("id, description, amount, category_id")
         .eq("user_id", user_id),
       supabaseAdmin
-        .from("income")
+        .from("income_entries")
         .select("id, source_name, amount")
         .eq("user_id", user_id),
     ]);

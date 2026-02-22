@@ -91,12 +91,12 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   // Check report_requests count for this month
   const { data: requestRecord } = await supabaseAdmin
     .from("report_requests")
-    .select("count")
+    .select("request_count")
     .eq("user_id", user.id)
-    .eq("month", currentMonth)
+    .eq("report_month", currentMonth)
     .maybeSingle();
 
-  const currentCount = requestRecord?.count ?? 0;
+  const currentCount = requestRecord?.request_count ?? 0;
 
   if (currentCount >= 2) {
     return res.status(429).json({
@@ -108,10 +108,10 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   await supabaseAdmin.from("report_requests").upsert(
     {
       user_id: user.id,
-      month: currentMonth,
-      count: currentCount + 1,
+      report_month: currentMonth,
+      request_count: currentCount + 1,
     },
-    { onConflict: "user_id,month" }
+    { onConflict: "user_id,report_month" }
   );
 
   // Generate the report for the current month

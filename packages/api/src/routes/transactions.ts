@@ -143,7 +143,16 @@ async function validateAttribution(
 
   // 4. Requester must be uploader of the statement OR head of household
   const isUploader = statement.user_id === requesterId;
-  const isHead = requesterProfile.is_head === true;
+
+  let isHead = false;
+  if (!isUploader && requesterProfile.household_id) {
+    const { data: household } = await supabase
+      .from("households")
+      .select("head_of_household_id")
+      .eq("id", requesterProfile.household_id)
+      .single();
+    isHead = household?.head_of_household_id === requesterId;
+  }
 
   if (!isUploader && !isHead) {
     return { error: "Only the statement uploader or head of household can attribute transactions" };
