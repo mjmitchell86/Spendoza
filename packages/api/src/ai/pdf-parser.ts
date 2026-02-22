@@ -1,6 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
-// @ts-ignore - pdf-parse types don't export default correctly
-import pdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 // ---------------------------------------------------------------------------
@@ -21,7 +20,8 @@ export interface ParsedTransaction {
  * Extracts raw text from a PDF buffer using pdf-parse.
  */
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
-  const result = await pdfParse(pdfBuffer);
+  const parser = new PDFParse({ data: pdfBuffer });
+  const result = await parser.getText();
   return result.text;
 }
 
