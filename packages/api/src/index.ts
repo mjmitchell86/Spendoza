@@ -8,6 +8,7 @@ import incomeRouter from "./routes/income";
 import expensesRouter from "./routes/expenses";
 import bankStatementsRouter from "./routes/bank-statements";
 import transactionsRouter from "./routes/transactions";
+import householdsRouter from "./routes/households";
 import { requireAuth } from "./middleware/auth";
 
 const app: Express = express();
@@ -28,6 +29,7 @@ app.use("/api/income", requireAuth, incomeRouter);
 app.use("/api/expenses", requireAuth, expensesRouter);
 app.use("/api/bank-statements", requireAuth, bankStatementsRouter);
 app.use("/api/transactions", requireAuth, transactionsRouter);
+app.use("/api/households", requireAuth, householdsRouter);
 
 app.listen(PORT, () => {
   console.log(`Spendoza API running on port ${PORT}`);
