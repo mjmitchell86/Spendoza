@@ -1,0 +1,92 @@
+import type { BankStatement, StatementStatus } from "@spendoza/shared";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+const STATUS_CONFIG: Record<
+  StatementStatus,
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+> = {
+  uploaded: { label: "Uploaded", variant: "outline" },
+  processing: { label: "Processing", variant: "default" },
+  parsed: { label: "Parsed", variant: "secondary" },
+  failed: { label: "Failed", variant: "destructive" },
+};
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+  });
+}
+
+interface StatementListProps {
+  statements: BankStatement[];
+  onSelect: (statement: BankStatement) => void;
+  selectedId: string | null;
+}
+
+export function StatementList({
+  statements,
+  onSelect,
+  selectedId,
+}: StatementListProps) {
+  if (statements.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-muted-foreground">No bank statements uploaded.</p>
+        <p className="text-sm text-muted-foreground">
+          Upload your first statement to begin.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Bank</TableHead>
+          <TableHead>Month</TableHead>
+          <TableHead>Account</TableHead>
+          <TableHead>Status</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {statements.map((stmt) => {
+          const status = STATUS_CONFIG[stmt.status];
+          return (
+            <TableRow
+              key={stmt.id}
+              className={`cursor-pointer ${selectedId === stmt.id ? "bg-muted" : ""}`}
+              onClick={() => onSelect(stmt)}
+            >
+              <TableCell className="font-medium">
+                {stmt.bank_name ?? "Unknown Bank"}
+              </TableCell>
+              <TableCell>{formatDate(stmt.statement_month)}</TableCell>
+              <TableCell>
+                {stmt.is_shared_account ? (
+                  <Badge variant="outline" className="text-xs">
+                    {stmt.account_label ?? "Shared"}
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">Personal</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <Badge variant={status.variant}>{status.label}</Badge>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}

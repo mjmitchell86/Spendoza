@@ -5,6 +5,11 @@ import { AuthGuard } from "@/components/auth-guard";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/pages/login";
 import { SignupPage } from "@/pages/signup";
+import { IncomePage } from "@/pages/income";
+import { ExpensesPage } from "@/pages/expenses";
+import { CategoriesPage } from "@/pages/categories";
+import { BankStatementsPage } from "@/pages/bank-statements";
+import { HouseholdPage } from "@/pages/household";
 
 const queryClient = new QueryClient();
 
@@ -22,26 +27,14 @@ function App() {
                   path="/dashboard"
                   element={<div>Dashboard Coming Soon</div>}
                 />
-                <Route
-                  path="/income"
-                  element={<div>Income Coming Soon</div>}
-                />
-                <Route
-                  path="/expenses"
-                  element={<div>Expenses Coming Soon</div>}
-                />
-                <Route
-                  path="/categories"
-                  element={<div>Categories Coming Soon</div>}
-                />
+                <Route path="/income" element={<IncomePage />} />
+                <Route path="/expenses" element={<ExpensesPage />} />
+                <Route path="/categories" element={<CategoriesPage />} />
                 <Route
                   path="/bank-statements"
-                  element={<div>Bank Statements Coming Soon</div>}
+                  element={<BankStatementsPage />}
                 />
-                <Route
-                  path="/household"
-                  element={<div>Household Coming Soon</div>}
-                />
+                <Route path="/household" element={<HouseholdPage />} />
               </Route>
               <Route
                 path="/onboarding"
