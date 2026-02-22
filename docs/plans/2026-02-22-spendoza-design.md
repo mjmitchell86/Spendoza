@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-22
 **Status:** Approved
-**Version:** 1.0
+**Version:** 1.1
 
 ---
 
@@ -156,7 +156,8 @@ Extends Supabase `auth.users`.
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid, PK | |
-| user_id | uuid | FK -> profiles |
+| user_id | uuid | FK -> profiles; the user who created/owns this entry |
+| attributed_to_user_id | uuid, nullable | FK -> profiles; if set, this income belongs to a different household member |
 | source_name | text | e.g., "Employer - Acme Corp" |
 | amount | numeric | |
 | frequency | enum | 'one_time', 'weekly', 'biweekly', 'monthly', 'annually' |
@@ -166,6 +167,8 @@ Extends Supabase `auth.users`.
 | bank_statement_id | uuid, nullable | FK -> bank_statements |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
+
+**Income attribution:** When a user identifies income on a shared bank statement that belongs to another household member, they set `attributed_to_user_id`. That income then appears on the attributed member's personal dashboard and is counted toward their income totals. The attributed member can also see and adjust the entry.
 
 ### expenses
 
@@ -191,16 +194,20 @@ Extends Supabase `auth.users`.
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid, PK | |
-| user_id | uuid | FK -> profiles |
+| user_id | uuid | FK -> profiles; the user who uploaded |
 | file_path | text | Supabase Storage path |
 | file_hash | text | SHA-256 for deduplication |
 | bank_name | text, nullable | hybrid parsing hint |
 | statement_month | date | first of the month |
+| is_shared_account | boolean | default false; true = joint/shared bank account |
+| account_label | text, nullable | e.g., "Joint Checking", "Household Savings" |
 | status | enum | 'uploaded', 'processing', 'parsed', 'failed' |
 | parsed_data | jsonb, nullable | raw extraction results |
 | created_at | timestamptz | |
 
 **Deduplication:** `UNIQUE(user_id, file_hash)` — same file uploaded twice is rejected before processing.
+
+**Shared accounts:** When `is_shared_account` is true, the uploader reviews parsed transactions and attributes each to the appropriate household member (or leaves as shared/household-level). Only users in the same household can be attributed.
 
 ### transactions
 
@@ -208,7 +215,8 @@ Extends Supabase `auth.users`.
 |---|---|---|
 | id | uuid, PK | |
 | bank_statement_id | uuid | FK -> bank_statements |
-| user_id | uuid | FK -> profiles |
+| user_id | uuid | FK -> profiles; the uploading user |
+| attributed_to_user_id | uuid, nullable | FK -> profiles; if set, this transaction belongs to a different household member |
 | date | date | |
 | description | text | |
 | amount | numeric | |
@@ -217,6 +225,8 @@ Extends Supabase `auth.users`.
 | matched_expense_id | uuid, nullable | FK -> expenses |
 | matched_income_id | uuid, nullable | FK -> income_entries |
 | created_at | timestamptz | |
+
+**Attribution:** For shared bank account statements, each transaction can be attributed to a specific household member via `attributed_to_user_id`. When null on a shared statement, the transaction is treated as a household-level expense. When attributed, it appears on that member's personal dashboard and report. Only household members can be attribution targets.
 
 ### reports
 
@@ -302,7 +312,7 @@ DELETE /api/expenses/:id
 ### Bank Statements
 
 ```
-POST   /api/bank-statements/upload
+POST   /api/bank-statements/upload          # Accepts is_shared_account flag + account_label
 GET    /api/bank-statements
 GET    /api/bank-statements/:id
 POST   /api/bank-statements/:id/reprocess
@@ -313,6 +323,8 @@ POST   /api/bank-statements/:id/reprocess
 ```
 GET    /api/transactions
 PUT    /api/transactions/:id
+PUT    /api/transactions/:id/attribute    # Assign transaction to a household member
+POST   /api/transactions/bulk-attribute   # Bulk assign transactions to household members
 ```
 
 ### Reports & Dashboards
@@ -331,12 +343,13 @@ GET    /api/dashboard/household
 
 ### Hybrid Parsing Strategy
 
-1. **Upload:** PDF -> Supabase Storage, SHA-256 hash computed, checked against existing hashes for user
+1. **Upload:** PDF -> Supabase Storage, SHA-256 hash computed, checked against existing hashes for user. User specifies if this is a shared/joint bank account.
 2. **Extract:** LangChain PDF loader extracts text. If bank is identified (user selects or auto-detected), use bank-specific prompt template for better accuracy
 3. **Parse:** OpenAI structured output extracts transactions (date, description, amount, credit/debit)
 4. **Classify:** Each transaction gets an AI-suggested category from user's existing categories (or suggests new ones)
 5. **Match:** Transactions matched to existing expenses/income by description similarity + amount proximity
 6. **Adjust:** If a matched recurring expense has a different amount, flag it and optionally update the stored expense amount
+7. **Attribute (shared accounts only):** For shared bank account statements, the user reviews transactions and attributes each to the appropriate household member. AI may suggest attribution based on matched income/expense patterns from household members.
 
 ### AI-Powered Categorization
 
@@ -358,9 +371,9 @@ GET    /api/dashboard/household
 ### Onboarding Wizard
 
 1. **Welcome screen** — brief app explanation
-2. **Upload bank statement(s)** — drag-and-drop or file picker, optional bank name selection
+2. **Upload bank statement(s)** — drag-and-drop or file picker, optional bank name selection, toggle for shared/joint account
 3. **AI processing** — loading state while transactions are extracted
-4. **Review transactions** — user confirms/adjusts categories and identifies income sources
+4. **Review transactions** — user confirms/adjusts categories and identifies income sources. For shared accounts: attribute transactions to household members (if already in a household) or flag for later attribution
 5. **Setup recurring expenses** — mark which expenses are recurring vs. one-time
 6. **Optional: Household** — create or join a household (can skip)
 7. **Dashboard** — loads with initial data from processed statement
@@ -520,6 +533,9 @@ GET    /api/dashboard/household
 5. **Head of household:** The user who created the household. They can invite/remove members. If they leave, the household is dissolved (or ownership transfers — to be decided in v2)
 6. **Income sharing modes:** all (full income reported), none (no income shared), partial (fixed amount shared)
 7. **Expense sharing modes:** all (all expenses shared), none (no expenses shared), category (only expenses in categories marked `is_shared_with_household`)
+8. **Shared bank accounts:** A user can mark a bank statement as belonging to a shared/joint account. Transactions from shared statements can be attributed to any household member. Unattributed transactions on shared statements are treated as household-level expenses.
+9. **Income attribution:** A user can specify that an income entry (manual or parsed) belongs to another household member. The attributed member sees it on their dashboard. Only members of the same household can be attribution targets. The attributed member can view and adjust the entry.
+10. **Transaction attribution:** Only the uploader of a shared bank statement or the head of household can attribute transactions from that statement to household members.
 
 ---
 
