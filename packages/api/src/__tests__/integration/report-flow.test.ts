@@ -292,7 +292,7 @@ describe("Report Flow: Generate -> Verify -> Rate Limit -> Cache", () => {
         selectMaybeSingle: { data: sampleReport, error: null },
       },
       report_requests: {
-        selectMaybeSingle: { data: { count: 0 }, error: null },
+        selectMaybeSingle: { data: { request_count: 0 }, error: null },
         upsertResult: { data: null, error: null },
       },
       profiles: {
@@ -359,7 +359,7 @@ describe("Report Flow: Generate -> Verify -> Rate Limit -> Cache", () => {
         selectMaybeSingle: { data: sampleReport, error: null },
       },
       report_requests: {
-        selectMaybeSingle: { data: { count: 1 }, error: null },
+        selectMaybeSingle: { data: { request_count: 1 }, error: null },
         upsertResult: { data: null, error: null },
       },
     };
@@ -383,7 +383,7 @@ describe("Report Flow: Generate -> Verify -> Rate Limit -> Cache", () => {
 
     adminResults = {
       report_requests: {
-        selectMaybeSingle: { data: { count: 2 }, error: null },
+        selectMaybeSingle: { data: { request_count: 2 }, error: null },
       },
     };
 

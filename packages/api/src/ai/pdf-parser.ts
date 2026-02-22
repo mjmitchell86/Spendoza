@@ -1,4 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
+// @ts-ignore - pdf-parse types don't export default correctly
 import pdfParse from "pdf-parse";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 

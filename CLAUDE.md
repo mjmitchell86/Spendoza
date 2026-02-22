@@ -41,6 +41,12 @@ cd packages/api && bun run dev    # Start API server only
 cd packages/web && bun run dev    # Start web frontend only
 ```
 
+## Git Workflow
+
+- **Always work on a feature branch**, never commit directly to `main` or `test`.
+- After completing changes, **push the branch to GitHub** and **create a PR against the `test` branch**.
+- Use `gh pr create --base test` to target the test branch.
+
 ## Conventions
 
 - **Shared Zod schemas** live in `packages/shared` and are imported by both `api` and `web`.

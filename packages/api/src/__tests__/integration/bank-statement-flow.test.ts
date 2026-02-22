@@ -315,6 +315,31 @@ mock.module("@supabase/supabase-js", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mock pdf-parse and AI modules (transitively imported by bank-statements route)
+// ---------------------------------------------------------------------------
+mock.module("pdf-parse", () => ({
+  default: mock(() => Promise.resolve({ text: "mocked pdf text" })),
+}));
+
+mock.module("@langchain/openai", () => ({
+  ChatOpenAI: class MockChatOpenAI {
+    constructor(_opts?: any) {}
+    invoke = mock(() => Promise.resolve({ content: '{"transactions":[]}' }));
+  },
+}));
+
+mock.module("@langchain/core/messages", () => ({
+  SystemMessage: class {
+    content: string;
+    constructor(c: string) { this.content = c; }
+  },
+  HumanMessage: class {
+    content: string;
+    constructor(c: string) { this.content = c; }
+  },
+}));
+
+// ---------------------------------------------------------------------------
 // Mock multer to inject a fake file
 // ---------------------------------------------------------------------------
 const fakePdfBuffer = Buffer.from("%PDF-1.4 fake bank statement content");
