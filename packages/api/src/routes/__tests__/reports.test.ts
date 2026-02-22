@@ -307,7 +307,7 @@ beforeEach(() => {
       selectMaybeSingle: { data: sampleReport, error: null },
     },
     report_requests: {
-      selectMaybeSingle: { data: { count: 0 }, error: null },
+      selectMaybeSingle: { data: { request_count: 0 }, error: null },
       upsertResult: { data: null, error: null },
     },
     profiles: {
@@ -431,7 +431,7 @@ describe("POST /api/reports/generate", () => {
 
   it("returns 200 with generated report", async () => {
     adminResults.report_requests.selectMaybeSingle = {
-      data: { count: 0 },
+      data: { request_count: 0 },
       error: null,
     };
 

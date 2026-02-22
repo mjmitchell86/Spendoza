@@ -8,7 +8,7 @@
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'no lint configured yet'",
-    "test": "bun test"
+    "test": "bash run-tests.sh"
   },
   "dependencies": {
     "@langchain/community": "^0.3",
