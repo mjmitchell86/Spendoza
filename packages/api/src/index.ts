@@ -6,6 +6,7 @@ import profileRouter from "./routes/profile";
 import categoriesRouter from "./routes/categories";
 import incomeRouter from "./routes/income";
 import expensesRouter from "./routes/expenses";
+import bankStatementsRouter from "./routes/bank-statements";
 import { requireAuth } from "./middleware/auth";
 
 const app: Express = express();
@@ -24,6 +25,7 @@ app.use("/api/profile", requireAuth, profileRouter);
 app.use("/api/categories", requireAuth, categoriesRouter);
 app.use("/api/income", requireAuth, incomeRouter);
 app.use("/api/expenses", requireAuth, expensesRouter);
+app.use("/api/bank-statements", requireAuth, bankStatementsRouter);
 
 app.listen(PORT, () => {
   console.log(`Spendoza API running on port ${PORT}`);
