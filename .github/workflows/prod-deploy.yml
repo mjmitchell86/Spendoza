@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
 jobs:
-  deploy:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -11,10 +11,31 @@ jobs:
       - run: bun install
       - run: bun run typecheck
       - run: bun run test
-      - name: Deploy to Vercel (production)
+
+  deploy-api:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy API to Vercel (production)
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_PROD }}
+          vercel-project-id: ${{ secrets.VERCEL_API_PROJECT_ID_PROD }}
           vercel-args: '--prod'
+          working-directory: packages/api
+
+  deploy-web:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Web to Vercel (production)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_WEB_PROJECT_ID_PROD }}
+          vercel-args: '--prod'
+          working-directory: packages/web

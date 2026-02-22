@@ -451,7 +451,7 @@ describe("POST /api/reports/generate", () => {
 
   it("returns 429 when at monthly limit", async () => {
     adminResults.report_requests.selectMaybeSingle = {
-      data: { count: 2 },
+      data: { request_count: 2 },
       error: null,
     };
 
