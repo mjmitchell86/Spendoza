@@ -24,7 +24,6 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_API_PROJECT_ID_PROD }}
           vercel-args: '--prod'
-          working-directory: packages/api
 
   deploy-web:
     needs: check
@@ -38,4 +37,3 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_WEB_PROJECT_ID_PROD }}
           vercel-args: '--prod'
-          working-directory: packages/web
