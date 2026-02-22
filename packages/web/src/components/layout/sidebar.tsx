@@ -6,6 +6,7 @@ import {
   Tags,
   FileText,
   Users,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ const navItems = [
   { to: "/categories", label: "Categories", icon: Tags },
   { to: "/bank-statements", label: "Bank Statements", icon: FileText },
   { to: "/household", label: "Household", icon: Users },
+  { to: "/household-dashboard", label: "Household Dashboard", icon: BarChart3 },
 ];
 
 interface SidebarProps {
