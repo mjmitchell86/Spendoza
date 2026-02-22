@@ -2,6 +2,8 @@ import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import authRouter from "./routes/auth";
+import profileRouter from "./routes/profile";
+import { requireAuth } from "./middleware/auth";
 
 const app: Express = express();
 const PORT = process.env.PORT || 3001;
@@ -15,6 +17,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/profile", requireAuth, profileRouter);
 
 app.listen(PORT, () => {
   console.log(`Spendoza API running on port ${PORT}`);
