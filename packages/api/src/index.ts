@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import authRouter from "./routes/auth";
 import profileRouter from "./routes/profile";
+import categoriesRouter from "./routes/categories";
 import { requireAuth } from "./middleware/auth";
 
 const app: Express = express();
@@ -18,6 +19,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/profile", requireAuth, profileRouter);
+app.use("/api/categories", requireAuth, categoriesRouter);
 
 app.listen(PORT, () => {
   console.log(`Spendoza API running on port ${PORT}`);
