@@ -140,7 +140,7 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
 
   const parsedTransactions = await withTimeout(
     extractTransactions(pdfText, statement.bank_name ?? undefined),
-    50_000,
+    110_000,
     "OpenAI transaction extraction"
   );
 
@@ -205,7 +205,7 @@ async function stepClassifyTransactions(statementId: string): Promise<void> {
   } else {
     classifiedTransactions = await withTimeout(
       classifyTransactions(rawTransactions, categoryNames),
-      50_000,
+      110_000,
       "OpenAI transaction classification"
     );
   }
