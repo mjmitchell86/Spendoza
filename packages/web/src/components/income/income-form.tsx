@@ -81,7 +81,7 @@ export function IncomeForm({
       frequency,
       effective_date: effectiveDate,
       end_date: endDate || null,
-      attributed_to_user_id: attributedToUserId || null,
+      attributed_to_user_id: attributedToUserId && attributedToUserId !== "none" ? attributedToUserId : null,
     };
 
     try {
@@ -198,7 +198,7 @@ export function IncomeForm({
                   <SelectValue placeholder="Select member" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {householdMembers.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.display_name}

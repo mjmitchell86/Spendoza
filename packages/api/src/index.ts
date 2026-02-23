@@ -56,6 +56,7 @@ app.use("/api/expenses", requireAuth, expensesRouter);
 app.use("/api/bank-statements", requireAuth, bankStatementsRouter);
 app.use("/api/transactions", requireAuth, transactionsRouter);
 app.use("/api/households", requireAuth, householdsRouter);
+app.use("/api/household", requireAuth, householdsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/internal", internalRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
