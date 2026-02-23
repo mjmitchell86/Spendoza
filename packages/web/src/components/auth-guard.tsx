@@ -8,14 +8,14 @@ export function AuthGuard() {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
 
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(
     null
   );
 
   useEffect(() => {
     if (!user) {
-      setProfileLoading(false);
+      setInitialLoading(false);
       return;
     }
 
@@ -34,7 +34,7 @@ export function AuthGuard() {
         }
       } finally {
         if (!cancelled) {
-          setProfileLoading(false);
+          setInitialLoading(false);
         }
       }
     }
@@ -44,10 +44,10 @@ export function AuthGuard() {
     return () => {
       cancelled = true;
     };
-  }, [user, location.pathname]);
+  }, [user]);
 
   // Show spinner while auth or profile is loading
-  if (authLoading || (user && profileLoading)) {
+  if (authLoading || (user && initialLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="size-8 animate-spin text-muted-foreground" />
