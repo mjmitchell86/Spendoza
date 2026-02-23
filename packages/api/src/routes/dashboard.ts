@@ -5,16 +5,40 @@ import type { AuthenticatedRequest } from "../middleware/auth";
 const router = Router();
 
 // ---------------------------------------------------------------------------
-// Helper: compute dashboard data from transactions when no report exists
+// Helper: derive date range for a month string (YYYY-MM-01)
 // ---------------------------------------------------------------------------
-async function computeFromTransactions(userId: string, month: string) {
-  // month is YYYY-MM-01, derive range
+function monthRange(month: string) {
   const startDate = month.slice(0, 7) + "-01";
   const endYear = parseInt(month.slice(0, 4));
   const endMonth = parseInt(month.slice(5, 7));
   const nextMonth = endMonth === 12
     ? `${endYear + 1}-01-01`
     : `${endYear}-${String(endMonth + 1).padStart(2, "0")}-01`;
+  return { startDate, nextMonth };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: find the most recent month that has transactions for a user
+// ---------------------------------------------------------------------------
+async function findLatestTransactionMonth(userId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("transactions")
+    .select("date")
+    .eq("user_id", userId)
+    .order("date", { ascending: false })
+    .limit(1);
+
+  if (!data || data.length === 0) return null;
+  // Return first day of that month
+  const d = data[0].date as string;
+  return d.slice(0, 7) + "-01";
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute dashboard data from transactions when no report exists
+// ---------------------------------------------------------------------------
+async function computeFromTransactions(userId: string, month: string) {
+  const { startDate, nextMonth } = monthRange(month);
 
   const { data: transactions } = await supabaseAdmin
     .from("transactions")
@@ -112,7 +136,16 @@ router.get("/personal", async (req: Request, res: Response) => {
   }
 
   // No report yet — compute directly from transactions
-  const dashboard = await computeFromTransactions(user.id, month);
+  // If querying the current month yields nothing, try the latest month with data
+  let dashboard = await computeFromTransactions(user.id, month);
+
+  if (dashboard.summary.total_income === 0 && dashboard.summary.total_expenses === 0) {
+    const latestMonth = await findLatestTransactionMonth(user.id);
+    if (latestMonth && latestMonth !== month) {
+      dashboard = await computeFromTransactions(user.id, latestMonth);
+    }
+  }
+
   return res.status(200).json(dashboard);
 });
 

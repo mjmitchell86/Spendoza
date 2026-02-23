@@ -42,6 +42,8 @@ function App() {
               </Route>
               <Route path="/onboarding" element={<OnboardingPage />} />
             </Route>
+            <Route path="/profile" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/settings" element={<Navigate to="/dashboard" replace />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
