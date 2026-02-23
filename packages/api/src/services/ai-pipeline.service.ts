@@ -3,6 +3,16 @@ import { extractTextFromPDF, extractTransactions } from "../ai/pdf-parser";
 import { classifyTransactions } from "../ai/transaction-classifier";
 import { matchTransactions } from "../ai/expense-matcher";
 
+/** Wraps a promise with a timeout so it fails gracefully instead of being killed by Vercel. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+    ),
+  ]);
+}
+
 /**
  * Processes a bank statement through the AI pipeline:
  *
@@ -81,9 +91,11 @@ export async function processBankStatement(
 
     // 5. Extract transactions from text using AI
     log("step 5", "extracting transactions via AI");
-    const parsedTransactions = await extractTransactions(
-      pdfText,
-      bank_name ?? undefined
+    await updateProgress("step 5: calling OpenAI for transaction extraction...");
+    const parsedTransactions = await withTimeout(
+      extractTransactions(pdfText, bank_name ?? undefined),
+      45_000,
+      "OpenAI transaction extraction"
     );
     log("step 5", `extracted ${parsedTransactions.length} transactions`);
     await updateProgress(`step 5: extracted ${parsedTransactions.length} transactions`);
@@ -119,9 +131,11 @@ export async function processBankStatement(
 
     // 7. Classify transactions with AI
     log("step 7", "classifying transactions via AI");
-    const classifiedTransactions = await classifyTransactions(
-      parsedTransactions,
-      categoryNames
+    await updateProgress("step 7: calling OpenAI for classification...");
+    const classifiedTransactions = await withTimeout(
+      classifyTransactions(parsedTransactions, categoryNames),
+      45_000,
+      "OpenAI transaction classification"
     );
     log("step 7", `classified ${classifiedTransactions.length} transactions`);
 
@@ -141,10 +155,11 @@ export async function processBankStatement(
 
     // 9. Match transactions against existing records
     log("step 9", "matching transactions");
-    const matchedTransactions = await matchTransactions(
-      classifiedTransactions,
-      expenses ?? [],
-      income ?? []
+    await updateProgress("step 9: calling OpenAI for matching...");
+    const matchedTransactions = await withTimeout(
+      matchTransactions(classifiedTransactions, expenses ?? [], income ?? []),
+      45_000,
+      "OpenAI transaction matching"
     );
     log("step 9", `matched ${matchedTransactions.length} transactions`);
 
