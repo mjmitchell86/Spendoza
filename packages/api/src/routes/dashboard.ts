@@ -120,6 +120,7 @@ function toDashboardResponse(report: any) {
 // GET /personal — personal dashboard data
 // ---------------------------------------------------------------------------
 router.get("/personal", async (req: Request, res: Response) => {
+  res.set("Cache-Control", "no-store");
   const { user } = req as AuthenticatedRequest;
   const month = (req.query.month as string) ?? currentMonthStr();
 
@@ -135,18 +136,25 @@ router.get("/personal", async (req: Request, res: Response) => {
   if (report) {
     const rd = report.report_data as any;
     if (rd.total_income > 0 || rd.total_expenses > 0) {
+      console.log(`[dashboard] Using report for ${month}: income=${rd.total_income}, expenses=${rd.total_expenses}`);
       return res.status(200).json(toDashboardResponse(report));
     }
+    console.log(`[dashboard] Report for ${month} has no data, falling through to transactions`);
+  } else {
+    console.log(`[dashboard] No report found for ${month}`);
   }
 
   // No report or report has no data — compute from transactions
   // If the requested month has no transactions, try the latest month with data
   let dashboard = await computeFromTransactions(user.id, month);
+  console.log(`[dashboard] Computed from ${month} transactions: income=${dashboard.summary.total_income}, expenses=${dashboard.summary.total_expenses}`);
 
   if (dashboard.summary.total_income === 0 && dashboard.summary.total_expenses === 0) {
     const latestMonth = await findLatestTransactionMonth(user.id);
+    console.log(`[dashboard] No data for ${month}, latest transaction month: ${latestMonth}`);
     if (latestMonth && latestMonth !== month) {
       dashboard = await computeFromTransactions(user.id, latestMonth);
+      console.log(`[dashboard] Computed from ${latestMonth} transactions: income=${dashboard.summary.total_income}, expenses=${dashboard.summary.total_expenses}`);
     }
   }
 
