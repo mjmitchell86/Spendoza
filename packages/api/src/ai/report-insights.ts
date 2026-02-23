@@ -45,7 +45,7 @@ export async function generateInsights(
   );
 
   const model = new ChatOpenAI({
-    modelName: "gpt-4o-mini",
+    modelName: "gpt-5-mini",
     temperature: 0.3,
     timeout: 60_000,
   });
