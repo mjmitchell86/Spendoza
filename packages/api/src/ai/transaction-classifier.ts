@@ -46,7 +46,7 @@ export async function classifyTransactions(
   );
 
   const model = new ChatOpenAI({
-    modelName: "gpt-5-mini",
+    modelName: "gpt-4o-mini",
     temperature: 0,
     timeout: 60_000,
   });
