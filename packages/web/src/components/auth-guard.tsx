@@ -44,7 +44,7 @@ export function AuthGuard() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, location.pathname]);
 
   // Show spinner while auth or profile is loading
   if (authLoading || (user && profileLoading)) {
