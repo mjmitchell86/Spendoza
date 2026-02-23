@@ -1,9 +1,15 @@
 import { ChatOpenAI } from "@langchain/openai";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
-// Disable pdfjs worker — it's designed for browsers and hangs in serverless
-pdfjs.GlobalWorkerOptions.workerSrc = "";
+// Point pdfjs worker to the bundled file (copied by the build script).
+// In serverless, __dirname resolves to the function directory where
+// pdf.worker.mjs lives alongside the bundled entry point.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+pdfjs.GlobalWorkerOptions.workerSrc = join(__dirname, "pdf.worker.mjs");
 
 // ---------------------------------------------------------------------------
 // Types
