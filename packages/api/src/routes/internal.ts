@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { waitUntil } from "@vercel/functions";
 import { executeStep } from "../services/ai-pipeline.service";
 
 const router = Router();
@@ -23,13 +24,15 @@ router.post("/process-step", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "statement_id and step are required" });
   }
 
-  // Return 200 immediately, run step in background
-  res.status(200).json({ message: "Step accepted", statement_id, step });
-
-  // Execute the step after responding
-  executeStep(statement_id, step).catch((err) =>
-    console.error(`[internal] Failed to execute step ${step} for ${statement_id}:`, err)
+  // Return 200 immediately so pg_net doesn't wait, but keep the
+  // function alive via waitUntil so Vercel doesn't kill it.
+  waitUntil(
+    executeStep(statement_id, step).catch((err) =>
+      console.error(`[internal] Failed to execute step ${step} for ${statement_id}:`, err)
+    )
   );
+
+  return res.status(200).json({ message: "Step accepted", statement_id, step });
 });
 
 export default router;
