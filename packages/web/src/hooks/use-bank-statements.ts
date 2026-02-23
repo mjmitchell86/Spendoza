@@ -17,7 +17,10 @@ export function useBankStatements() {
 export function useBankStatement(id: string | null) {
   const query = useQuery<BankStatement>({
     queryKey: ["bank-statements", id],
-    queryFn: () => apiClient(`/bank-statements/${id}`),
+    queryFn: async () => {
+      const res = await apiClient(`/bank-statements/${id}`);
+      return res.statement;
+    },
     enabled: !!id,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
@@ -30,7 +33,10 @@ export function useBankStatement(id: string | null) {
 export function useTransactions(statementId: string | null) {
   return useQuery<Transaction[]>({
     queryKey: ["transactions", statementId],
-    queryFn: () => apiClient(`/bank-statements/${statementId}/transactions`),
+    queryFn: async () => {
+      const res = await apiClient(`/bank-statements/${statementId}`);
+      return res.transactions;
+    },
     enabled: !!statementId,
   });
 }
