@@ -1,10 +1,12 @@
 import { supabase } from "./supabase";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
+
 export async function apiClient(path: string, options?: RequestInit) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(`${API_BASE}/api${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
