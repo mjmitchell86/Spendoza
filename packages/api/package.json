@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun build src/index.ts --outfile dist/index.mjs --target node && if [ \"$BUILD_API_FUNCTION\" = \"1\" ]; then mkdir -p ../../.vercel/output/functions/api.func && cp dist/index.mjs ../../.vercel/output/functions/api.func/index.mjs && printf '{\"runtime\":\"nodejs20.x\",\"handler\":\"index.mjs\",\"launcherType\":\"Nodejs\"}' > ../../.vercel/output/functions/api.func/.vc-config.json && printf '{\"version\":3,\"routes\":[{\"src\":\"/(.*)\",\"dest\":\"/api\"}]}' > ../../.vercel/output/config.json; fi",
+    "build": "mkdir -p .vercel/output/functions/api.func && bun build src/index.ts --outfile .vercel/output/functions/api.func/index.mjs --target node && printf '{\"runtime\":\"nodejs20.x\",\"handler\":\"index.mjs\",\"launcherType\":\"Nodejs\"}' > .vercel/output/functions/api.func/.vc-config.json && printf '{\"version\":3,\"routes\":[{\"src\":\"/(.*)\",\"dest\":\"/api\"}]}' > .vercel/output/config.json",
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'no lint configured yet'",
