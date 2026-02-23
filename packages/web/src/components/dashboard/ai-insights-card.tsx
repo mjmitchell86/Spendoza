@@ -2,7 +2,7 @@ import { Lightbulb } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface AiInsightsCardProps {
-  insights: string;
+  insights: string | null;
 }
 
 function parseInsights(raw: string): string[] {
@@ -13,7 +13,7 @@ function parseInsights(raw: string): string[] {
 }
 
 export function AiInsightsCard({ insights }: AiInsightsCardProps) {
-  const items = parseInsights(insights);
+  const items = insights ? parseInsights(insights) : [];
 
   if (items.length === 0) {
     return (
