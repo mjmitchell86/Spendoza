@@ -17,14 +17,19 @@ import { matchTransactions } from "../ai/expense-matcher";
 export async function processBankStatement(
   statementId: string
 ): Promise<void> {
+  const log = (step: string, detail?: string) =>
+    console.log(`[ai-pipeline] [${statementId}] ${step}${detail ? `: ${detail}` : ""}`);
+
   try {
     // 1. Update status to "processing"
+    log("step 1", "setting status to processing");
     await supabaseAdmin
       .from("bank_statements")
       .update({ status: "processing" })
       .eq("id", statementId);
 
     // 2. Fetch the statement record
+    log("step 2", "fetching statement record");
     const { data: statement, error: stmtError } = await supabaseAdmin
       .from("bank_statements")
       .select("*")
@@ -36,8 +41,10 @@ export async function processBankStatement(
     }
 
     const { file_path, user_id, bank_name } = statement;
+    log("step 2", `found statement, file_path=${file_path}`);
 
     // 3. Download PDF from Supabase Storage
+    log("step 3", "downloading PDF from storage");
     const { data: fileData, error: downloadError } = await supabaseAdmin.storage
       .from("bank-statements")
       .download(file_path);
@@ -49,19 +56,24 @@ export async function processBankStatement(
     // Convert Blob to Buffer
     const arrayBuffer = await fileData.arrayBuffer();
     const pdfBuffer = Buffer.from(arrayBuffer);
+    log("step 3", `downloaded PDF, size=${pdfBuffer.length} bytes`);
 
     // 4. Extract text from PDF
+    log("step 4", "extracting text from PDF");
     const pdfText = await extractTextFromPDF(pdfBuffer);
+    log("step 4", `extracted ${pdfText.length} chars of text`);
 
     if (!pdfText.trim()) {
       throw new Error("No text could be extracted from the PDF");
     }
 
     // 5. Extract transactions from text using AI
+    log("step 5", "extracting transactions via AI");
     const parsedTransactions = await extractTransactions(
       pdfText,
       bank_name ?? undefined
     );
+    log("step 5", `extracted ${parsedTransactions.length} transactions`);
 
     if (parsedTransactions.length === 0) {
       // Update with zero transactions — still considered "parsed"
@@ -76,10 +88,12 @@ export async function processBankStatement(
           },
         })
         .eq("id", statementId);
+      log("complete", "0 transactions, status set to parsed");
       return;
     }
 
     // 6. Fetch user's categories from DB
+    log("step 6", "fetching user categories");
     const { data: categories } = await supabaseAdmin
       .from("categories")
       .select("name")
@@ -88,14 +102,18 @@ export async function processBankStatement(
     const categoryNames = (categories ?? []).map(
       (c: { name: string }) => c.name
     );
+    log("step 6", `found ${categoryNames.length} categories`);
 
     // 7. Classify transactions with AI
+    log("step 7", "classifying transactions via AI");
     const classifiedTransactions = await classifyTransactions(
       parsedTransactions,
       categoryNames
     );
+    log("step 7", `classified ${classifiedTransactions.length} transactions`);
 
     // 8. Fetch user's existing expenses and income for matching
+    log("step 8", "fetching existing expenses/income for matching");
     const [{ data: expenses }, { data: income }] = await Promise.all([
       supabaseAdmin
         .from("expenses")
@@ -106,15 +124,19 @@ export async function processBankStatement(
         .select("id, source_name, amount")
         .eq("user_id", user_id),
     ]);
+    log("step 8", `found ${expenses?.length ?? 0} expenses, ${income?.length ?? 0} income entries`);
 
     // 9. Match transactions against existing records
+    log("step 9", "matching transactions");
     const matchedTransactions = await matchTransactions(
       classifiedTransactions,
       expenses ?? [],
       income ?? []
     );
+    log("step 9", `matched ${matchedTransactions.length} transactions`);
 
     // 10. Insert all transactions into the transactions table
+    log("step 10", "inserting transactions into DB");
     const transactionRows = matchedTransactions.map((t) => ({
       bank_statement_id: statementId,
       user_id,
@@ -136,6 +158,7 @@ export async function processBankStatement(
         `Failed to insert transactions: ${insertError.message}`
       );
     }
+    log("step 10", `inserted ${transactionRows.length} transactions`);
 
     // 11. Update bank_statements: status = "parsed", parsed_data = summary
     const totalCredits = matchedTransactions
@@ -157,9 +180,11 @@ export async function processBankStatement(
         },
       })
       .eq("id", statementId);
+
+    log("complete", `parsed ${matchedTransactions.length} txns, credits=$${totalCredits}, debits=$${totalDebits}`);
   } catch (error) {
     // Update bank_statements status to "failed"
-    console.error(`Failed to process statement ${statementId}:`, error);
+    console.error(`[ai-pipeline] [${statementId}] FAILED:`, error);
     await supabaseAdmin
       .from("bank_statements")
       .update({ status: "failed" })

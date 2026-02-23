@@ -508,7 +508,7 @@ describe("POST /api/bank-statements/:id/reprocess", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.message).toBe("Reprocessing started");
+    expect(body.message).toBe("Reprocessing complete");
     expect(mockFrom).toHaveBeenCalledWith("bank_statements");
   });
 

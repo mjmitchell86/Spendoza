@@ -81,10 +81,10 @@ router.post(
       return res.status(400).json({ error: error.message });
     }
 
-    // Trigger async AI processing (fire-and-forget)
-    processBankStatement(data.id).catch((err) =>
-      console.error("AI pipeline failed for statement", data.id, err)
-    );
+    // Process synchronously — Vercel kills serverless functions after response
+    console.log(`[upload] statement ${data.id} inserted, starting AI processing`);
+    await processBankStatement(data.id);
+    console.log(`[upload] statement ${data.id} processing complete`);
 
     return res.status(201).json(data);
   }
@@ -155,12 +155,12 @@ router.post("/:id/reprocess", async (req, res: Response) => {
     return res.status(404).json({ error: "Statement not found" });
   }
 
-  // Trigger async AI reprocessing (fire-and-forget)
-  processBankStatement(data.id).catch((err) =>
-    console.error("AI pipeline reprocess failed for statement", data.id, err)
-  );
+  // Process synchronously — Vercel kills serverless functions after response
+  console.log(`[reprocess] statement ${data.id} starting AI processing`);
+  await processBankStatement(data.id);
+  console.log(`[reprocess] statement ${data.id} processing complete`);
 
-  return res.status(200).json({ message: "Reprocessing started" });
+  return res.status(200).json({ message: "Reprocessing complete" });
 });
 
 export default router;

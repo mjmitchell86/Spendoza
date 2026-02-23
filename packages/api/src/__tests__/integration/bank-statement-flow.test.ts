@@ -315,8 +315,12 @@ mock.module("@supabase/supabase-js", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock pdf-parse and AI modules (transitively imported by bank-statements route)
+// Mock AI pipeline (now awaited in upload route) and its transitive deps
 // ---------------------------------------------------------------------------
+mock.module("../../services/ai-pipeline.service", () => ({
+  processBankStatement: mock(() => Promise.resolve()),
+}));
+
 mock.module("pdf-parse", () => ({
   PDFParse: class MockPDFParse {
     constructor(_opts?: any) {}
