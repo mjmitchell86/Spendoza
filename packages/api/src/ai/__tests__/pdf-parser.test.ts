@@ -52,12 +52,15 @@ const EXPECTED_TRANSACTIONS = [
 // ---------------------------------------------------------------------------
 // Mock pdf-parse before importing the module under test
 // ---------------------------------------------------------------------------
-const mockPdfParse = mock(() =>
-  Promise.resolve({ text: SAMPLE_BANK_TEXT })
+const mockGetText = mock(() =>
+  Promise.resolve({ text: SAMPLE_BANK_TEXT, pages: [] })
 );
 
 mock.module("pdf-parse", () => ({
-  default: mockPdfParse,
+  PDFParse: class MockPDFParse {
+    constructor(_opts?: any) {}
+    getText = mockGetText;
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -87,11 +90,11 @@ const { extractTextFromPDF, extractTransactions } = await import(
 // Tests
 // ---------------------------------------------------------------------------
 beforeEach(() => {
-  mockPdfParse.mockClear();
+  mockGetText.mockClear();
   mockInvoke.mockClear();
 
-  mockPdfParse.mockImplementation(() =>
-    Promise.resolve({ text: SAMPLE_BANK_TEXT })
+  mockGetText.mockImplementation(() =>
+    Promise.resolve({ text: SAMPLE_BANK_TEXT, pages: [] })
   );
 
   mockInvoke.mockImplementation(() =>
@@ -102,17 +105,16 @@ beforeEach(() => {
 });
 
 describe("extractTextFromPDF", () => {
-  it("extracts text from a PDF buffer using pdf-parse", async () => {
+  it("extracts text from a PDF buffer using PDFParse", async () => {
     const buffer = Buffer.from("fake-pdf-content");
     const text = await extractTextFromPDF(buffer);
 
-    expect(mockPdfParse).toHaveBeenCalledTimes(1);
-    expect(mockPdfParse).toHaveBeenCalledWith(buffer);
+    expect(mockGetText).toHaveBeenCalledTimes(1);
     expect(text).toBe(SAMPLE_BANK_TEXT);
   });
 
-  it("propagates errors from pdf-parse", async () => {
-    mockPdfParse.mockImplementation(() =>
+  it("propagates errors from PDFParse", async () => {
+    mockGetText.mockImplementation(() =>
       Promise.reject(new Error("Invalid PDF"))
     );
 
