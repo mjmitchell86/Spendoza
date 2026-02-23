@@ -318,7 +318,10 @@ mock.module("@supabase/supabase-js", () => ({
 // Mock pdf-parse and AI modules (transitively imported by bank-statements route)
 // ---------------------------------------------------------------------------
 mock.module("pdf-parse", () => ({
-  default: mock(() => Promise.resolve({ text: "mocked pdf text" })),
+  PDFParse: class MockPDFParse {
+    constructor(_opts?: any) {}
+    getText = mock(() => Promise.resolve({ text: "mocked pdf text", pages: [] }));
+  },
 }));
 
 mock.module("@langchain/openai", () => ({
