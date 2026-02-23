@@ -186,6 +186,13 @@ mock.module("multer", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Mock @vercel/functions (waitUntil is used for background processing)
+// ---------------------------------------------------------------------------
+mock.module("@vercel/functions", () => ({
+  waitUntil: (_promise: Promise<any>) => {},
+}));
+
+// ---------------------------------------------------------------------------
 // Mock AI pipeline to avoid loading pdf-parse in tests.
 // ---------------------------------------------------------------------------
 mock.module("../../services/ai-pipeline.service", () => ({
@@ -508,7 +515,7 @@ describe("POST /api/bank-statements/:id/reprocess", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.message).toBe("Reprocessing complete");
+    expect(body.message).toBe("Reprocessing started");
     expect(mockFrom).toHaveBeenCalledWith("bank_statements");
   });
 

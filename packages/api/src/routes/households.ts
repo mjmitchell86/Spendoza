@@ -6,7 +6,7 @@ import {
   updateSharingSchema,
 } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
-import { createSupabaseClient, supabaseAdmin } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { generateInviteCode } from "../services/household.service";
 
@@ -16,12 +16,11 @@ const router = Router();
 // POST / — create household
 // ---------------------------------------------------------------------------
 router.post("/", validate(createHouseholdSchema), async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
   const invite_code = generateInviteCode();
 
-  const { data: household, error } = await supabase
+  const { data: household, error } = await supabaseAdmin
     .from("households")
     .insert({
       name: req.body.name,
@@ -48,12 +47,11 @@ router.post("/", validate(createHouseholdSchema), async (req, res: Response) => 
 // GET /:id — get household details + member list
 // ---------------------------------------------------------------------------
 router.get("/:id", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
   const householdId = req.params.id;
 
   // Verify user is a member of this household
-  const { data: profile } = await supabase
+  const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select("household_id")
     .eq("id", user.id)
@@ -64,7 +62,7 @@ router.get("/:id", async (req, res: Response) => {
   }
 
   // Get household details
-  const { data: household, error: hhError } = await supabase
+  const { data: household, error: hhError } = await supabaseAdmin
     .from("households")
     .select("*")
     .eq("id", householdId)
@@ -75,7 +73,7 @@ router.get("/:id", async (req, res: Response) => {
   }
 
   // Get members
-  const { data: members, error: membersError } = await supabase
+  const { data: members, error: membersError } = await supabaseAdmin
     .from("profiles")
     .select("id, display_name, income_sharing_mode, expense_sharing_mode")
     .eq("household_id", householdId);
@@ -253,12 +251,11 @@ router.put(
   "/:id/sharing",
   validate(updateSharingSchema),
   async (req, res: Response) => {
-    const { user, accessToken } = req as AuthenticatedRequest;
-    const supabase = createSupabaseClient(accessToken);
+    const { user } = req as AuthenticatedRequest;
     const householdId = req.params.id;
 
     // Verify user is a member of this household
-    const { data: profile } = await supabase
+    const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("household_id")
       .eq("id", user.id)
@@ -269,7 +266,7 @@ router.put(
     }
 
     // Update sharing preferences
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("profiles")
       .update({
         income_sharing_mode: req.body.income_sharing_mode,

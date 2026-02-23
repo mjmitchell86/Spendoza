@@ -69,17 +69,17 @@ const mockGetUser = mock(() =>
 // ---------------------------------------------------------------------------
 mock.module("@supabase/supabase-js", () => ({
   createClient: (_url: string, _key: string, options?: any) => {
-    // If options include an Authorization header, this is the RLS client
     if (options?.global?.headers?.Authorization) {
       return { from: mockFrom };
     }
-    // Otherwise it's the admin client
+    // Admin client — used by routes (supabaseAdmin) and auth middleware (getUser)
     return {
       auth: {
         admin: { createUser: mock() },
         signInWithPassword: mock(),
         getUser: mockGetUser,
       },
+      from: mockFrom,
     };
   },
 }));

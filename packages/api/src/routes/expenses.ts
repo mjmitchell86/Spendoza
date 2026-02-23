@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { createExpenseSchema, updateExpenseSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
-import { createSupabaseClient } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
@@ -10,10 +10,9 @@ const router = Router();
 // GET / — list expenses (filterable by category, frequency, date range)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  let query = supabase
+  let query = supabaseAdmin
     .from("expenses")
     .select("*")
     .eq("user_id", user.id);
@@ -50,10 +49,9 @@ router.get("/", async (req, res: Response) => {
 // POST / — create expense
 // ---------------------------------------------------------------------------
 router.post("/", validate(createExpenseSchema), async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("expenses")
     .insert({ ...req.body, user_id: user.id })
     .select()
@@ -70,10 +68,9 @@ router.post("/", validate(createExpenseSchema), async (req, res: Response) => {
 // PUT /:id — update expense
 // ---------------------------------------------------------------------------
 router.put("/:id", validate(updateExpenseSchema), async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("expenses")
     .update(req.body)
     .eq("id", req.params.id)
@@ -92,10 +89,9 @@ router.put("/:id", validate(updateExpenseSchema), async (req, res: Response) => 
 // DELETE /:id — delete expense
 // ---------------------------------------------------------------------------
 router.delete("/:id", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("expenses")
     .delete()
     .eq("id", req.params.id)

@@ -121,6 +121,7 @@ mock.module("@supabase/supabase-js", () => ({
         signInWithPassword: mock(),
         getUser: mockGetUser,
       },
+      from: mockFrom,
     };
   },
 }));
