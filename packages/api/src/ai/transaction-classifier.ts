@@ -14,15 +14,25 @@ export interface ClassifiedTransaction extends ParsedTransaction {
 // ---------------------------------------------------------------------------
 const BATCH_SIZE = 20;
 
-const SYSTEM_PROMPT = `You are a financial transaction classifier. Given a list of transactions and available categories, classify each transaction into the most appropriate category.
+const SYSTEM_PROMPT = `You are a financial transaction classifier. Given a numbered list of transactions and available categories, classify each transaction into the most appropriate category.
 
 Respond ONLY with valid JSON in this exact format:
-{"classifications": [{"description": "...", "ai_category": "..."}]}
+{"classifications": [{"index": 1, "ai_category": "..."}, {"index": 2, "ai_category": "..."}, ...]}
 
 Rules:
-- Use ONLY the provided category names exactly as given
-- Every transaction must be classified
-- Match based on the merchant/description and transaction type`;
+- Use ONLY the provided category names exactly as given — do not invent new categories
+- Every transaction MUST be classified — use the closest matching category
+- The "index" field must match the transaction number from the input list
+- Match based on merchant name patterns (e.g. WALMART/TARGET → Groceries, SHELL/EXXON → Gas/Transportation, NETFLIX/SPOTIFY → Entertainment, restaurants/cafes → Dining)
+- For ambiguous transactions, prefer the most specific matching category over generic ones
+- If no category is a good fit, pick the broadest/most general category available — never leave a transaction unclassified`;
+
+/**
+ * Normalize a description for fuzzy matching: lowercase, strip non-alphanumeric.
+ */
+function normalizeDescription(desc: string): string {
+  return desc.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
 
 // ---------------------------------------------------------------------------
 // Classification
@@ -114,26 +124,52 @@ ${transactionList}`;
     }
 
     const classifications: Array<{
-      description: string;
+      index?: number;
+      description?: string;
       ai_category: string;
     }> = parsed.classifications ?? [];
 
-    // Build a lookup map from description -> ai_category
-    const categoryMap = new Map<string, string>();
+    // Build index-based lookup (1-based index → category)
+    const indexMap = new Map<number, string>();
+    // Build normalized description lookup as fallback
+    const descMap = new Map<string, string>();
     for (const c of classifications) {
-      categoryMap.set(c.description.toLowerCase(), c.ai_category);
+      if (c.index != null) {
+        indexMap.set(c.index, c.ai_category);
+      }
+      if (c.description) {
+        descMap.set(normalizeDescription(c.description), c.ai_category);
+      }
     }
+
+    // Category name lookup for case-insensitive validation
+    const categoryLower = new Map(
+      userCategories.map((uc) => [uc.toLowerCase(), uc])
+    );
 
     let uncategorizedCount = 0;
 
     // Merge classification results with original transaction data
-    for (const transaction of batch) {
-      const aiCategory =
-        categoryMap.get(transaction.description.toLowerCase()) ??
-        "Uncategorized";
+    for (let j = 0; j < batch.length; j++) {
+      const transaction = batch[j];
 
-      if (aiCategory === "Uncategorized") {
+      // 1. Try index-based lookup
+      let aiCategory = indexMap.get(j + 1);
+
+      // 2. Fallback: normalized description match
+      if (!aiCategory) {
+        aiCategory = descMap.get(normalizeDescription(transaction.description));
+      }
+
+      // 3. Validate category exists (case-insensitive)
+      if (aiCategory) {
+        const exact = categoryLower.get(aiCategory.toLowerCase());
+        aiCategory = exact ?? undefined;
+      }
+
+      if (!aiCategory) {
         uncategorizedCount++;
+        aiCategory = "Uncategorized";
       }
 
       results.push({
