@@ -15,11 +15,16 @@ export function useBankStatements() {
 }
 
 export function useBankStatement(id: string | null) {
-  return useQuery<BankStatement>({
+  const query = useQuery<BankStatement>({
     queryKey: ["bank-statements", id],
     queryFn: () => apiClient(`/bank-statements/${id}`),
     enabled: !!id,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "uploaded" || status === "processing" ? 3000 : false;
+    },
   });
+  return query;
 }
 
 export function useTransactions(statementId: string | null) {

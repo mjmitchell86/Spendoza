@@ -11,6 +11,7 @@ export function createSupabaseClient(accessToken: string) {
     process.env.SUPABASE_ANON_KEY!,
     {
       global: { headers: { Authorization: `Bearer ${accessToken}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
     }
   );
 }
