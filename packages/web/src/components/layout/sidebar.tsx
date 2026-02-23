@@ -6,6 +6,7 @@ import {
   Tags,
   FileText,
   Users,
+  ArrowLeftRight,
   BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ const navItems = [
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/categories", label: "Categories", icon: Tags },
   { to: "/bank-statements", label: "Bank Statements", icon: FileText },
+  { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { to: "/household", label: "Household", icon: Users },
   { to: "/household-dashboard", label: "Household Dashboard", icon: BarChart3 },
 ];

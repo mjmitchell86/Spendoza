@@ -11,6 +11,7 @@ import { ExpensesPage } from "@/pages/expenses";
 import { CategoriesPage } from "@/pages/categories";
 import { BankStatementsPage } from "@/pages/bank-statements";
 import { HouseholdPage } from "@/pages/household";
+import { TransactionsPage } from "@/pages/transactions";
 import { HouseholdDashboardPage } from "@/pages/household-dashboard";
 import { OnboardingPage } from "@/pages/onboarding";
 
@@ -33,6 +34,10 @@ function App() {
                 <Route
                   path="/bank-statements"
                   element={<BankStatementsPage />}
+                />
+                <Route
+                  path="/transactions"
+                  element={<TransactionsPage />}
                 />
                 <Route path="/household" element={<HouseholdPage />} />
                 <Route

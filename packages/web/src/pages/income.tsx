@@ -5,12 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useIncome } from "@/hooks/use-income";
 import { useHousehold } from "@/hooks/use-household";
+import { useCategories } from "@/hooks/use-categories";
+import { useAllTransactions, useUpdateTransactionCategory } from "@/hooks/use-transactions";
 import { IncomeForm } from "@/components/income/income-form";
 import { IncomeList } from "@/components/income/income-list";
+import { TransactionTable } from "@/components/transactions/transaction-table";
 
 export function IncomePage() {
   const { data: entries, isLoading, error, refetch } = useIncome();
   const { data: household } = useHousehold();
+  const { data: creditTransactions } = useAllTransactions({ type: "credit" });
+  const { data: categories } = useCategories();
+  const updateCategory = useUpdateTransactionCategory();
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<IncomeEntry | null>(null);
 
@@ -66,6 +72,24 @@ export function IncomePage() {
           )}
         </CardContent>
       </Card>
+
+      {creditTransactions && creditTransactions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-0">
+            <CardTitle>Bank Transactions (Credits)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TransactionTable
+              transactions={creditTransactions}
+              categories={categories ?? []}
+              onCategoryChange={(id, cat) =>
+                updateCategory.mutate({ transactionId: id, ai_category: cat })
+              }
+              showTypeColumn={false}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <IncomeForm
         open={formOpen}
