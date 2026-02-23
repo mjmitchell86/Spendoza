@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api";
+import { apiClient, API_BASE } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import type {
   BankStatement,
@@ -37,7 +37,7 @@ export function useUploadBankStatement() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      const response = await fetch("/api/bank-statements/upload", {
+      const response = await fetch(`${API_BASE}/api/bank-statements/upload`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session?.access_token}`,
