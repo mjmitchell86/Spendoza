@@ -23,26 +23,15 @@ export function ProcessingStep({
 }: ProcessingStepProps) {
   const { data: statement } = useBankStatement(statementId);
 
-  // Poll for status updates
+  // useBankStatement polls automatically via refetchInterval while processing.
+  // React to terminal status changes here.
   useEffect(() => {
     if (!statement) return;
 
     if (statement.status === "parsed") {
-      // Small delay so the user sees the success state
       const timer = setTimeout(onComplete, 1200);
       return () => clearTimeout(timer);
     }
-
-    if (statement.status === "failed") {
-      return;
-    }
-
-    // Keep polling if still processing
-    const interval = setInterval(() => {
-      // TanStack Query will refetch automatically with staleTime
-    }, 3000);
-
-    return () => clearInterval(interval);
   }, [statement, onComplete]);
 
   const isParsed = statement?.status === "parsed";
