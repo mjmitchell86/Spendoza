@@ -50,17 +50,28 @@ const EXPECTED_TRANSACTIONS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Mock pdf-parse before importing the module under test
+// Mock pdfjs-dist before importing the module under test
 // ---------------------------------------------------------------------------
-const mockGetText = mock(() =>
-  Promise.resolve({ text: SAMPLE_BANK_TEXT, pages: [] })
+const mockGetTextContent = mock(() =>
+  Promise.resolve({
+    items: SAMPLE_BANK_TEXT.split(" ").map((str) => ({ str })),
+  })
 );
 
-mock.module("pdf-parse", () => ({
-  PDFParse: class MockPDFParse {
-    constructor(_opts?: any) {}
-    getText = mockGetText;
-  },
+const mockGetPage = mock(() =>
+  Promise.resolve({ getTextContent: mockGetTextContent })
+);
+
+const mockGetDocument = mock(() => ({
+  promise: Promise.resolve({
+    numPages: 1,
+    getPage: mockGetPage,
+  }),
+}));
+
+mock.module("pdfjs-dist/legacy/build/pdf.mjs", () => ({
+  getDocument: mockGetDocument,
+  GlobalWorkerOptions: { workerSrc: "" },
 }));
 
 // ---------------------------------------------------------------------------
@@ -90,12 +101,27 @@ const { extractTextFromPDF, extractTransactions } = await import(
 // Tests
 // ---------------------------------------------------------------------------
 beforeEach(() => {
-  mockGetText.mockClear();
+  mockGetDocument.mockClear();
+  mockGetPage.mockClear();
+  mockGetTextContent.mockClear();
   mockInvoke.mockClear();
 
-  mockGetText.mockImplementation(() =>
-    Promise.resolve({ text: SAMPLE_BANK_TEXT, pages: [] })
+  mockGetTextContent.mockImplementation(() =>
+    Promise.resolve({
+      items: SAMPLE_BANK_TEXT.split(" ").map((str) => ({ str })),
+    })
   );
+
+  mockGetPage.mockImplementation(() =>
+    Promise.resolve({ getTextContent: mockGetTextContent })
+  );
+
+  mockGetDocument.mockImplementation(() => ({
+    promise: Promise.resolve({
+      numPages: 1,
+      getPage: mockGetPage,
+    }),
+  }));
 
   mockInvoke.mockImplementation(() =>
     Promise.resolve({
@@ -105,18 +131,20 @@ beforeEach(() => {
 });
 
 describe("extractTextFromPDF", () => {
-  it("extracts text from a PDF buffer using PDFParse", async () => {
+  it("extracts text from a PDF buffer using pdfjs-dist", async () => {
     const buffer = Buffer.from("fake-pdf-content");
     const text = await extractTextFromPDF(buffer);
 
-    expect(mockGetText).toHaveBeenCalledTimes(1);
-    expect(text).toBe(SAMPLE_BANK_TEXT);
+    expect(mockGetDocument).toHaveBeenCalledTimes(1);
+    expect(mockGetPage).toHaveBeenCalledTimes(1);
+    expect(mockGetTextContent).toHaveBeenCalledTimes(1);
+    expect(text).toContain("CHASE");
   });
 
-  it("propagates errors from PDFParse", async () => {
-    mockGetText.mockImplementation(() =>
-      Promise.reject(new Error("Invalid PDF"))
-    );
+  it("propagates errors from pdfjs-dist", async () => {
+    mockGetDocument.mockImplementation(() => ({
+      promise: Promise.reject(new Error("Invalid PDF")),
+    }));
 
     const buffer = Buffer.from("not-a-pdf");
     await expect(extractTextFromPDF(buffer)).rejects.toThrow("Invalid PDF");
