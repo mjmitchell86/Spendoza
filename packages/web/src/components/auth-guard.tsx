@@ -62,7 +62,11 @@ export function AuthGuard() {
 
   // If onboarding not completed, redirect to onboarding
   // (unless already on the onboarding page)
-  if (onboardingCompleted === false && location.pathname !== "/onboarding") {
+  if (
+    onboardingCompleted === false &&
+    location.pathname !== "/onboarding" &&
+    !location.state?.onboardingCompleted
+  ) {
     return <Navigate to="/onboarding" replace />;
   }
 

@@ -12,10 +12,10 @@ export function CompleteStep() {
     setIsSubmitting(true);
     try {
       await apiClient("/profile/onboarding", { method: "PUT" });
-      navigate("/dashboard", { replace: true });
+      navigate("/dashboard", { replace: true, state: { onboardingCompleted: true } });
     } catch {
       // Even if the API call fails, navigate to dashboard
-      navigate("/dashboard", { replace: true });
+      navigate("/dashboard", { replace: true, state: { onboardingCompleted: true } });
     }
   }
 
