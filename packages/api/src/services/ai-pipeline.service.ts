@@ -1,6 +1,5 @@
 import { supabaseAdmin } from "../lib/supabase";
 import { extractTextFromPDF, extractTransactions } from "../ai/pdf-parser";
-import { classifyTransactions } from "../ai/transaction-classifier";
 import { matchTransactions } from "../ai/expense-matcher";
 
 /** Wraps a promise with a timeout so it fails gracefully instead of being killed by Vercel. */
@@ -19,10 +18,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
  * 1. Downloads PDF from Supabase Storage
  * 2. Extracts text from PDF
  * 3. Uses AI to extract structured transactions
- * 4. Classifies transactions into user categories
- * 5. Matches transactions against existing expenses/income
- * 6. Inserts parsed transactions into the database
- * 7. Updates statement status to "parsed"
+ * 4. Matches transactions against existing expenses/income (deterministic)
+ * 5. Inserts parsed transactions into the database
+ * 6. Updates statement status to "parsed"
+ *
+ * Note: Classification is skipped to stay within Vercel's 60s function limit.
+ * Transactions are inserted as "Uncategorized" and can be classified later.
  */
 export async function processBankStatement(
   statementId: string
@@ -94,7 +95,7 @@ export async function processBankStatement(
     await updateProgress("step 5: calling OpenAI for transaction extraction...");
     const parsedTransactions = await withTimeout(
       extractTransactions(pdfText, bank_name ?? undefined),
-      45_000,
+      50_000,
       "OpenAI transaction extraction"
     );
     log("step 5", `extracted ${parsedTransactions.length} transactions`);
@@ -117,30 +118,15 @@ export async function processBankStatement(
       return;
     }
 
-    // 6. Fetch user's categories from DB
-    log("step 6", "fetching user categories");
-    const { data: categories } = await supabaseAdmin
-      .from("categories")
-      .select("name")
-      .eq("user_id", user_id);
+    // 6. Assign default category (skip AI classification to stay within 60s)
+    log("step 6", "assigning default categories");
+    const classifiedTransactions = parsedTransactions.map((t) => ({
+      ...t,
+      ai_category: "Uncategorized",
+    }));
 
-    const categoryNames = (categories ?? []).map(
-      (c: { name: string }) => c.name
-    );
-    log("step 6", `found ${categoryNames.length} categories`);
-
-    // 7. Classify transactions with AI
-    log("step 7", "classifying transactions via AI");
-    await updateProgress("step 7: calling OpenAI for classification...");
-    const classifiedTransactions = await withTimeout(
-      classifyTransactions(parsedTransactions, categoryNames),
-      45_000,
-      "OpenAI transaction classification"
-    );
-    log("step 7", `classified ${classifiedTransactions.length} transactions`);
-
-    // 8. Fetch user's existing expenses and income for matching
-    log("step 8", "fetching existing expenses/income for matching");
+    // 7. Fetch user's existing expenses and income for matching
+    log("step 7", "fetching existing expenses/income for matching");
     const [{ data: expenses }, { data: income }] = await Promise.all([
       supabaseAdmin
         .from("expenses")
@@ -151,20 +137,19 @@ export async function processBankStatement(
         .select("id, source_name, amount")
         .eq("user_id", user_id),
     ]);
-    log("step 8", `found ${expenses?.length ?? 0} expenses, ${income?.length ?? 0} income entries`);
+    log("step 7", `found ${expenses?.length ?? 0} expenses, ${income?.length ?? 0} income entries`);
 
-    // 9. Match transactions against existing records
-    log("step 9", "matching transactions");
-    await updateProgress("step 9: calling OpenAI for matching...");
-    const matchedTransactions = await withTimeout(
-      matchTransactions(classifiedTransactions, expenses ?? [], income ?? []),
-      45_000,
-      "OpenAI transaction matching"
+    // 8. Match transactions against existing records (deterministic, no AI)
+    log("step 8", "matching transactions");
+    const matchedTransactions = await matchTransactions(
+      classifiedTransactions,
+      expenses ?? [],
+      income ?? []
     );
-    log("step 9", `matched ${matchedTransactions.length} transactions`);
+    log("step 8", `matched ${matchedTransactions.length} transactions`);
 
-    // 10. Insert all transactions into the transactions table
-    log("step 10", "inserting transactions into DB");
+    // 9. Insert all transactions into the transactions table
+    log("step 9", "inserting transactions into DB");
     const transactionRows = matchedTransactions.map((t) => ({
       bank_statement_id: statementId,
       user_id,
@@ -186,9 +171,9 @@ export async function processBankStatement(
         `Failed to insert transactions: ${insertError.message}`
       );
     }
-    log("step 10", `inserted ${transactionRows.length} transactions`);
+    log("step 9", `inserted ${transactionRows.length} transactions`);
 
-    // 11. Update bank_statements: status = "parsed", parsed_data = summary
+    // 10. Update bank_statements: status = "parsed", parsed_data = summary
     const totalCredits = matchedTransactions
       .filter((t) => t.type === "credit")
       .reduce((sum, t) => sum + t.amount, 0);
