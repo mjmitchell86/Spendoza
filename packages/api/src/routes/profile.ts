@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { updateProfileSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
-import { createSupabaseClient } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
@@ -10,10 +10,9 @@ const router = Router();
 // GET / — get authenticated user's profile
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("*")
     .eq("id", user.id)
@@ -30,10 +29,9 @@ router.get("/", async (req, res: Response) => {
 // PUT / — update profile fields
 // ---------------------------------------------------------------------------
 router.put("/", validate(updateProfileSchema), async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("profiles")
     .update(req.body)
     .eq("id", user.id)
@@ -51,10 +49,9 @@ router.put("/", validate(updateProfileSchema), async (req, res: Response) => {
 // PUT /onboarding — mark onboarding complete
 // ---------------------------------------------------------------------------
 router.put("/onboarding", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("profiles")
     .update({ onboarding_completed: true })
     .eq("id", user.id)

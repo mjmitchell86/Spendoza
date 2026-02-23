@@ -233,12 +233,11 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     currentUserEmail = HEAD_EMAIL;
     resetResults();
 
-    rlsResults = {
+    rlsResults = {};
+    adminResults = {
       households: {
         insertSingle: { data: householdData, error: null },
       },
-    };
-    adminResults = {
       profiles: {
         updateResult: { data: null, error: null },
       },
@@ -340,7 +339,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
       expense_sharing_mode: "all" as const,
     };
 
-    rlsResults = {
+    adminResults = {
       profiles: {
         selectSingle: { data: { ...memberProfile, household_id: HOUSEHOLD_ID }, error: null },
         updateSingle: { data: updatedMemberProfile, error: null },
@@ -377,7 +376,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
       { ...memberProfile, household_id: HOUSEHOLD_ID },
     ];
 
-    rlsResults = {
+    adminResults = {
       profiles: {
         selectSingle: { data: headProfile, error: null },
         selectList: { data: membersList, error: null },

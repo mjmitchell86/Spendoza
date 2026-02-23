@@ -339,7 +339,7 @@ describe("GET /api/households/:id", () => {
 
   it("returns 403 for non-member", async () => {
     // User profile has no household_id (not a member)
-    rlsResults.profiles.selectSingle = {
+    adminResults.profiles.selectSingle = {
       data: { ...memberProfile, household_id: null },
       error: null,
     };
@@ -494,7 +494,7 @@ describe("PUT /api/households/:id/sharing", () => {
       expense_sharing_mode: "category" as const,
     };
 
-    rlsResults.profiles.updateSingle = {
+    adminResults.profiles.updateSingle = {
       data: updatedProfile,
       error: null,
     };

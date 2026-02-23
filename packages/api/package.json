@@ -16,6 +16,7 @@
     "@langchain/openai": "^0.3",
     "@spendoza/shared": "workspace:*",
     "@supabase/supabase-js": "^2",
+    "@vercel/functions": "^3.4.2",
     "cors": "^2",
     "express": "^4",
     "express-rate-limit": "^7",

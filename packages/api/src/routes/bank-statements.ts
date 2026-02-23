@@ -1,7 +1,8 @@
 import { Router, type Response } from "express";
 import multer from "multer";
+import { waitUntil } from "@vercel/functions";
 import { uploadBankStatementSchema } from "@spendoza/shared";
-import { createSupabaseClient } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { computeFileHash } from "../services/bank-statement.service";
 import { processBankStatement } from "../services/ai-pipeline.service";
@@ -16,8 +17,7 @@ router.post(
   "/upload",
   upload.single("file"),
   async (req, res: Response) => {
-    const { user, accessToken } = req as AuthenticatedRequest;
-    const supabase = createSupabaseClient(accessToken);
+    const { user } = req as AuthenticatedRequest;
 
     // Validate metadata fields
     const parsed = uploadBankStatementSchema.safeParse(req.body);
@@ -37,7 +37,7 @@ router.post(
     const fileHash = computeFileHash(file.buffer);
 
     // Check for duplicates
-    const { data: existing } = await supabase
+    const { data: existing } = await supabaseAdmin
       .from("bank_statements")
       .select("id")
       .eq("user_id", user.id)
@@ -50,7 +50,7 @@ router.post(
 
     // Upload to Supabase Storage
     const storagePath = `${user.id}/statements/${file.originalname}`;
-    const { error: storageError } = await supabase.storage
+    const { error: storageError } = await supabaseAdmin.storage
       .from("bank-statements")
       .upload(storagePath, file.buffer, {
         contentType: file.mimetype,
@@ -62,7 +62,7 @@ router.post(
     }
 
     // Insert record into bank_statements table
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("bank_statements")
       .insert({
         user_id: user.id,
@@ -81,10 +81,9 @@ router.post(
       return res.status(400).json({ error: error.message });
     }
 
-    // Process synchronously — Vercel kills serverless functions after response
-    console.log(`[upload] statement ${data.id} inserted, starting AI processing`);
-    await processBankStatement(data.id);
-    console.log(`[upload] statement ${data.id} processing complete`);
+    // Process in background — waitUntil keeps the function alive after response
+    console.log(`[upload] statement ${data.id} inserted, starting AI processing via waitUntil`);
+    waitUntil(processBankStatement(data.id));
 
     return res.status(201).json(data);
   }
@@ -94,10 +93,9 @@ router.post(
 // GET / — list user's bank statements
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("bank_statements")
     .select("*")
     .eq("user_id", user.id)
@@ -114,10 +112,9 @@ router.get("/", async (req, res: Response) => {
 // GET /:id — get statement with parsed transactions
 // ---------------------------------------------------------------------------
 router.get("/:id", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data: statement, error } = await supabase
+  const { data: statement, error } = await supabaseAdmin
     .from("bank_statements")
     .select("*")
     .eq("id", req.params.id)
@@ -128,7 +125,7 @@ router.get("/:id", async (req, res: Response) => {
     return res.status(404).json({ error: "Statement not found" });
   }
 
-  const { data: transactions } = await supabase
+  const { data: transactions } = await supabaseAdmin
     .from("transactions")
     .select("*")
     .eq("bank_statement_id", statement.id);
@@ -140,10 +137,9 @@ router.get("/:id", async (req, res: Response) => {
 // POST /:id/reprocess — re-trigger AI parsing
 // ---------------------------------------------------------------------------
 router.post("/:id/reprocess", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("bank_statements")
     .update({ status: "uploaded" })
     .eq("id", req.params.id)
@@ -155,12 +151,11 @@ router.post("/:id/reprocess", async (req, res: Response) => {
     return res.status(404).json({ error: "Statement not found" });
   }
 
-  // Process synchronously — Vercel kills serverless functions after response
-  console.log(`[reprocess] statement ${data.id} starting AI processing`);
-  await processBankStatement(data.id);
-  console.log(`[reprocess] statement ${data.id} processing complete`);
+  // Process in background — waitUntil keeps the function alive after response
+  console.log(`[reprocess] statement ${data.id} starting AI processing via waitUntil`);
+  waitUntil(processBankStatement(data.id));
 
-  return res.status(200).json({ message: "Reprocessing complete" });
+  return res.status(200).json({ message: "Reprocessing started" });
 });
 
 export default router;

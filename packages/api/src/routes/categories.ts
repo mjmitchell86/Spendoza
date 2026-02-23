@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { createCategorySchema, updateCategorySchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
-import { createSupabaseClient } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
@@ -10,10 +10,9 @@ const router = Router();
 // GET / — list user's categories (system defaults + custom)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("categories")
     .select("*")
     .eq("user_id", user.id)
@@ -30,10 +29,9 @@ router.get("/", async (req, res: Response) => {
 // POST / — create custom category
 // ---------------------------------------------------------------------------
 router.post("/", validate(createCategorySchema), async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("categories")
     .insert({ ...req.body, user_id: user.id })
     .select()
@@ -50,10 +48,9 @@ router.post("/", validate(createCategorySchema), async (req, res: Response) => {
 // PUT /:id — update category (name, icon, is_shared_with_household)
 // ---------------------------------------------------------------------------
 router.put("/:id", validate(updateCategorySchema), async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("categories")
     .update(req.body)
     .eq("id", req.params.id)
@@ -72,11 +69,10 @@ router.put("/:id", validate(updateCategorySchema), async (req, res: Response) =>
 // DELETE /:id — delete (only custom, not system defaults)
 // ---------------------------------------------------------------------------
 router.delete("/:id", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
   // First, look up the category to check if it's a system default
-  const { data: category, error: lookupError } = await supabase
+  const { data: category, error: lookupError } = await supabaseAdmin
     .from("categories")
     .select("*")
     .eq("id", req.params.id)
@@ -91,7 +87,7 @@ router.delete("/:id", async (req, res: Response) => {
     return res.status(403).json({ error: "Cannot delete system default categories" });
   }
 
-  const { error: deleteError } = await supabase
+  const { error: deleteError } = await supabaseAdmin
     .from("categories")
     .delete()
     .eq("id", req.params.id)
