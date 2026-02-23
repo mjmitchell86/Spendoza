@@ -5,12 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useExpenses } from "@/hooks/use-expenses";
 import { useCategories } from "@/hooks/use-categories";
+import { useAllTransactions, useUpdateTransactionCategory } from "@/hooks/use-transactions";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
+import { TransactionTable } from "@/components/transactions/transaction-table";
 
 export function ExpensesPage() {
   const { data: expenses, isLoading, error, refetch } = useExpenses();
   const { data: categories } = useCategories();
+  const { data: debitTransactions } = useAllTransactions({ type: "debit" });
+  const updateCategory = useUpdateTransactionCategory();
   const [formOpen, setFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
@@ -68,6 +72,24 @@ export function ExpensesPage() {
           )}
         </CardContent>
       </Card>
+
+      {debitTransactions && debitTransactions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-0">
+            <CardTitle>Bank Transactions (Debits)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TransactionTable
+              transactions={debitTransactions}
+              categories={categories ?? []}
+              onCategoryChange={(id, cat) =>
+                updateCategory.mutate({ transactionId: id, ai_category: cat })
+              }
+              showTypeColumn={false}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <ExpenseForm
         open={formOpen}
