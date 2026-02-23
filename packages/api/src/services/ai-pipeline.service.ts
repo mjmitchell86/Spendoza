@@ -20,6 +20,14 @@ export async function processBankStatement(
   const log = (step: string, detail?: string) =>
     console.log(`[ai-pipeline] [${statementId}] ${step}${detail ? `: ${detail}` : ""}`);
 
+  // Helper to persist progress to DB (Vercel logs from waitUntil are not captured)
+  const updateProgress = async (step: string) => {
+    await supabaseAdmin
+      .from("bank_statements")
+      .update({ parsed_data: { pipeline_step: step, updated_at: new Date().toISOString() } })
+      .eq("id", statementId);
+  };
+
   try {
     // 1. Update status to "processing"
     log("step 1", "setting status to processing");
@@ -27,6 +35,7 @@ export async function processBankStatement(
       .from("bank_statements")
       .update({ status: "processing" })
       .eq("id", statementId);
+    await updateProgress("step 1: status set to processing");
 
     // 2. Fetch the statement record
     log("step 2", "fetching statement record");
@@ -42,6 +51,7 @@ export async function processBankStatement(
 
     const { file_path, user_id, bank_name } = statement;
     log("step 2", `found statement, file_path=${file_path}`);
+    await updateProgress("step 2: fetched statement record");
 
     // 3. Download PDF from Supabase Storage
     log("step 3", "downloading PDF from storage");
@@ -57,11 +67,13 @@ export async function processBankStatement(
     const arrayBuffer = await fileData.arrayBuffer();
     const pdfBuffer = Buffer.from(arrayBuffer);
     log("step 3", `downloaded PDF, size=${pdfBuffer.length} bytes`);
+    await updateProgress(`step 3: downloaded PDF (${pdfBuffer.length} bytes)`);
 
     // 4. Extract text from PDF
     log("step 4", "extracting text from PDF");
     const pdfText = await extractTextFromPDF(pdfBuffer);
     log("step 4", `extracted ${pdfText.length} chars of text`);
+    await updateProgress(`step 4: extracted ${pdfText.length} chars of text`);
 
     if (!pdfText.trim()) {
       throw new Error("No text could be extracted from the PDF");
@@ -74,6 +86,7 @@ export async function processBankStatement(
       bank_name ?? undefined
     );
     log("step 5", `extracted ${parsedTransactions.length} transactions`);
+    await updateProgress(`step 5: extracted ${parsedTransactions.length} transactions`);
 
     if (parsedTransactions.length === 0) {
       // Update with zero transactions — still considered "parsed"
@@ -183,11 +196,14 @@ export async function processBankStatement(
 
     log("complete", `parsed ${matchedTransactions.length} txns, credits=$${totalCredits}, debits=$${totalDebits}`);
   } catch (error) {
-    // Update bank_statements status to "failed"
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[ai-pipeline] [${statementId}] FAILED:`, error);
     await supabaseAdmin
       .from("bank_statements")
-      .update({ status: "failed" })
+      .update({
+        status: "failed",
+        parsed_data: { error: errorMessage, failed_at: new Date().toISOString() },
+      })
       .eq("id", statementId);
   }
 }
