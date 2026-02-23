@@ -61,8 +61,10 @@ app.use("/api/dashboard", requireAuth, dashboardRouter);
 // Global error handler (must be LAST middleware)
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Spendoza API running on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Spendoza API running on port ${PORT}`);
+  });
+}
 
 export default app;
