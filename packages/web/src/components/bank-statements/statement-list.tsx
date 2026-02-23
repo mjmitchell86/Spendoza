@@ -1,4 +1,5 @@
 import type { BankStatement, StatementStatus } from "@spendoza/shared";
+import { RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -17,6 +18,13 @@ const STATUS_CONFIG: Record<
   processing: { label: "Processing", variant: "default" },
   parsed: { label: "Parsed", variant: "secondary" },
   failed: { label: "Failed", variant: "destructive" },
+};
+
+const STEP_LABELS: Record<string, string> = {
+  extract_text: "Reading PDF",
+  extract_transactions: "Extracting transactions",
+  classify_transactions: "Classifying",
+  match_and_insert: "Matching & saving",
 };
 
 function formatDate(dateStr: string) {
@@ -81,7 +89,16 @@ export function StatementList({
                 )}
               </TableCell>
               <TableCell>
-                <Badge variant={status.variant}>{status.label}</Badge>
+                {stmt.status === "processing" ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <RefreshCw className="size-3 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {STEP_LABELS[(stmt.parsed_data as any)?.pipeline_step] ?? "Processing"}
+                    </span>
+                  </span>
+                ) : (
+                  <Badge variant={status.variant}>{status.label}</Badge>
+                )}
               </TableCell>
             </TableRow>
           );

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -5,10 +6,12 @@ import {
   RefreshCw,
   ArrowUpRight,
   ArrowDownRight,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePersonalDashboard, useGenerateReport } from "@/hooks/use-dashboard";
+import { useBankStatements } from "@/hooks/use-bank-statements";
 import { IncomeVsExpensesChart } from "@/components/dashboard/income-vs-expenses-chart";
 import { SpendingByCategoryChart } from "@/components/dashboard/spending-by-category-chart";
 import { SavingsRateCard } from "@/components/dashboard/savings-rate-card";
@@ -46,6 +49,23 @@ function TrendBadge({ value }: { value: number }) {
 export function DashboardPage() {
   const { data, isLoading, error, refetch } = usePersonalDashboard();
   const generateReport = useGenerateReport();
+  const { data: statements } = useBankStatements();
+
+  const processingStatements = (statements ?? []).filter(
+    (s) => s.status === "processing" || s.status === "uploaded"
+  );
+
+  // Refetch dashboard data when processing statements finish
+  const prevProcessingCount = useRef(processingStatements.length);
+  useEffect(() => {
+    if (
+      prevProcessingCount.current > 0 &&
+      processingStatements.length < prevProcessingCount.current
+    ) {
+      void refetch();
+    }
+    prevProcessingCount.current = processingStatements.length;
+  }, [processingStatements.length, refetch]);
 
   if (isLoading) {
     return (
@@ -96,6 +116,24 @@ export function DashboardPage() {
           {generateReport.isPending ? "Generating..." : "Refresh Report"}
         </Button>
       </div>
+
+      {/* Processing Banner */}
+      {processingStatements.length > 0 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="flex items-center gap-3 py-3">
+            <RefreshCw className="size-4 animate-spin text-primary" />
+            <div className="flex items-center gap-2">
+              <FileText className="size-4 text-primary" />
+              <p className="text-sm">
+                <span className="font-medium">
+                  {processingStatements.length} statement{processingStatements.length > 1 ? "s" : ""}
+                </span>{" "}
+                currently processing. Dashboard will update once complete.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
