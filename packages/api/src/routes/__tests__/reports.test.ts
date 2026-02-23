@@ -55,6 +55,7 @@ function buildChain(results: Record<string, any>, calls: typeof adminCalls) {
       eq: (...args: any[]) => makeEqChain(depth + 1),
       gte: (...args: any[]) => makeEqChain(depth + 1),
       lte: (...args: any[]) => makeEqChain(depth + 1),
+      lt: (...args: any[]) => makeEqChain(depth + 1),
       or: (...args: any[]) => makeEqChain(depth + 1),
       is: (...args: any[]) => makeEqChain(depth + 1),
       order: (...args: any[]) => makeEqChain(depth + 1),
@@ -554,15 +555,24 @@ describe("GET /api/dashboard/personal", () => {
     expect(body.insights).toBeDefined();
   });
 
-  it("returns 404 when no report exists for dashboard", async () => {
+  it("returns 200 with computed data when no report exists", async () => {
     adminResults.reports.selectSingle = { data: null, error: null };
     adminResults.reports.selectMaybeSingle = { data: null, error: null };
+    adminResults.transactions = {
+      selectList: { data: [], error: null },
+    };
 
     const res = await fetch(url(), {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
     });
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summary).toBeDefined();
+    expect(body.summary.total_income).toBe(0);
+    expect(body.summary.total_expenses).toBe(0);
+    expect(body.summary.net).toBe(0);
+    expect(body.by_category).toEqual([]);
   });
 
   it("returns 401 without auth token", async () => {
