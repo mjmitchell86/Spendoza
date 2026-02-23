@@ -1,4 +1,5 @@
 {
   "installCommand": "cd ../.. && bun install",
+  "buildCommand": "",
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
 }
