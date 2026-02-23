@@ -1,11 +1,9 @@
 import { Router, type Response } from "express";
 import multer from "multer";
-import { waitUntil } from "@vercel/functions";
 import { uploadBankStatementSchema } from "@spendoza/shared";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { computeFileHash } from "../services/bank-statement.service";
-import { processBankStatement } from "../services/ai-pipeline.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -72,7 +70,8 @@ router.post(
         statement_month: parsed.data.statement_month,
         is_shared_account: parsed.data.is_shared_account,
         account_label: parsed.data.account_label ?? null,
-        status: "uploaded",
+        status: "processing",
+        parsed_data: { pipeline_step: "extract_text" },
       })
       .select()
       .single();
@@ -81,9 +80,7 @@ router.post(
       return res.status(400).json({ error: error.message });
     }
 
-    // Process in background — waitUntil keeps the function alive after response
-    console.log(`[upload] statement ${data.id} inserted, starting AI processing via waitUntil`);
-    waitUntil(processBankStatement(data.id));
+    console.log(`[upload] statement ${data.id} inserted, pipeline trigger will fire`);
 
     return res.status(201).json(data);
   }
@@ -141,7 +138,10 @@ router.post("/:id/reprocess", async (req, res: Response) => {
 
   const { data, error } = await supabaseAdmin
     .from("bank_statements")
-    .update({ status: "uploaded" })
+    .update({
+      status: "processing",
+      parsed_data: { pipeline_step: "extract_text" },
+    })
     .eq("id", req.params.id)
     .eq("user_id", user.id)
     .select()
@@ -151,9 +151,7 @@ router.post("/:id/reprocess", async (req, res: Response) => {
     return res.status(404).json({ error: "Statement not found" });
   }
 
-  // Process in background — waitUntil keeps the function alive after response
-  console.log(`[reprocess] statement ${data.id} starting AI processing via waitUntil`);
-  waitUntil(processBankStatement(data.id));
+  console.log(`[reprocess] statement ${data.id} pipeline trigger will fire`);
 
   return res.status(200).json({ message: "Reprocessing started" });
 });

@@ -63,10 +63,6 @@ export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
 // AI-powered transaction extraction
 // ---------------------------------------------------------------------------
 
-// Max chars of PDF text to send to the AI model. Keeps the prompt small
-// enough for gpt-5-mini to respond within Vercel's 60s function limit.
-const MAX_TEXT_LENGTH = 8_000;
-
 const SYSTEM_PROMPT = `You are a financial data extraction assistant. Your job is to extract individual transactions from bank statement text.
 
 For each transaction, extract:
@@ -87,13 +83,11 @@ export async function extractTransactions(
   pdfText: string,
   bankName?: string
 ): Promise<ParsedTransaction[]> {
-  // Truncate to avoid slow/timed-out responses on large documents
-  const truncated = pdfText.length > MAX_TEXT_LENGTH;
-  const text = truncated ? pdfText.slice(0, MAX_TEXT_LENGTH) : pdfText;
-
   console.log(
-    `[pdf-parser] Starting AI transaction extraction (${text.length}/${pdfText.length} chars${truncated ? " TRUNCATED" : ""}, bank: ${bankName ?? "unknown"})`
+    `[pdf-parser] Starting AI transaction extraction (${pdfText.length} chars, bank: ${bankName ?? "unknown"})`
   );
+
+  const text = pdfText;
 
   const model = new ChatOpenAI({
     modelName: "gpt-5-mini",

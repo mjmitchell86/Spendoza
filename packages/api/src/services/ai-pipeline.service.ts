@@ -1,5 +1,9 @@
 import { supabaseAdmin } from "../lib/supabase";
 import { extractTextFromPDF, extractTransactions } from "../ai/pdf-parser";
+import {
+  classifyTransactions,
+  type ClassifiedTransaction,
+} from "../ai/transaction-classifier";
 import { matchTransactions } from "../ai/expense-matcher";
 
 /** Wraps a promise with a timeout so it fails gracefully instead of being killed by Vercel. */
@@ -12,198 +16,296 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-/**
- * Processes a bank statement through the AI pipeline:
- *
- * 1. Downloads PDF from Supabase Storage
- * 2. Extracts text from PDF
- * 3. Uses AI to extract structured transactions
- * 4. Matches transactions against existing expenses/income (deterministic)
- * 5. Inserts parsed transactions into the database
- * 6. Updates statement status to "parsed"
- *
- * Note: Classification is skipped to stay within Vercel's 60s function limit.
- * Transactions are inserted as "Uncategorized" and can be classified later.
- */
-export async function processBankStatement(
-  statementId: string
-): Promise<void> {
-  const log = (step: string, detail?: string) =>
-    console.log(`[ai-pipeline] [${statementId}] ${step}${detail ? `: ${detail}` : ""}`);
+const STEPS = [
+  "extract_text",
+  "extract_transactions",
+  "classify_transactions",
+  "match_and_insert",
+] as const;
 
-  // Helper to persist progress to DB (Vercel logs from waitUntil are not captured)
-  const updateProgress = async (step: string) => {
-    await supabaseAdmin
-      .from("bank_statements")
-      .update({ parsed_data: { pipeline_step: step, updated_at: new Date().toISOString() } })
-      .eq("id", statementId);
-  };
+type PipelineStep = (typeof STEPS)[number];
+
+// ---------------------------------------------------------------------------
+// Step dispatcher
+// ---------------------------------------------------------------------------
+
+export async function executeStep(statementId: string, step: string): Promise<void> {
+  const log = (msg: string) =>
+    console.log(`[ai-pipeline] [${statementId}] [${step}] ${msg}`);
+
+  log("starting");
 
   try {
-    // 1. Update status to "processing"
-    log("step 1", "setting status to processing");
+    switch (step as PipelineStep) {
+      case "extract_text":
+        await stepExtractText(statementId);
+        break;
+      case "extract_transactions":
+        await stepExtractTransactions(statementId);
+        break;
+      case "classify_transactions":
+        await stepClassifyTransactions(statementId);
+        break;
+      case "match_and_insert":
+        await stepMatchAndInsert(statementId);
+        break;
+      default:
+        throw new Error(`Unknown pipeline step: ${step}`);
+    }
+
+    log("completed");
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[ai-pipeline] [${statementId}] [${step}] FAILED:`, error);
     await supabaseAdmin
       .from("bank_statements")
-      .update({ status: "processing" })
+      .update({
+        status: "failed",
+        parsed_data: { error: errorMessage, failed_at: new Date().toISOString(), failed_step: step },
+      })
       .eq("id", statementId);
-    await updateProgress("step 1: status set to processing");
+  }
+}
 
-    // 2. Fetch the statement record
-    log("step 2", "fetching statement record");
-    const { data: statement, error: stmtError } = await supabaseAdmin
-      .from("bank_statements")
-      .select("*")
-      .eq("id", statementId)
-      .single();
+// ---------------------------------------------------------------------------
+// Helper: read statement record
+// ---------------------------------------------------------------------------
 
-    if (stmtError || !statement) {
-      throw new Error(`Statement not found: ${statementId}`);
-    }
+async function getStatement(statementId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("bank_statements")
+    .select("*")
+    .eq("id", statementId)
+    .single();
 
-    const { file_path, user_id, bank_name } = statement;
-    log("step 2", `found statement, file_path=${file_path}`);
-    await updateProgress("step 2: fetched statement record");
+  if (error || !data) {
+    throw new Error(`Statement not found: ${statementId}`);
+  }
 
-    // 3. Download PDF from Supabase Storage
-    log("step 3", "downloading PDF from storage");
-    const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-      .from("bank-statements")
-      .download(file_path);
+  return data;
+}
 
-    if (downloadError || !fileData) {
-      throw new Error(`Failed to download PDF: ${downloadError?.message}`);
-    }
+// ---------------------------------------------------------------------------
+// Step 1: extract_text — download PDF, extract text, store in parsed_data
+// ---------------------------------------------------------------------------
 
-    // Convert Blob to Buffer
-    const arrayBuffer = await fileData.arrayBuffer();
-    const pdfBuffer = Buffer.from(arrayBuffer);
-    log("step 3", `downloaded PDF, size=${pdfBuffer.length} bytes`);
-    await updateProgress(`step 3: downloaded PDF (${pdfBuffer.length} bytes)`);
+async function stepExtractText(statementId: string): Promise<void> {
+  const statement = await getStatement(statementId);
+  const { file_path } = statement;
 
-    // 4. Extract text from PDF
-    log("step 4", "extracting text from PDF");
-    const pdfText = await extractTextFromPDF(pdfBuffer);
-    log("step 4", `extracted ${pdfText.length} chars of text`);
-    await updateProgress(`step 4: extracted ${pdfText.length} chars of text`);
+  // Download PDF from Supabase Storage
+  const { data: fileData, error: downloadError } = await supabaseAdmin.storage
+    .from("bank-statements")
+    .download(file_path);
 
-    if (!pdfText.trim()) {
-      throw new Error("No text could be extracted from the PDF");
-    }
+  if (downloadError || !fileData) {
+    throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+  }
 
-    // 5. Extract transactions from text using AI
-    log("step 5", "extracting transactions via AI");
-    await updateProgress("step 5: calling OpenAI for transaction extraction...");
-    const parsedTransactions = await withTimeout(
-      extractTransactions(pdfText, bank_name ?? undefined),
-      50_000,
-      "OpenAI transaction extraction"
-    );
-    log("step 5", `extracted ${parsedTransactions.length} transactions`);
-    await updateProgress(`step 5: extracted ${parsedTransactions.length} transactions`);
+  const arrayBuffer = await fileData.arrayBuffer();
+  const pdfBuffer = Buffer.from(arrayBuffer);
+  console.log(`[ai-pipeline] [${statementId}] downloaded PDF, size=${pdfBuffer.length} bytes`);
 
-    if (parsedTransactions.length === 0) {
-      // Update with zero transactions — still considered "parsed"
-      await supabaseAdmin
-        .from("bank_statements")
-        .update({
-          status: "parsed",
-          parsed_data: {
-            transaction_count: 0,
-            total_credits: 0,
-            total_debits: 0,
-          },
-        })
-        .eq("id", statementId);
-      log("complete", "0 transactions, status set to parsed");
-      return;
-    }
+  // Extract text
+  const pdfText = await extractTextFromPDF(pdfBuffer);
+  console.log(`[ai-pipeline] [${statementId}] extracted ${pdfText.length} chars of text`);
 
-    // 6. Assign default category (skip AI classification to stay within 60s)
-    log("step 6", "assigning default categories");
-    const classifiedTransactions = parsedTransactions.map((t) => ({
-      ...t,
-      ai_category: "Uncategorized",
-    }));
+  if (!pdfText.trim()) {
+    throw new Error("No text could be extracted from the PDF");
+  }
 
-    // 7. Fetch user's existing expenses and income for matching
-    log("step 7", "fetching existing expenses/income for matching");
-    const [{ data: expenses }, { data: income }] = await Promise.all([
-      supabaseAdmin
-        .from("expenses")
-        .select("id, description, amount, category_id")
-        .eq("user_id", user_id),
-      supabaseAdmin
-        .from("income_entries")
-        .select("id, source_name, amount")
-        .eq("user_id", user_id),
-    ]);
-    log("step 7", `found ${expenses?.length ?? 0} expenses, ${income?.length ?? 0} income entries`);
+  // Store text and advance to next step
+  await supabaseAdmin
+    .from("bank_statements")
+    .update({
+      parsed_data: {
+        pipeline_step: "extract_transactions",
+        pdf_text: pdfText,
+      },
+    })
+    .eq("id", statementId);
+}
 
-    // 8. Match transactions against existing records (deterministic, no AI)
-    log("step 8", "matching transactions");
-    const matchedTransactions = await matchTransactions(
-      classifiedTransactions,
-      expenses ?? [],
-      income ?? []
-    );
-    log("step 8", `matched ${matchedTransactions.length} transactions`);
+// ---------------------------------------------------------------------------
+// Step 2: extract_transactions — AI call to get structured transactions
+// ---------------------------------------------------------------------------
 
-    // 9. Insert all transactions into the transactions table
-    log("step 9", "inserting transactions into DB");
-    const transactionRows = matchedTransactions.map((t) => ({
-      bank_statement_id: statementId,
-      user_id,
-      date: t.date,
-      description: t.description,
-      amount: t.amount,
-      type: t.type,
-      ai_category: t.ai_category,
-      matched_expense_id: t.matched_expense_id,
-      matched_income_id: t.matched_income_id,
-    }));
+async function stepExtractTransactions(statementId: string): Promise<void> {
+  const statement = await getStatement(statementId);
+  const pdfText = statement.parsed_data?.pdf_text;
 
-    const { error: insertError } = await supabaseAdmin
-      .from("transactions")
-      .insert(transactionRows);
+  if (!pdfText) {
+    throw new Error("No pdf_text found in parsed_data");
+  }
 
-    if (insertError) {
-      throw new Error(
-        `Failed to insert transactions: ${insertError.message}`
-      );
-    }
-    log("step 9", `inserted ${transactionRows.length} transactions`);
+  const parsedTransactions = await withTimeout(
+    extractTransactions(pdfText, statement.bank_name ?? undefined),
+    50_000,
+    "OpenAI transaction extraction"
+  );
 
-    // 10. Update bank_statements: status = "parsed", parsed_data = summary
-    const totalCredits = matchedTransactions
-      .filter((t) => t.type === "credit")
-      .reduce((sum, t) => sum + t.amount, 0);
+  console.log(`[ai-pipeline] [${statementId}] extracted ${parsedTransactions.length} transactions`);
 
-    const totalDebits = matchedTransactions
-      .filter((t) => t.type === "debit")
-      .reduce((sum, t) => sum + t.amount, 0);
-
+  if (parsedTransactions.length === 0) {
+    // No transactions — mark as parsed immediately
     await supabaseAdmin
       .from("bank_statements")
       .update({
         status: "parsed",
         parsed_data: {
-          transaction_count: matchedTransactions.length,
-          total_credits: totalCredits,
-          total_debits: totalDebits,
+          transaction_count: 0,
+          total_credits: 0,
+          total_debits: 0,
         },
       })
       .eq("id", statementId);
-
-    log("complete", `parsed ${matchedTransactions.length} txns, credits=$${totalCredits}, debits=$${totalDebits}`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[ai-pipeline] [${statementId}] FAILED:`, error);
-    await supabaseAdmin
-      .from("bank_statements")
-      .update({
-        status: "failed",
-        parsed_data: { error: errorMessage, failed_at: new Date().toISOString() },
-      })
-      .eq("id", statementId);
+    return;
   }
+
+  // Store raw transactions and advance to classification step
+  await supabaseAdmin
+    .from("bank_statements")
+    .update({
+      parsed_data: {
+        pipeline_step: "classify_transactions",
+        raw_transactions: parsedTransactions,
+      },
+    })
+    .eq("id", statementId);
+}
+
+// ---------------------------------------------------------------------------
+// Step 3: classify_transactions — AI call to classify into user categories
+// ---------------------------------------------------------------------------
+
+async function stepClassifyTransactions(statementId: string): Promise<void> {
+  const statement = await getStatement(statementId);
+  const rawTransactions = statement.parsed_data?.raw_transactions;
+
+  if (!rawTransactions || rawTransactions.length === 0) {
+    throw new Error("No raw_transactions found in parsed_data");
+  }
+
+  // Fetch user's categories
+  const { data: categories } = await supabaseAdmin
+    .from("categories")
+    .select("name")
+    .eq("user_id", statement.user_id);
+
+  const categoryNames = (categories ?? []).map((c: { name: string }) => c.name);
+
+  let classifiedTransactions: ClassifiedTransaction[];
+
+  if (categoryNames.length === 0) {
+    // No user categories — skip AI classification, mark all as Uncategorized
+    classifiedTransactions = rawTransactions.map((t: any) => ({
+      ...t,
+      ai_category: "Uncategorized",
+    }));
+  } else {
+    classifiedTransactions = await withTimeout(
+      classifyTransactions(rawTransactions, categoryNames),
+      50_000,
+      "OpenAI transaction classification"
+    );
+  }
+
+  console.log(`[ai-pipeline] [${statementId}] classified ${classifiedTransactions.length} transactions`);
+
+  // Store classified transactions and advance to match_and_insert
+  await supabaseAdmin
+    .from("bank_statements")
+    .update({
+      parsed_data: {
+        pipeline_step: "match_and_insert",
+        classified_transactions: classifiedTransactions,
+      },
+    })
+    .eq("id", statementId);
+}
+
+// ---------------------------------------------------------------------------
+// Step 4: match_and_insert — deterministic matching + DB insert
+// ---------------------------------------------------------------------------
+
+async function stepMatchAndInsert(statementId: string): Promise<void> {
+  const statement = await getStatement(statementId);
+  const classifiedTransactions = statement.parsed_data?.classified_transactions;
+
+  if (!classifiedTransactions || classifiedTransactions.length === 0) {
+    throw new Error("No classified_transactions found in parsed_data");
+  }
+
+  const { user_id } = statement;
+
+  // Fetch existing expenses and income for matching
+  const [{ data: expenses }, { data: income }] = await Promise.all([
+    supabaseAdmin
+      .from("expenses")
+      .select("id, description, amount, category_id")
+      .eq("user_id", user_id),
+    supabaseAdmin
+      .from("income_entries")
+      .select("id, source_name, amount")
+      .eq("user_id", user_id),
+  ]);
+
+  console.log(
+    `[ai-pipeline] [${statementId}] found ${expenses?.length ?? 0} expenses, ${income?.length ?? 0} income entries`
+  );
+
+  // Match transactions against existing records (deterministic, no AI)
+  const matchedTransactions = await matchTransactions(
+    classifiedTransactions,
+    expenses ?? [],
+    income ?? []
+  );
+
+  // Insert all transactions into the transactions table
+  const transactionRows = matchedTransactions.map((t) => ({
+    bank_statement_id: statementId,
+    user_id,
+    date: t.date,
+    description: t.description,
+    amount: t.amount,
+    type: t.type,
+    ai_category: t.ai_category,
+    matched_expense_id: t.matched_expense_id,
+    matched_income_id: t.matched_income_id,
+  }));
+
+  const { error: insertError } = await supabaseAdmin
+    .from("transactions")
+    .insert(transactionRows);
+
+  if (insertError) {
+    throw new Error(`Failed to insert transactions: ${insertError.message}`);
+  }
+
+  console.log(`[ai-pipeline] [${statementId}] inserted ${transactionRows.length} transactions`);
+
+  // Update statement to parsed with summary
+  const totalCredits = matchedTransactions
+    .filter((t) => t.type === "credit")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalDebits = matchedTransactions
+    .filter((t) => t.type === "debit")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  await supabaseAdmin
+    .from("bank_statements")
+    .update({
+      status: "parsed",
+      parsed_data: {
+        transaction_count: matchedTransactions.length,
+        total_credits: totalCredits,
+        total_debits: totalDebits,
+      },
+    })
+    .eq("id", statementId);
+
+  console.log(
+    `[ai-pipeline] [${statementId}] complete: ${matchedTransactions.length} txns, credits=$${totalCredits}, debits=$${totalDebits}`
+  );
 }

@@ -9,12 +9,12 @@ interface ProcessingStepProps {
   onError: () => void;
 }
 
-const STATUS_MESSAGES = [
-  "Reading your bank statement...",
-  "Extracting transactions...",
-  "Categorizing expenses...",
-  "Preparing your data...",
-];
+const STEP_MESSAGES: Record<string, string> = {
+  extract_text: "Reading your bank statement...",
+  extract_transactions: "Extracting transactions...",
+  classify_transactions: "Categorizing expenses...",
+  match_and_insert: "Preparing your data...",
+};
 
 export function ProcessingStep({
   statementId,
@@ -37,9 +37,11 @@ export function ProcessingStep({
   const isParsed = statement?.status === "parsed";
   const isFailed = statement?.status === "failed";
 
-  // Cycle through messages while processing
-  const messageIndex =
-    Math.floor(Date.now() / 3000) % STATUS_MESSAGES.length;
+  const pipelineStep = (statement?.parsed_data as any)?.pipeline_step as
+    | string
+    | undefined;
+  const statusMessage =
+    (pipelineStep && STEP_MESSAGES[pipelineStep]) ?? "Processing your statement...";
 
   return (
     <div className="flex flex-col items-center gap-6 py-8 text-center">
@@ -72,7 +74,7 @@ export function ProcessingStep({
           <div>
             <h2 className="text-xl font-semibold">Processing Your Statement</h2>
             <p className="text-sm text-muted-foreground">
-              {STATUS_MESSAGES[messageIndex]}
+              {statusMessage}
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
