@@ -1,6 +1,9 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { PDFParse } from "pdf-parse";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+
+// Disable pdfjs worker — it's designed for browsers and hangs in serverless
+pdfjs.GlobalWorkerOptions.workerSrc = "";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,12 +20,23 @@ export interface ParsedTransaction {
 // ---------------------------------------------------------------------------
 
 /**
- * Extracts raw text from a PDF buffer using pdf-parse.
+ * Extracts raw text from a PDF buffer using pdfjs-dist directly (no worker).
  */
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
-  const parser = new PDFParse({ data: pdfBuffer });
-  const result = await parser.getText();
-  return result.text;
+  const data = new Uint8Array(pdfBuffer);
+  const doc = await pdfjs.getDocument({ data, useWorkerFetch: false }).promise;
+
+  const textParts: string[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item: any) => item.str)
+      .join(" ");
+    textParts.push(pageText);
+  }
+
+  return textParts.join("\n");
 }
 
 // ---------------------------------------------------------------------------
