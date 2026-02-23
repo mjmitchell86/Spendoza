@@ -11,6 +11,14 @@ export function useBankStatements() {
   return useQuery<BankStatement[]>({
     queryKey: ["bank-statements"],
     queryFn: () => apiClient("/bank-statements"),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      const hasProcessing = data.some(
+        (s) => s.status === "uploaded" || s.status === "processing"
+      );
+      return hasProcessing ? 3000 : false;
+    },
   });
 }
 

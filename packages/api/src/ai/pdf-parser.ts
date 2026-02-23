@@ -29,20 +29,34 @@ export interface ParsedTransaction {
  * Extracts raw text from a PDF buffer using pdfjs-dist directly (no worker).
  */
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
-  const data = new Uint8Array(pdfBuffer);
-  const doc = await pdfjs.getDocument({ data, useWorkerFetch: false }).promise;
+  console.log(
+    `[pdf-parser] Extracting text from PDF (${(pdfBuffer.length / 1024).toFixed(1)} KB)`
+  );
+  try {
+    const data = new Uint8Array(pdfBuffer);
+    const doc = await pdfjs.getDocument({ data, useWorkerFetch: false }).promise;
 
-  const textParts: string[] = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item: any) => item.str)
-      .join(" ");
-    textParts.push(pageText);
+    const textParts: string[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: any) => item.str)
+        .join(" ");
+      textParts.push(pageText);
+    }
+
+    const text = textParts.join("\n");
+    console.log(
+      `[pdf-parser] Extracted ${text.length} chars from ${doc.numPages} page(s)`
+    );
+    return text;
+  } catch (error) {
+    console.error("[pdf-parser] Failed to extract text from PDF:", error);
+    throw new Error(
+      `PDF text extraction failed: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
-
-  return textParts.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -69,9 +83,14 @@ export async function extractTransactions(
   pdfText: string,
   bankName?: string
 ): Promise<ParsedTransaction[]> {
+  console.log(
+    `[pdf-parser] Starting AI transaction extraction (${pdfText.length} chars, bank: ${bankName ?? "unknown"})`
+  );
+
   const model = new ChatOpenAI({
     modelName: "gpt-4o-mini",
     temperature: 0,
+    timeout: 120_000,
   });
 
   let userPrompt = `Extract all transactions from the following bank statement text:\n\n${pdfText}`;
@@ -80,22 +99,49 @@ export async function extractTransactions(
     userPrompt += `\n\nThis is a ${bankName} bank statement. Use ${bankName}-specific formatting conventions to help parse the data accurately.`;
   }
 
-  const response = await model.invoke([
-    new SystemMessage(SYSTEM_PROMPT),
-    new HumanMessage(userPrompt),
-  ]);
+  let content: string;
+  try {
+    const startTime = Date.now();
+    const response = await model.invoke([
+      new SystemMessage(SYSTEM_PROMPT),
+      new HumanMessage(userPrompt),
+    ]);
+    const elapsed = Date.now() - startTime;
 
-  const content =
-    typeof response.content === "string"
-      ? response.content
-      : JSON.stringify(response.content);
+    content =
+      typeof response.content === "string"
+        ? response.content
+        : JSON.stringify(response.content);
 
-  const parsed = JSON.parse(content);
+    console.log(
+      `[pdf-parser] AI response received in ${elapsed}ms (${content.length} chars)`
+    );
+  } catch (error) {
+    console.error("[pdf-parser] OpenAI API call failed:", error);
+    throw new Error(
+      `AI transaction extraction failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    console.error(
+      "[pdf-parser] Failed to parse AI response as JSON. Raw response:",
+      content.slice(0, 500)
+    );
+    throw new Error("AI returned invalid JSON during transaction extraction");
+  }
 
   // Handle both { transactions: [...] } and top-level array formats
   const rawTransactions: any[] = Array.isArray(parsed)
     ? parsed
     : parsed.transactions ?? [];
+
+  console.log(
+    `[pdf-parser] Extracted ${rawTransactions.length} transaction(s) from AI response`
+  );
 
   // Normalize: ensure amounts are positive
   return rawTransactions.map((t) => ({
