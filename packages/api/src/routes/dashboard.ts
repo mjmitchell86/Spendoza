@@ -5,6 +5,65 @@ import type { AuthenticatedRequest } from "../middleware/auth";
 const router = Router();
 
 // ---------------------------------------------------------------------------
+// Helper: compute dashboard data from transactions when no report exists
+// ---------------------------------------------------------------------------
+async function computeFromTransactions(userId: string, month: string) {
+  // month is YYYY-MM-01, derive range
+  const startDate = month.slice(0, 7) + "-01";
+  const endYear = parseInt(month.slice(0, 4));
+  const endMonth = parseInt(month.slice(5, 7));
+  const nextMonth = endMonth === 12
+    ? `${endYear + 1}-01-01`
+    : `${endYear}-${String(endMonth + 1).padStart(2, "0")}-01`;
+
+  const { data: transactions } = await supabaseAdmin
+    .from("transactions")
+    .select("amount, type, ai_category, date")
+    .eq("user_id", userId)
+    .gte("date", startDate)
+    .lt("date", nextMonth);
+
+  const txns = transactions ?? [];
+
+  const totalCredits = txns
+    .filter((t) => t.type === "credit")
+    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+
+  const totalDebits = txns
+    .filter((t) => t.type === "debit")
+    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+
+  // Group debits by category
+  const categoryMap = new Map<string, number>();
+  for (const t of txns.filter((t) => t.type === "debit")) {
+    const cat = t.ai_category ?? "Uncategorized";
+    categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
+  }
+
+  const byCategory = Array.from(categoryMap.entries())
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: totalDebits > 0 ? (amount / totalDebits) * 100 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  return {
+    summary: {
+      total_income: totalCredits,
+      total_expenses: totalDebits,
+      savings_rate: totalCredits > 0
+        ? ((totalCredits - totalDebits) / totalCredits) * 100
+        : 0,
+      net: totalCredits - totalDebits,
+    },
+    by_category: byCategory,
+    trends: { income_change: 0, expense_change: 0 },
+    insights: null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Helper: get current month string (YYYY-MM-01)
 // ---------------------------------------------------------------------------
 function currentMonthStr(): string {
@@ -48,11 +107,13 @@ router.get("/personal", async (req: Request, res: Response) => {
     .eq("report_month", month)
     .maybeSingle();
 
-  if (!report) {
-    return res.status(404).json({ error: "No report data available" });
+  if (report) {
+    return res.status(200).json(toDashboardResponse(report));
   }
 
-  return res.status(200).json(toDashboardResponse(report));
+  // No report yet — compute directly from transactions
+  const dashboard = await computeFromTransactions(user.id, month);
+  return res.status(200).json(dashboard);
 });
 
 // ---------------------------------------------------------------------------
