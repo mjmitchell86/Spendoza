@@ -5,13 +5,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_ENV: test
-      SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
-      SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      CRON_SECRET: ${{ secrets.TEST_CRON_SECRET }}
-      VITE_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
-      VITE_SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY }}
       VITE_API_URL: https://test-api.spendoza.io
     steps:
       - uses: actions/checkout@v4
