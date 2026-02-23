@@ -131,12 +131,16 @@ router.get("/personal", async (req: Request, res: Response) => {
     .eq("report_month", month)
     .maybeSingle();
 
+  // Use report if it has meaningful data
   if (report) {
-    return res.status(200).json(toDashboardResponse(report));
+    const rd = report.report_data as any;
+    if (rd.total_income > 0 || rd.total_expenses > 0) {
+      return res.status(200).json(toDashboardResponse(report));
+    }
   }
 
-  // No report yet — compute directly from transactions
-  // If querying the current month yields nothing, try the latest month with data
+  // No report or report has no data — compute from transactions
+  // If the requested month has no transactions, try the latest month with data
   let dashboard = await computeFromTransactions(user.id, month);
 
   if (dashboard.summary.total_income === 0 && dashboard.summary.total_expenses === 0) {
@@ -144,6 +148,11 @@ router.get("/personal", async (req: Request, res: Response) => {
     if (latestMonth && latestMonth !== month) {
       dashboard = await computeFromTransactions(user.id, latestMonth);
     }
+  }
+
+  // Merge AI insights from the report if we have them
+  if (report?.ai_insights && !dashboard.insights) {
+    dashboard.insights = report.ai_insights;
   }
 
   return res.status(200).json(dashboard);
