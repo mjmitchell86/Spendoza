@@ -89,7 +89,6 @@ export async function extractTransactions(
 
   const model = new ChatOpenAI({
     modelName: "gpt-5-mini",
-    temperature: 0,
     timeout: 120_000,
   });
 
