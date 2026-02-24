@@ -116,8 +116,23 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     ? new Date(latestTxn[0].date + "T00:00:00Z")
     : now;
 
-  // Generate the report for the month with data (force=true to bypass cache)
+  // Generate the personal report for the month with data (force=true to bypass cache)
   const report = await generateUserReport(user.id, reportDate, true);
+
+  // Also generate household report if user belongs to one
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("household_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.household_id) {
+    try {
+      await generateHouseholdReport(profile.household_id, reportDate, true);
+    } catch (err) {
+      console.error(`Failed to generate household report:`, err);
+    }
+  }
 
   // Increment the request count only after successful generation
   await supabaseAdmin.from("report_requests").upsert(
