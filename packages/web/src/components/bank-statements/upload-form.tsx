@@ -27,7 +27,7 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [bankName, setBankName] = useState("");
   const [statementMonth, setStatementMonth] = useState(
-    new Date().toISOString().slice(0, 7) + "-01"
+    new Date().toISOString().slice(0, 7)
   );
   const [isSharedAccount, setIsSharedAccount] = useState(false);
   const [accountLabel, setAccountLabel] = useState("");
@@ -37,7 +37,7 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
   function resetForm() {
     setFile(null);
     setBankName("");
-    setStatementMonth(new Date().toISOString().slice(0, 7) + "-01");
+    setStatementMonth(new Date().toISOString().slice(0, 7));
     setIsSharedAccount(false);
     setAccountLabel("");
     setError(null);
@@ -87,7 +87,7 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("statement_month", statementMonth);
+    formData.append("statement_month", statementMonth + "-01");
     if (bankName.trim()) {
       formData.append("bank_name", bankName.trim());
     }
@@ -174,7 +174,7 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
               <Label htmlFor="statement_month">Statement Month</Label>
               <Input
                 id="statement_month"
-                type="date"
+                type="month"
                 value={statementMonth}
                 onChange={(e) => setStatementMonth(e.target.value)}
                 required

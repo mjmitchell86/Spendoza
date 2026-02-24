@@ -20,7 +20,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
   const [file, setFile] = useState<File | null>(null);
   const [bankName, setBankName] = useState("");
   const [statementMonth, setStatementMonth] = useState(
-    new Date().toISOString().slice(0, 7) + "-01"
+    new Date().toISOString().slice(0, 7)
   );
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("statement_month", statementMonth);
+    formData.append("statement_month", statementMonth + "-01");
     if (bankName.trim()) {
       formData.append("bank_name", bankName.trim());
     }
@@ -154,7 +154,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
             <Label htmlFor="ob_statement_month">Statement Month</Label>
             <Input
               id="ob_statement_month"
-              type="date"
+              type="month"
               value={statementMonth}
               onChange={(e) => setStatementMonth(e.target.value)}
               required
