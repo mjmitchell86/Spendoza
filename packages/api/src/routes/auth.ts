@@ -5,22 +5,30 @@ import { supabaseAdmin } from "../lib/supabase";
 
 const router = Router();
 
+const ADMIN_INVITE_CODE = "Chloe14";
+
 // ---------------------------------------------------------------------------
 // POST /signup
 // ---------------------------------------------------------------------------
 router.post("/signup", validate(signupSchema), async (req: Request, res: Response) => {
   const { email, password, display_name, invite_code } = req.body;
 
-  // Validate invite code
-  const { data: codeRecord, error: codeError } = await supabaseAdmin
-    .from("invite_codes")
-    .select("id")
-    .eq("code", invite_code)
-    .is("used_by", null)
-    .single();
+  // Validate invite code: check hardcoded admin code first, then DB
+  let dbCodeId: string | null = null;
 
-  if (codeError || !codeRecord) {
-    return res.status(400).json({ error: "Invalid or already-used invite code" });
+  if (invite_code !== ADMIN_INVITE_CODE) {
+    const { data: codeRecord, error: codeError } = await supabaseAdmin
+      .from("invite_codes")
+      .select("id")
+      .eq("code", invite_code)
+      .is("used_by", null)
+      .single();
+
+    if (codeError || !codeRecord) {
+      return res.status(400).json({ error: "Invalid or already-used invite code" });
+    }
+
+    dbCodeId = codeRecord.id;
   }
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -34,11 +42,13 @@ router.post("/signup", validate(signupSchema), async (req: Request, res: Respons
     return res.status(400).json({ error: error.message });
   }
 
-  // Mark invite code as used
-  await supabaseAdmin
-    .from("invite_codes")
-    .update({ used_by: data.user.id, used_at: new Date().toISOString() })
-    .eq("id", codeRecord.id);
+  // Mark DB invite code as used (skip for admin code)
+  if (dbCodeId) {
+    await supabaseAdmin
+      .from("invite_codes")
+      .update({ used_by: data.user.id, used_at: new Date().toISOString() })
+      .eq("id", dbCodeId);
+  }
 
   return res.status(201).json({ user: data.user });
 });
