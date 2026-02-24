@@ -2,7 +2,7 @@
   "installCommand": "cd ../.. && bun install",
   "functions": {
     "src/index.ts": {
-      "maxDuration": 60
+      "maxDuration": 120
     }
   }
 }
