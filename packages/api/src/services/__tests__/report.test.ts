@@ -8,8 +8,8 @@ const TEST_HOUSEHOLD_ID = "hh-1";
 const REPORT_MONTH = new Date("2026-01-01");
 
 const sampleIncomeEntries = [
-  { id: "inc-1", user_id: TEST_USER_ID, amount: 5000, frequency: "monthly" },
-  { id: "inc-2", user_id: TEST_USER_ID, amount: 1500, frequency: "monthly" },
+  { id: "inc-1", user_id: TEST_USER_ID, amount: 5000, frequency: "monthly", effective_date: "2025-06-01", end_date: null },
+  { id: "inc-2", user_id: TEST_USER_ID, amount: 1500, frequency: "biweekly", effective_date: "2025-09-01", end_date: null },
 ];
 
 const sampleExpenses = [
@@ -17,22 +17,34 @@ const sampleExpenses = [
     id: "exp-1",
     user_id: TEST_USER_ID,
     amount: 1200,
+    frequency: "recurring",
+    recurrence_interval: "monthly",
+    next_due_date: "2026-02-01",
+    end_date: null,
     category_id: "cat-1",
     categories: { name: "Housing" },
   },
   {
     id: "exp-2",
     user_id: TEST_USER_ID,
-    amount: 400,
+    amount: 100,
+    frequency: "recurring",
+    recurrence_interval: "weekly",
+    next_due_date: "2026-01-07",
+    end_date: null,
     category_id: "cat-2",
     categories: { name: "Food" },
   },
   {
     id: "exp-3",
     user_id: TEST_USER_ID,
-    amount: 200,
-    category_id: "cat-2",
-    categories: { name: "Food" },
+    amount: 500,
+    frequency: "one_time",
+    recurrence_interval: null,
+    next_due_date: "2026-01-15",
+    end_date: null,
+    category_id: "cat-3",
+    categories: { name: "Shopping" },
   },
 ];
 
@@ -309,14 +321,35 @@ describe("generateUserReport", () => {
     expect(result.report_data.top_categories[1]).toBe("Food");
   });
 
-  it("falls back to manual entries when no transactions exist", async () => {
+  it("falls back to manual entries with frequency proration when no transactions", async () => {
     adminResults.transactions.selectList = { data: [], error: null };
 
     const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
 
-    // Falls back to income_entries (6500) and expenses (1800)
-    expect(result.report_data.total_income).toBe(6500);
-    expect(result.report_data.total_expenses).toBe(1800);
+    // Income: $5000 monthly + $1500 biweekly (1500 * 26/12 = $3250) = $8250
+    expect(result.report_data.total_income).toBeCloseTo(8250, 0);
+
+    // Expenses: $1200 monthly + $100 weekly (100 * 52/12 ≈ $433.33) + $500 one-time (in Jan) = $2133.33
+    expect(result.report_data.total_expenses).toBeCloseTo(2133.33, 0);
+  });
+
+  it("excludes one-time expenses outside the report month", async () => {
+    adminResults.transactions.selectList = { data: [], error: null };
+    adminResults.expenses.selectList = {
+      data: [
+        {
+          ...sampleExpenses[2],
+          next_due_date: "2026-03-15", // March, not January
+        },
+      ],
+      error: null,
+    };
+    adminResults.income_entries.selectList = { data: [], error: null };
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
+
+    // One-time expense in March should not count for January report
+    expect(result.report_data.total_expenses).toBe(0);
   });
 
   it("returns cached report when has_new_data is false", async () => {
