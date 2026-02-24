@@ -193,7 +193,7 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
 
   const { transactions: parsedTransactions, detectedBankName } = await withTimeout(
     extractTransactions(pdfText, statement.bank_name ?? undefined),
-    110_000,
+    150_000,
     "OpenAI transaction extraction"
   );
 

@@ -100,7 +100,7 @@ export async function extractTransactions(
 
   const model = new ChatOpenAI({
     modelName: "gpt-5-mini",
-    timeout: 110_000,
+    timeout: 150_000,
   });
 
   let userPrompt = `Extract all transactions from the following bank statement text:\n\n${text}`;
