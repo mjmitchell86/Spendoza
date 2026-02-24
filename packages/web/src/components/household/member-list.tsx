@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, ShieldCheck } from "lucide-react";
 import type { HouseholdMember } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useRemoveMember } from "@/hooks/use-household";
+import { useRemoveMember, useTransferOwnership } from "@/hooks/use-household";
 
 const SHARING_LABELS: Record<string, string> = {
   all: "All",
@@ -41,7 +41,11 @@ export function MemberList({
   isHead,
 }: MemberListProps) {
   const removeMember = useRemoveMember();
+  const transferOwnership = useTransferOwnership();
   const [removeTarget, setRemoveTarget] = useState<HouseholdMember | null>(
+    null
+  );
+  const [transferTarget, setTransferTarget] = useState<HouseholdMember | null>(
     null
   );
 
@@ -50,6 +54,16 @@ export function MemberList({
     try {
       await removeMember.mutateAsync(removeTarget.id);
       setRemoveTarget(null);
+    } catch {
+      // Error handled by mutation
+    }
+  }
+
+  async function handleTransfer() {
+    if (!transferTarget) return;
+    try {
+      await transferOwnership.mutateAsync({ new_head_id: transferTarget.id });
+      setTransferTarget(null);
     } catch {
       // Error handled by mutation
     }
@@ -94,14 +108,25 @@ export function MemberList({
               {isHead && (
                 <TableCell>
                   {member.id !== currentUserId && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setRemoveTarget(member)}
-                    >
-                      <Trash2 className="size-4" />
-                      <span className="sr-only">Remove</span>
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setTransferTarget(member)}
+                        title="Transfer ownership"
+                      >
+                        <ShieldCheck className="size-4" />
+                        <span className="sr-only">Transfer ownership</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setRemoveTarget(member)}
+                      >
+                        <Trash2 className="size-4" />
+                        <span className="sr-only">Remove</span>
+                      </Button>
+                    </div>
                   )}
                 </TableCell>
               )}
@@ -135,6 +160,34 @@ export function MemberList({
               disabled={removeMember.isPending}
             >
               {removeMember.isPending ? "Removing..." : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!transferTarget}
+        onOpenChange={(v) => {
+          if (!v) setTransferTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer Ownership</DialogTitle>
+            <DialogDescription>
+              Transfer ownership to {transferTarget?.display_name}? You will no
+              longer be the head of household.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleTransfer}
+              disabled={transferOwnership.isPending}
+            >
+              {transferOwnership.isPending ? "Transferring..." : "Transfer"}
             </Button>
           </DialogFooter>
         </DialogContent>

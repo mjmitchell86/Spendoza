@@ -4,6 +4,7 @@ import {
   inviteToHouseholdSchema,
   joinHouseholdSchema,
   updateSharingSchema,
+  transferOwnershipSchema,
 } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
@@ -260,10 +261,28 @@ async function leaveHandler(req: Request, res: Response) {
     .eq("id", householdId)
     .single();
 
+  // Count members to decide if sole-member head can leave
+  const { data: allMembers } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("household_id", householdId);
+
   if (household?.head_of_household_id === user.id) {
-    return res
-      .status(400)
-      .json({ error: "Head of household cannot leave. Transfer ownership or delete the household first." });
+    if ((allMembers?.length ?? 0) > 1) {
+      return res
+        .status(400)
+        .json({ error: "Head of household cannot leave. Transfer ownership first." });
+    }
+
+    // Sole member — remove from household then delete it
+    await supabaseAdmin
+      .from("profiles")
+      .update({ household_id: null })
+      .eq("id", user.id);
+
+    await supabaseAdmin.from("households").delete().eq("id", householdId);
+
+    return res.status(200).json({ message: "Left and deleted household successfully" });
   }
 
   await supabaseAdmin
@@ -272,6 +291,56 @@ async function leaveHandler(req: Request, res: Response) {
     .eq("id", user.id);
 
   return res.status(200).json({ message: "Left household successfully" });
+}
+
+async function transferOwnershipHandler(req: Request, res: Response) {
+  const { user } = req as AuthenticatedRequest;
+  const householdId = req.params.id;
+
+  // Verify caller is head of household
+  const { data: household } = await supabaseAdmin
+    .from("households")
+    .select("*")
+    .eq("id", householdId)
+    .single();
+
+  if (!household || household.head_of_household_id !== user.id) {
+    return res
+      .status(403)
+      .json({ error: "Only the head of household can transfer ownership" });
+  }
+
+  const { new_head_id } = req.body;
+
+  // Can't transfer to self
+  if (new_head_id === user.id) {
+    return res.status(400).json({ error: "Cannot transfer ownership to yourself" });
+  }
+
+  // Verify new head is a member of the same household
+  const { data: targetProfile } = await supabaseAdmin
+    .from("profiles")
+    .select("household_id")
+    .eq("id", new_head_id)
+    .single();
+
+  if (!targetProfile || targetProfile.household_id !== householdId) {
+    return res.status(400).json({ error: "Target user is not a member of this household" });
+  }
+
+  // Update head_of_household_id
+  const { data: updated, error } = await supabaseAdmin
+    .from("households")
+    .update({ head_of_household_id: new_head_id })
+    .eq("id", householdId)
+    .select()
+    .single();
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  return res.status(200).json(updated);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +378,7 @@ router.post("/", validate(createHouseholdSchema), async (req, res: Response) => 
 router.put("/sharing", resolveHousehold, validate(updateSharingSchema), updateSharingHandler);
 router.post("/invite", resolveHousehold, validate(inviteToHouseholdSchema), inviteHandler);
 router.post("/leave", resolveHousehold, leaveHandler);
+router.post("/transfer", resolveHousehold, validate(transferOwnershipSchema), transferOwnershipHandler);
 router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 
 // ---------------------------------------------------------------------------
@@ -317,6 +387,7 @@ router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 router.get("/:id", getHouseholdHandler);
 router.post("/:id/invite", validate(inviteToHouseholdSchema), inviteHandler);
 router.post("/:id/join", validate(joinHouseholdSchema), joinHandler);
+router.post("/:id/transfer", validate(transferOwnershipSchema), transferOwnershipHandler);
 router.delete("/:id/members/:userId", removeMemberHandler);
 router.put("/:id/sharing", validate(updateSharingSchema), updateSharingHandler);
 

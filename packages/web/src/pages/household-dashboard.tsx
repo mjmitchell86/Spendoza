@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -6,6 +7,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Users,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +17,16 @@ import {
   useHouseholdDashboard,
   useGenerateReport,
 } from "@/hooks/use-dashboard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
-import { useHousehold } from "@/hooks/use-household";
+import { useHousehold, useLeaveHousehold } from "@/hooks/use-household";
 import { IncomeVsExpensesChart } from "@/components/dashboard/income-vs-expenses-chart";
 import { SpendingByCategoryChart } from "@/components/dashboard/spending-by-category-chart";
 import { SavingsRateCard } from "@/components/dashboard/savings-rate-card";
@@ -114,11 +124,25 @@ export function HouseholdPage() {
   const { data, isLoading, error, refetch } = useHouseholdDashboard(undefined, hasHousehold);
   const generateReport = useGenerateReport();
 
+  const leaveHousehold = useLeaveHousehold();
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+
   const household = householdData?.household;
   const members = householdData?.members ?? [];
   const currentUserId = user?.id ?? "";
   const isHead = household?.head_of_household_id === currentUserId;
+  const isSoleMember = members.length <= 1;
+  const canLeave = !isHead || isSoleMember;
   const currentMember = members.find((m) => m.id === currentUserId);
+
+  async function handleLeave() {
+    try {
+      await leaveHousehold.mutateAsync();
+      setShowLeaveDialog(false);
+    } catch {
+      // Error handled by mutation
+    }
+  }
 
   // Loading state
   if (householdLoading) {
@@ -336,6 +360,75 @@ export function HouseholdPage() {
                 </CardContent>
               </Card>
             )}
+
+            <Separator />
+
+            {/* Danger Zone */}
+            <Card className="border-destructive/50">
+              <CardHeader className="pb-0">
+                <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {isHead && isSoleMember
+                        ? "Leave & Delete Household"
+                        : "Leave Household"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {isHead && !isSoleMember
+                        ? "Transfer ownership before leaving"
+                        : isHead && isSoleMember
+                          ? "This will permanently delete the household"
+                          : "You will be removed from this household"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    disabled={!canLeave}
+                    onClick={() => setShowLeaveDialog(true)}
+                  >
+                    <LogOut className="size-4" />
+                    {isHead && isSoleMember
+                      ? "Leave & Delete"
+                      : "Leave Household"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Dialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>
+                    {isHead && isSoleMember
+                      ? "Leave & Delete Household"
+                      : "Leave Household"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {isHead && isSoleMember
+                      ? `Are you sure you want to leave ${household.name}? Since you are the only member, the household will be permanently deleted.`
+                      : `Are you sure you want to leave ${household.name}?`}
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowLeaveDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleLeave}
+                    disabled={leaveHousehold.isPending}
+                  >
+                    {leaveHousehold.isPending ? "Leaving..." : "Leave"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </TabsContent>
       </Tabs>
