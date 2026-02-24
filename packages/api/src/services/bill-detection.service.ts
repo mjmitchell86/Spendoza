@@ -9,6 +9,7 @@ import type { RecurrenceInterval } from "@spendoza/shared";
 const LOOKBACK_MONTHS = 12;
 const MIN_OCCURRENCES = 3;
 const AMOUNT_TOLERANCE = 0.1;
+const MORTGAGE_AMOUNT_TOLERANCE = 0.25;
 const STALENESS_MULTIPLIER = 2;
 const SIMILARITY_THRESHOLD = 0.6;
 
@@ -57,6 +58,15 @@ export function isBillLikeCategory(aiCategory: string | null): boolean {
   if (!aiCategory) return false;
   const lower = aiCategory.toLowerCase();
   return BILL_CATEGORY_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+const MORTGAGE_KEYWORDS = ["mortgage", "home loan"];
+
+/** Check if an ai_category is mortgage-related (needs higher amount tolerance). */
+function isMortgageCategory(aiCategory: string | null): boolean {
+  if (!aiCategory) return false;
+  const lower = aiCategory.toLowerCase();
+  return MORTGAGE_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 /** Interval definitions in days. */
@@ -317,20 +327,7 @@ function detectPatterns(
   for (const [, txns] of groups) {
     if (txns.length < MIN_OCCURRENCES) continue;
 
-    // Verify amount consistency
-    const amounts = txns.map((t) => t.amount);
-    const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-    const allWithinTolerance = amounts.every(
-      (a) => Math.abs(a - avgAmount) / avgAmount <= AMOUNT_TOLERANCE
-    );
-    if (!allWithinTolerance) continue;
-
-    // Detect recurrence interval
-    const dates = txns.map((t) => t.date);
-    const interval = detectInterval(dates);
-    if (!interval) continue;
-
-    // Use the most common ai_category
+    // Determine the most common ai_category first (needed for tolerance selection)
     const categoryCounts = new Map<string, number>();
     for (const tx of txns) {
       if (tx.ai_category) {
@@ -351,6 +348,22 @@ function detectPatterns(
 
     // Only auto-detect bills in bill-like categories
     if (!isBillLikeCategory(bestCategory)) continue;
+
+    // Verify amount consistency — mortgages get higher tolerance due to escrow variability
+    const tolerance = isMortgageCategory(bestCategory)
+      ? MORTGAGE_AMOUNT_TOLERANCE
+      : AMOUNT_TOLERANCE;
+    const amounts = txns.map((t) => t.amount);
+    const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+    const allWithinTolerance = amounts.every(
+      (a) => Math.abs(a - avgAmount) / avgAmount <= tolerance
+    );
+    if (!allWithinTolerance) continue;
+
+    // Detect recurrence interval
+    const dates = txns.map((t) => t.date);
+    const interval = detectInterval(dates);
+    if (!interval) continue;
 
     const sortedDates = [...dates].sort();
     const lastDate = sortedDates[sortedDates.length - 1];
