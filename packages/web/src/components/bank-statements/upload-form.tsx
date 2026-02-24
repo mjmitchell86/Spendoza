@@ -1,5 +1,5 @@
 import { useState, useRef, type FormEvent, type DragEvent } from "react";
-import { Upload, FileText, X, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Upload, FileText, X, CheckCircle2, AlertCircle, Loader2, ShieldCheck } from "lucide-react";
 import { MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -225,6 +225,12 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
               className="hidden"
             />
           </div>
+
+          <p className="flex items-start gap-2 text-xs text-muted-foreground">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+            Your bank statement is deleted after processing. We only store the
+            extracted transaction data, never the original file.
+          </p>
 
           {/* File list */}
           {files.length > 0 && (
