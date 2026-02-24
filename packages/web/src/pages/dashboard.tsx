@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import {
   TimePeriodFilter,
   getMonthParam,
+  getDateRange,
   type TimePeriod,
 } from "@/components/filters/time-period-filter";
 
@@ -32,6 +33,40 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatPeriodLabel(period: TimePeriod): string {
+  const fmt = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00Z");
+    return d.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  };
+
+  if (period.startsWith("month:")) {
+    return fmt(period.slice(6) + "-01");
+  }
+
+  const range = getDateRange(period);
+
+  switch (period) {
+    case "this_month":
+    case "last_month":
+      return range.from_date ? fmt(range.from_date) : "";
+    case "last_3_months":
+      return range.from_date && range.to_date
+        ? `${fmt(range.from_date)} – ${fmt(range.to_date)}`
+        : "";
+    case "this_year":
+    case "last_year":
+      return range.from_date ? range.from_date.slice(0, 4) : "";
+    case "all_time":
+      return "All Time";
+    default:
+      return "";
+  }
 }
 
 function TrendBadge({ value }: { value: number }) {
@@ -122,7 +157,7 @@ export function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Your personal financial overview
+            {formatPeriodLabel(timePeriod)}
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -211,7 +246,9 @@ export function DashboardPage() {
             >
               {formatCurrency(data.summary.net)}
             </p>
-            <span className="text-xs text-muted-foreground">This month</span>
+            <span className="text-xs text-muted-foreground">
+              {timePeriod === "this_month" ? "This month" : formatPeriodLabel(timePeriod)}
+            </span>
           </CardContent>
         </Card>
       </div>
