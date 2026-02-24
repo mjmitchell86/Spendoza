@@ -244,47 +244,49 @@ export function ExpensesPage() {
         </div>
       )}
 
-      {/* Filter Bar */}
-      {hasTransactions && (
-        <div className="flex flex-wrap items-center gap-3">
-          <TimePeriodFilter value={timePeriod} onValueChange={setTimePeriod} />
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search merchants..."
-              value={merchantSearch}
-              onChange={(e) => setMerchantSearch(e.target.value)}
-              className="w-[220px] pl-9"
-            />
-          </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All Categories</SelectItem>
-              <SelectItem value="__uncategorized__">Uncategorized</SelectItem>
-              {uniqueCategories.map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {cat}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {(selectedCategory !== "__all__" || merchantSearch) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSelectedCategory("__all__");
-                setMerchantSearch("");
-              }}
-            >
-              Clear filters
-            </Button>
-          )}
-        </div>
-      )}
+      {/* Filter Bar — always visible so user can change time period */}
+      <div className="flex flex-wrap items-center gap-3">
+        <TimePeriodFilter value={timePeriod} onValueChange={setTimePeriod} />
+        {hasTransactions && (
+          <>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search merchants..."
+                value={merchantSearch}
+                onChange={(e) => setMerchantSearch(e.target.value)}
+                className="w-[220px] pl-9"
+              />
+            </div>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Categories</SelectItem>
+                <SelectItem value="__uncategorized__">Uncategorized</SelectItem>
+                {uniqueCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat}>
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(selectedCategory !== "__all__" || merchantSearch) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedCategory("__all__");
+                  setMerchantSearch("");
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Charts Row — react to filters */}
       {categoryBreakdown.length > 0 && (
