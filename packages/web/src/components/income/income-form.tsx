@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import type { IncomeEntry, Frequency } from "@spendoza/shared";
 import type { HouseholdMember } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,40 @@ export function IncomeForm({
   const [attributedToUserId, setAttributedToUserId] = useState(
     income?.attributed_to_user_id ?? ""
   );
+  const [attributedToName, setAttributedToName] = useState(
+    income?.attributed_to_name ?? ""
+  );
+  const [attributionMode, setAttributionMode] = useState<
+    "none" | "member" | "custom"
+  >(
+    income?.attributed_to_user_id
+      ? "member"
+      : income?.attributed_to_name
+        ? "custom"
+        : "none"
+  );
   const [error, setError] = useState<string | null>(null);
+
+  // Sync form state when income prop changes (e.g. clicking Edit on a different entry)
+  useEffect(() => {
+    if (income) {
+      setSourceName(income.source_name);
+      setAmount(income.amount.toString());
+      setFrequency(income.frequency);
+      setEffectiveDate(income.effective_date);
+      setEndDate(income.end_date ?? "");
+      setAttributedToUserId(income.attributed_to_user_id ?? "");
+      setAttributedToName(income.attributed_to_name ?? "");
+      setAttributionMode(
+        income.attributed_to_user_id
+          ? "member"
+          : income.attributed_to_name
+            ? "custom"
+            : "none"
+      );
+      setError(null);
+    }
+  }, [income]);
 
   const isPending = createIncome.isPending || updateIncome.isPending;
 
@@ -68,6 +101,8 @@ export function IncomeForm({
     setEffectiveDate(new Date().toISOString().split("T")[0]);
     setEndDate("");
     setAttributedToUserId("");
+    setAttributedToName("");
+    setAttributionMode("none");
     setError(null);
   }
 
@@ -81,7 +116,14 @@ export function IncomeForm({
       frequency,
       effective_date: effectiveDate,
       end_date: endDate || null,
-      attributed_to_user_id: attributedToUserId && attributedToUserId !== "none" ? attributedToUserId : null,
+      attributed_to_user_id:
+        attributionMode === "member" && attributedToUserId && attributedToUserId !== "none"
+          ? attributedToUserId
+          : null,
+      attributed_to_name:
+        attributionMode === "custom" && attributedToName.trim()
+          ? attributedToName.trim()
+          : null,
     };
 
     try {
@@ -187,9 +229,25 @@ export function IncomeForm({
             </div>
           </div>
 
-          {householdMembers && householdMembers.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <Label>Attributed To (optional)</Label>
+          <div className="flex flex-col gap-2">
+            <Label>Attributed To (optional)</Label>
+            <Select
+              value={attributionMode}
+              onValueChange={(v) => setAttributionMode(v as "none" | "member" | "custom")}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Who earned this?" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Me (default)</SelectItem>
+                {householdMembers && householdMembers.length > 0 && (
+                  <SelectItem value="member">Household Member</SelectItem>
+                )}
+                <SelectItem value="custom">Custom Name</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {attributionMode === "member" && householdMembers && householdMembers.length > 0 && (
               <Select
                 value={attributedToUserId}
                 onValueChange={setAttributedToUserId}
@@ -198,7 +256,6 @@ export function IncomeForm({
                   <SelectValue placeholder="Select member" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
                   {householdMembers.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.display_name}
@@ -206,8 +263,17 @@ export function IncomeForm({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          )}
+            )}
+
+            {attributionMode === "custom" && (
+              <Input
+                value={attributedToName}
+                onChange={(e) => setAttributedToName(e.target.value)}
+                placeholder="e.g. Jane, Partner"
+                maxLength={100}
+              />
+            )}
+          </div>
 
           <DialogFooter>
             <Button

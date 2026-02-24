@@ -58,9 +58,11 @@ export function IncomeList({
   const deleteIncome = useDeleteIncome();
   const [deleteTarget, setDeleteTarget] = useState<IncomeEntry | null>(null);
 
-  function getMemberName(userId: string | null) {
-    if (!userId || !householdMembers) return null;
-    return householdMembers.find((m) => m.id === userId)?.display_name ?? null;
+  function getAttributionLabel(entry: IncomeEntry) {
+    if (entry.attributed_to_user_id && householdMembers) {
+      return householdMembers.find((m) => m.id === entry.attributed_to_user_id)?.display_name ?? null;
+    }
+    return entry.attributed_to_name ?? null;
   }
 
   async function handleDelete() {
@@ -101,7 +103,7 @@ export function IncomeList({
         </TableHeader>
         <TableBody>
           {entries.map((entry) => {
-            const memberName = getMemberName(entry.attributed_to_user_id);
+            const memberName = getAttributionLabel(entry);
             return (
               <TableRow key={entry.id}>
                 <TableCell>

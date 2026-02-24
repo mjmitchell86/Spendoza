@@ -23,6 +23,7 @@ export const createIncomeSchema = z.object({
   effective_date: z.string().date(),
   end_date: z.string().date().nullable().optional(),
   attributed_to_user_id: z.string().uuid().nullable().optional(),
+  attributed_to_name: z.string().max(100).nullable().optional(),
 });
 
 export type CreateIncomeInput = z.infer<typeof createIncomeSchema>;
@@ -41,6 +42,7 @@ export interface IncomeEntry {
   id: string;
   user_id: string;
   attributed_to_user_id: string | null;
+  attributed_to_name: string | null;
   source_name: string;
   amount: number;
   frequency: Frequency;
