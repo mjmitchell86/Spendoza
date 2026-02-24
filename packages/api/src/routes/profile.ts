@@ -4,6 +4,7 @@ import { updateProfileSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { generateUserReport, generateHouseholdReport } from "../services/report.service";
 
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
@@ -67,6 +68,25 @@ router.put("/onboarding", async (req, res: Response) => {
   if (error) {
     return res.status(400).json({ error: error.message });
   }
+
+  // Trigger report generation for current and previous month (non-blocking)
+  const now = new Date();
+  const thisMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+  const lastMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1));
+
+  void (async () => {
+    try {
+      await generateUserReport(user.id, thisMonth, true);
+      await generateUserReport(user.id, lastMonth, true);
+
+      if (data.household_id) {
+        await generateHouseholdReport(data.household_id, thisMonth, true);
+        await generateHouseholdReport(data.household_id, lastMonth, true);
+      }
+    } catch (err) {
+      console.error(`[onboarding] report generation failed for ${user.id}:`, err);
+    }
+  })();
 
   return res.status(200).json(data);
 });

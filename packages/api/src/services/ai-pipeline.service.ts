@@ -6,6 +6,7 @@ import {
 } from "../ai/transaction-classifier";
 import { matchTransactions } from "../ai/expense-matcher";
 import { detectRecurringBills } from "./bill-detection.service";
+import { generateUserReport, generateHouseholdReport } from "./report.service";
 
 /** Delete the raw PDF from Supabase Storage after processing completes. */
 async function deleteRawFile(statementId: string, filePath: string): Promise<void> {
@@ -385,5 +386,36 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     await detectRecurringBills(user_id);
   } catch (err) {
     console.error(`[ai-pipeline] [${statementId}] bill detection failed:`, err);
+  }
+
+  // Auto-generate report if the statement is for this month or last month (non-fatal)
+  try {
+    const stmtMonth = statement.statement_month as string | null;
+    if (stmtMonth) {
+      const now = new Date();
+      const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+
+      if (stmtMonth === thisMonth || stmtMonth === lastMonth) {
+        const reportMonth = new Date(stmtMonth + "T00:00:00Z");
+        console.log(`[ai-pipeline] [${statementId}] generating report for ${stmtMonth}`);
+        await generateUserReport(user_id, reportMonth, true);
+
+        // Also generate household report if user belongs to one
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("household_id")
+          .eq("id", user_id)
+          .single();
+
+        if (profile?.household_id) {
+          console.log(`[ai-pipeline] [${statementId}] generating household report for ${stmtMonth}`);
+          await generateHouseholdReport(profile.household_id, reportMonth, true);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[ai-pipeline] [${statementId}] report generation failed:`, err);
   }
 }
