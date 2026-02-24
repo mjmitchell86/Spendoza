@@ -6,6 +6,19 @@ import {
 } from "../ai/transaction-classifier";
 import { matchTransactions } from "../ai/expense-matcher";
 
+/** Delete the raw PDF from Supabase Storage after processing completes. */
+async function deleteRawFile(statementId: string, filePath: string): Promise<void> {
+  const { error } = await supabaseAdmin.storage
+    .from("bank-statements")
+    .remove([filePath]);
+
+  if (error) {
+    console.error(`[ai-pipeline] [${statementId}] failed to delete raw file: ${error.message}`);
+  } else {
+    console.log(`[ai-pipeline] [${statementId}] deleted raw file: ${filePath}`);
+  }
+}
+
 /** Wraps a promise with a timeout so it fails gracefully instead of being killed by Vercel. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -159,6 +172,9 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
         },
       })
       .eq("id", statementId);
+
+    // Clean up raw PDF from storage
+    await deleteRawFile(statementId, statement.file_path);
     return;
   }
 
@@ -308,4 +324,7 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
   console.log(
     `[ai-pipeline] [${statementId}] complete: ${matchedTransactions.length} txns, credits=$${totalCredits}, debits=$${totalDebits}`
   );
+
+  // Clean up raw PDF from storage — no longer needed
+  await deleteRawFile(statementId, statement.file_path);
 }
