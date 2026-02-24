@@ -5,6 +5,7 @@ import {
   type ClassifiedTransaction,
 } from "../ai/transaction-classifier";
 import { matchTransactions } from "../ai/expense-matcher";
+import { detectRecurringBills } from "./bill-detection.service";
 
 /** Delete the raw PDF from Supabase Storage after processing completes. */
 async function deleteRawFile(statementId: string, filePath: string): Promise<void> {
@@ -378,4 +379,11 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
 
   // Clean up raw PDF from storage — no longer needed
   await deleteRawFile(statementId, statement.file_path);
+
+  // Detect recurring bills from transaction patterns (non-fatal)
+  try {
+    await detectRecurringBills(user_id);
+  } catch (err) {
+    console.error(`[ai-pipeline] [${statementId}] bill detection failed:`, err);
+  }
 }

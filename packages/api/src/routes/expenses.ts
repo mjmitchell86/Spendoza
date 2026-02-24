@@ -36,6 +36,9 @@ router.get("/", async (req, res: Response) => {
     query = query.lte("next_due_date", to_date as string);
   }
 
+  // Exclude expired bills (end_date in the past)
+  query = query.or("end_date.is.null,end_date.gte." + new Date().toISOString().slice(0, 10));
+
   const { data, error } = await query.order("next_due_date", { ascending: true });
 
   if (error) {
