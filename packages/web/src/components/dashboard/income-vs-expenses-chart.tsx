@@ -68,6 +68,8 @@ export function IncomeVsExpensesChart({ summary }: IncomeVsExpensesChartProps) {
                   color: "hsl(var(--foreground))",
                   fontSize: "13px",
                 }}
+                itemStyle={{ color: "hsl(var(--foreground))" }}
+                labelStyle={{ color: "hsl(var(--foreground))" }}
               />
               <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={64}>
                 {data.map((entry) => (

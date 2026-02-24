@@ -135,6 +135,8 @@ function GoalHistoryChart({
               color: "hsl(var(--foreground))",
               fontSize: "13px",
             }}
+            itemStyle={{ color: "hsl(var(--foreground))" }}
+            labelStyle={{ color: "hsl(var(--foreground))" }}
           />
           <ReferenceLine
             y={target}
