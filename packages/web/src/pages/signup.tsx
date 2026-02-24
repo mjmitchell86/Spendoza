@@ -17,6 +17,7 @@ export function SignupPage() {
   const { signUp } = useAuth();
   const navigate = useNavigate();
 
+  const [inviteCode, setInviteCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -29,7 +30,7 @@ export function SignupPage() {
     setLoading(true);
 
     try {
-      await signUp(email, password, displayName);
+      await signUp(email, password, displayName, inviteCode);
       navigate("/onboarding", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create account");
@@ -54,6 +55,17 @@ export function SignupPage() {
                 {error}
               </div>
             )}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="inviteCode">Invite Code</Label>
+              <Input
+                id="inviteCode"
+                type="text"
+                placeholder="Enter your invite code"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                required
+              />
+            </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="displayName">Display Name</Label>
               <Input

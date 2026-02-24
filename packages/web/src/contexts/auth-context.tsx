@@ -14,7 +14,7 @@ export interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName: string, inviteCode: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -49,11 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = useCallback(
-    async (email: string, password: string, displayName: string) => {
+    async (email: string, password: string, displayName: string, inviteCode: string) => {
       // Call the API signup endpoint which creates the Supabase user + profile
       await apiClient("/auth/signup", {
         method: "POST",
-        body: JSON.stringify({ email, password, display_name: displayName }),
+        body: JSON.stringify({ email, password, display_name: displayName, invite_code: inviteCode }),
       });
 
       // Auto sign in after signup

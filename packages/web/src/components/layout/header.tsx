@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Menu, Settings, User } from "lucide-react";
+import { LogOut, Menu, Settings, Ticket, User } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { InviteCodesDialog } from "@/components/invite-codes/invite-codes-dialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -20,6 +22,7 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [inviteCodesOpen, setInviteCodesOpen] = useState(false);
 
   const displayName = user?.user_metadata?.display_name ?? user?.email ?? "User";
   const initials = displayName
@@ -77,6 +80,10 @@ export function Header({ onMenuClick }: HeaderProps) {
               <User className="mr-2 size-4" />
               Profile
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setInviteCodesOpen(true)}>
+              <Ticket className="mr-2 size-4" />
+              Invite Codes
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/settings")}>
               <Settings className="mr-2 size-4" />
               Settings
@@ -90,6 +97,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         </DropdownMenu>
       </div>
       <Separator />
+      <InviteCodesDialog open={inviteCodesOpen} onOpenChange={setInviteCodesOpen} />
     </header>
   );
 }
