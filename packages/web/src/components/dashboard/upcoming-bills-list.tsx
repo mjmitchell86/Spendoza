@@ -36,9 +36,11 @@ function getDaysUntil(dateString: string): number {
 }
 
 export function UpcomingBillsList() {
+  const today = new Date().toISOString().slice(0, 10);
   const { data: bills, isLoading } = useQuery<RecurringExpense[]>({
     queryKey: ["expenses", "upcoming"],
-    queryFn: () => apiClient("/expenses?recurring=true&upcoming=true"),
+    queryFn: () =>
+      apiClient(`/expenses?frequency=recurring&from_date=${today}`),
   });
 
   return (

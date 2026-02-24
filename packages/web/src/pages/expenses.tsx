@@ -326,6 +326,7 @@ export function ExpensesPage() {
                         borderRadius: "8px",
                         border: "1px solid hsl(var(--border))",
                         backgroundColor: "hsl(var(--card))",
+                        color: "hsl(var(--foreground))",
                         fontSize: "13px",
                       }}
                     />
@@ -385,6 +386,7 @@ export function ExpensesPage() {
                         borderRadius: "8px",
                         border: "1px solid hsl(var(--border))",
                         backgroundColor: "hsl(var(--card))",
+                        color: "hsl(var(--foreground))",
                         fontSize: "13px",
                       }}
                     />
