@@ -6,6 +6,7 @@ import {
   generateHouseholdReport,
   generateAllReports,
 } from "../services/report.service";
+import { buildReportPdf } from "../services/pdf-report.service";
 
 const router = Router();
 
@@ -173,5 +174,243 @@ router.post("/generate-all", async (req: Request, res: Response) => {
     month: previousMonth.toISOString().slice(0, 10),
   });
 });
+
+// ---------------------------------------------------------------------------
+// GET /export/personal — download personal report as PDF
+// ---------------------------------------------------------------------------
+router.get(
+  "/export/personal",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { user } = req as AuthenticatedRequest;
+      const month = parseMonth(req.query.month as string | undefined);
+
+      // Try cached report
+      let { data: report } = await supabaseAdmin
+        .from("reports")
+        .select("*")
+        .eq("entity_type", "user")
+        .eq("entity_id", user.id)
+        .eq("report_month", month)
+        .maybeSingle();
+
+      // Regenerate if missing or stale
+      if (!report || report.has_new_data === true) {
+        report = await generateUserReport(
+          user.id,
+          new Date(month + "T00:00:00Z"),
+          true
+        );
+      }
+
+      if (!report?.report_data) {
+        return res
+          .status(404)
+          .json({ error: "No report data available for this month" });
+      }
+
+      // Fetch supplementary data in parallel
+      const [{ data: recurringBills }, { data: incomeSources }, { data: profile }] =
+        await Promise.all([
+          supabaseAdmin
+            .from("expenses")
+            .select(
+              "description, friendly_name, amount, recurrence_interval, next_due_date"
+            )
+            .eq("user_id", user.id)
+            .eq("frequency", "recurring"),
+          supabaseAdmin
+            .from("income_entries")
+            .select("source_name, amount, frequency, attributed_to_name")
+            .eq("user_id", user.id),
+          supabaseAdmin
+            .from("profiles")
+            .select("display_name")
+            .eq("id", user.id)
+            .single(),
+        ]);
+
+      const monthLabel = new Date(month + "T00:00:00Z").toLocaleDateString(
+        "en-US",
+        { month: "long", year: "numeric", timeZone: "UTC" }
+      );
+
+      const pdfBuffer = await buildReportPdf({
+        title: profile?.display_name ?? "Personal",
+        month: monthLabel,
+        reportData: report.report_data as import("../ai/report-insights").ReportData,
+        aiInsights: report.ai_insights ?? null,
+        recurringBills: recurringBills ?? [],
+        incomeSources: incomeSources ?? [],
+      });
+
+      const filename = `spendoza-report-${month.slice(0, 7)}.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader("Content-Length", pdfBuffer.length);
+
+      return res.send(pdfBuffer);
+    } catch (err) {
+      console.error("[export/personal] Error generating PDF:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to generate PDF report" });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /export/household — download household report as PDF
+// ---------------------------------------------------------------------------
+router.get(
+  "/export/household",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { user } = req as AuthenticatedRequest;
+      const month = parseMonth(req.query.month as string | undefined);
+
+      // Look up user's household
+      const { data: userProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("household_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!userProfile?.household_id) {
+        return res
+          .status(400)
+          .json({ error: "You are not a member of a household" });
+      }
+
+      const householdId = userProfile.household_id;
+
+      // Get household name
+      const { data: household } = await supabaseAdmin
+        .from("households")
+        .select("name")
+        .eq("id", householdId)
+        .single();
+
+      // Try cached report
+      let { data: report } = await supabaseAdmin
+        .from("reports")
+        .select("*")
+        .eq("entity_type", "household")
+        .eq("entity_id", householdId)
+        .eq("report_month", month)
+        .maybeSingle();
+
+      // Regenerate if missing or stale
+      if (!report || report.has_new_data === true) {
+        report = await generateHouseholdReport(
+          householdId,
+          new Date(month + "T00:00:00Z"),
+          true
+        );
+      }
+
+      if (!report?.report_data) {
+        return res
+          .status(404)
+          .json({ error: "No report data available for this month" });
+      }
+
+      // Get all household member IDs
+      const { data: members } = await supabaseAdmin
+        .from("profiles")
+        .select("id, display_name")
+        .eq("household_id", householdId);
+
+      const memberIds = (members ?? []).map((m) => m.id);
+
+      // Fetch recurring bills and income for all members in parallel
+      const [{ data: recurringBills }, { data: incomeSources }] =
+        await Promise.all([
+          supabaseAdmin
+            .from("expenses")
+            .select(
+              "description, friendly_name, amount, recurrence_interval, next_due_date"
+            )
+            .in("user_id", memberIds)
+            .eq("frequency", "recurring"),
+          supabaseAdmin
+            .from("income_entries")
+            .select("source_name, amount, frequency, attributed_to_name")
+            .in("user_id", memberIds),
+        ]);
+
+      // Compute member contributions from transactions
+      const monthStart = month;
+      const monthEnd = new Date(
+        new Date(month + "T00:00:00Z").getFullYear(),
+        new Date(month + "T00:00:00Z").getMonth() + 1,
+        0
+      )
+        .toISOString()
+        .slice(0, 10);
+
+      const memberContributions = await Promise.all(
+        (members ?? []).map(async (member) => {
+          const { data: txns } = await supabaseAdmin
+            .from("transactions")
+            .select("type, amount")
+            .eq("user_id", member.id)
+            .gte("date", monthStart)
+            .lte("date", monthEnd);
+
+          let income = 0;
+          let expenses = 0;
+          for (const t of txns ?? []) {
+            if (t.type === "credit") income += Number(t.amount);
+            else if (t.type === "debit") expenses += Number(t.amount);
+          }
+
+          return {
+            display_name: member.display_name ?? "Unknown",
+            income,
+            expenses,
+          };
+        })
+      );
+
+      const monthLabel = new Date(month + "T00:00:00Z").toLocaleDateString(
+        "en-US",
+        { month: "long", year: "numeric", timeZone: "UTC" }
+      );
+
+      const pdfBuffer = await buildReportPdf({
+        title: household?.name ?? "Household",
+        month: monthLabel,
+        reportData: report.report_data as import("../ai/report-insights").ReportData,
+        aiInsights: report.ai_insights ?? null,
+        recurringBills: recurringBills ?? [],
+        incomeSources: incomeSources ?? [],
+        memberContributions,
+      });
+
+      const filename = `spendoza-household-report-${month.slice(0, 7)}.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader("Content-Length", pdfBuffer.length);
+
+      return res.send(pdfBuffer);
+    } catch (err) {
+      console.error("[export/household] Error generating PDF:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to generate PDF report" });
+    }
+  }
+);
 
 export default router;
