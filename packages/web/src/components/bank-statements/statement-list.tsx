@@ -95,7 +95,9 @@ export function StatementList({
                   <span className="inline-flex items-center gap-1.5">
                     <RefreshCw className="size-3 animate-spin text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      {STEP_LABELS[(stmt.parsed_data as any)?.pipeline_step] ?? "Processing"}
+                      {(stmt.parsed_data as any)?.retry_count > 0
+                        ? `Retrying (${(stmt.parsed_data as any).retry_count}/2) — ${STEP_LABELS[(stmt.parsed_data as any)?.pipeline_step] ?? "Processing"}`
+                        : STEP_LABELS[(stmt.parsed_data as any)?.pipeline_step] ?? "Processing"}
                     </span>
                   </span>
                 ) : (
