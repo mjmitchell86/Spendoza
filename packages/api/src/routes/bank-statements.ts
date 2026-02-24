@@ -67,7 +67,7 @@ router.post(
         file_path: storagePath,
         file_hash: fileHash,
         bank_name: parsed.data.bank_name ?? null,
-        statement_month: parsed.data.statement_month,
+        statement_month: parsed.data.statement_month ?? null,
         is_shared_account: parsed.data.is_shared_account,
         account_label: parsed.data.account_label ?? null,
         status: "processing",

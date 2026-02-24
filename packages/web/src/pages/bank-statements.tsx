@@ -84,14 +84,19 @@ export function BankStatementsPage() {
           <CardHeader className="pb-0">
             <CardTitle>
               Transactions &mdash;{" "}
-              {selectedStatement.bank_name ?? "Unknown Bank"} (
-              {new Date(
-                selectedStatement.statement_month + "T00:00:00"
-              ).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-              })}
-              )
+              {selectedStatement.bank_name ?? "Unknown Bank"}
+              {selectedStatement.statement_month && (
+                <>
+                  {" "}(
+                  {new Date(
+                    selectedStatement.statement_month + "T00:00:00"
+                  ).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                  })}
+                  )
+                </>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>

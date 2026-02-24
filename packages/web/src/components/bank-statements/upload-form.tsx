@@ -26,9 +26,7 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
 
   const [file, setFile] = useState<File | null>(null);
   const [bankName, setBankName] = useState("");
-  const [statementMonth, setStatementMonth] = useState(
-    new Date().toISOString().slice(0, 7)
-  );
+  const [statementMonth, setStatementMonth] = useState("");
   const [isSharedAccount, setIsSharedAccount] = useState(false);
   const [accountLabel, setAccountLabel] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -37,7 +35,7 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
   function resetForm() {
     setFile(null);
     setBankName("");
-    setStatementMonth(new Date().toISOString().slice(0, 7));
+    setStatementMonth("");
     setIsSharedAccount(false);
     setAccountLabel("");
     setError(null);
@@ -87,7 +85,9 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("statement_month", statementMonth + "-01");
+    if (statementMonth) {
+      formData.append("statement_month", statementMonth + "-01");
+    }
     if (bankName.trim()) {
       formData.append("bank_name", bankName.trim());
     }
@@ -171,14 +171,16 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="statement_month">Statement Month</Label>
+              <Label htmlFor="statement_month">Statement Month (optional)</Label>
               <Input
                 id="statement_month"
                 type="month"
                 value={statementMonth}
                 onChange={(e) => setStatementMonth(e.target.value)}
-                required
               />
+              <p className="text-xs text-muted-foreground">
+                Auto-detected from transactions if not provided
+              </p>
             </div>
           </div>
 

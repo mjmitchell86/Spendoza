@@ -27,7 +27,8 @@ const STEP_LABELS: Record<string, string> = {
   match_and_insert: "Matching & saving",
 };
 
-function formatDate(dateStr: string) {
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return "Pending";
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",

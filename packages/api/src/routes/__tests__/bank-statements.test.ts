@@ -358,7 +358,7 @@ describe("POST /api/bank-statements/upload", () => {
     expect(body.error).toBe("Duplicate statement");
   });
 
-  it("returns 400 when statement_month is missing", async () => {
+  it("returns 201 without statement_month", async () => {
     const res = await fetch(url(), {
       method: "POST",
       headers: {
@@ -368,9 +368,9 @@ describe("POST /api/bank-statements/upload", () => {
       body: JSON.stringify({}),
     });
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.error).toBe("Validation failed");
+    expect(body.id).toBe("stmt-1");
   });
 
   it("returns 401 without auth token", async () => {
