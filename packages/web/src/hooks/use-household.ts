@@ -91,6 +91,17 @@ export function useRemoveMember() {
   });
 }
 
+export function useTransferOwnership() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { new_head_id: string }) =>
+      apiClient("/household/transfer", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["household"] });
+    },
+  });
+}
+
 export function useLeaveHousehold() {
   const queryClient = useQueryClient();
   return useMutation({

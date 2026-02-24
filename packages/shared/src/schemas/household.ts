@@ -45,6 +45,15 @@ export const updateSharingSchema = z.object({
 export type UpdateSharingInput = z.infer<typeof updateSharingSchema>;
 
 // ---------------------------------------------------------------------------
+// Transfer ownership
+// ---------------------------------------------------------------------------
+export const transferOwnershipSchema = z.object({
+  new_head_id: z.string().uuid(),
+});
+
+export type TransferOwnershipInput = z.infer<typeof transferOwnershipSchema>;
+
+// ---------------------------------------------------------------------------
 // Full household row
 // ---------------------------------------------------------------------------
 export interface Household {
