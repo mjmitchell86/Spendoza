@@ -31,6 +31,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+const MAX_RETRIES = 2;
+const RETRY_DELAYS = [5_000, 20_000];
+
 const STEPS = [
   "extract_text",
   "extract_transactions",
@@ -47,6 +50,16 @@ type PipelineStep = (typeof STEPS)[number];
 export async function executeStep(statementId: string, step: string): Promise<void> {
   const log = (msg: string) =>
     console.log(`[ai-pipeline] [${statementId}] [${step}] ${msg}`);
+
+  // Apply exponential backoff for retries
+  const statement = await getStatement(statementId);
+  const retryCount = (statement.parsed_data as any)?.retry_count ?? 0;
+
+  if (retryCount > 0) {
+    const delay = RETRY_DELAYS[retryCount - 1] ?? RETRY_DELAYS[RETRY_DELAYS.length - 1];
+    log(`retry ${retryCount}/${MAX_RETRIES}, backing off ${delay / 1000}s`);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
 
   log("starting");
 
@@ -72,13 +85,38 @@ export async function executeStep(statementId: string, step: string): Promise<vo
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[ai-pipeline] [${statementId}] [${step}] FAILED:`, error);
-    await supabaseAdmin
-      .from("bank_statements")
-      .update({
-        status: "failed",
-        parsed_data: { error: errorMessage, failed_at: new Date().toISOString(), failed_step: step },
-      })
-      .eq("id", statementId);
+
+    if (retryCount < MAX_RETRIES) {
+      // Re-read to preserve intermediate data (pdf_text, raw_transactions, etc.)
+      const current = await getStatement(statementId);
+      log(`scheduling retry ${retryCount + 1}/${MAX_RETRIES}`);
+      await supabaseAdmin
+        .from("bank_statements")
+        .update({
+          parsed_data: {
+            ...(current.parsed_data as any),
+            pipeline_step: step,
+            retry_count: retryCount + 1,
+            last_error: errorMessage,
+            last_retry_at: new Date().toISOString(),
+          },
+        })
+        .eq("id", statementId);
+    } else {
+      // All retries exhausted
+      await supabaseAdmin
+        .from("bank_statements")
+        .update({
+          status: "failed",
+          parsed_data: {
+            error: errorMessage,
+            failed_at: new Date().toISOString(),
+            failed_step: step,
+            retry_count: retryCount,
+          },
+        })
+        .eq("id", statementId);
+    }
   }
 }
 

@@ -200,12 +200,15 @@ function PipelineSteps({ currentStep }: { currentStep: string | undefined }) {
 
 function ProcessingStatus({ parsedData }: { parsedData: unknown }) {
   const step = (parsedData as any)?.pipeline_step as string | undefined;
+  const retryCount = (parsedData as any)?.retry_count as number | undefined;
 
   return (
     <>
       <RefreshCw className="mb-2 size-6 animate-spin text-muted-foreground" />
       <p className="text-muted-foreground">
-        This statement is being processed.
+        {retryCount
+          ? `Retrying... (attempt ${retryCount + 1} of 3)`
+          : "This statement is being processed."}
       </p>
       <PipelineSteps currentStep={step} />
     </>
@@ -225,12 +228,15 @@ function FailedStatus({
   const deleteStatement = useDeleteStatement();
   const failedStep = (parsedData as any)?.failed_step as string | undefined;
   const errorMsg = (parsedData as any)?.error as string | undefined;
+  const retryCount = (parsedData as any)?.retry_count as number | undefined;
   const stepLabel = PIPELINE_STEPS.find((s) => s.key === failedStep)?.label;
 
   return (
     <>
       <p className="text-destructive">
-        Failed to process this statement.
+        {retryCount
+          ? `Failed after ${retryCount} ${retryCount === 1 ? "retry" : "retries"}.`
+          : "Failed to process this statement."}
         {stepLabel && (
           <span className="block text-sm mt-1">
             Failed during: {stepLabel}
