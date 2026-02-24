@@ -6,6 +6,7 @@ import {
 } from "../ai/transaction-classifier";
 import { matchTransactions } from "../ai/expense-matcher";
 import { detectRecurringBills } from "./bill-detection.service";
+import { detectRecurringIncome } from "./income-detection.service";
 import { generateUserReport, generateHouseholdReport } from "./report.service";
 
 /** Delete the raw PDF from Supabase Storage after processing completes. */
@@ -424,6 +425,13 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     await detectRecurringBills(user_id);
   } catch (err) {
     console.error(`[ai-pipeline] [${statementId}] bill detection failed:`, err);
+  }
+
+  // Detect recurring income from transaction patterns (non-fatal)
+  try {
+    await detectRecurringIncome(user_id);
+  } catch (err) {
+    console.error(`[ai-pipeline] [${statementId}] income detection failed:`, err);
   }
 
   // Auto-generate reports for every month that had transactions inserted (non-fatal)

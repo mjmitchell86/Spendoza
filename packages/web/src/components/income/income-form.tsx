@@ -46,6 +46,9 @@ export function IncomeForm({
   const updateIncome = useUpdateIncome();
 
   const [sourceName, setSourceName] = useState(income?.source_name ?? "");
+  const [friendlyName, setFriendlyName] = useState(
+    income?.friendly_name ?? ""
+  );
   const [amount, setAmount] = useState(income?.amount?.toString() ?? "");
   const [frequency, setFrequency] = useState<Frequency>(
     income?.frequency ?? "monthly"
@@ -75,6 +78,7 @@ export function IncomeForm({
   useEffect(() => {
     if (income) {
       setSourceName(income.source_name);
+      setFriendlyName(income.friendly_name ?? "");
       setAmount(income.amount.toString());
       setFrequency(income.frequency);
       setEffectiveDate(income.effective_date);
@@ -96,6 +100,7 @@ export function IncomeForm({
 
   function resetForm() {
     setSourceName("");
+    setFriendlyName("");
     setAmount("");
     setFrequency("monthly");
     setEffectiveDate(new Date().toISOString().split("T")[0]);
@@ -112,6 +117,7 @@ export function IncomeForm({
 
     const data = {
       source_name: sourceName.trim(),
+      friendly_name: friendlyName.trim() || null,
       amount: parseFloat(amount),
       frequency,
       effective_date: effectiveDate,
@@ -169,6 +175,22 @@ export function IncomeForm({
               placeholder="e.g. Salary, Freelance"
               required
             />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="friendly_name">
+              Friendly Name (optional)
+            </Label>
+            <Input
+              id="friendly_name"
+              value={friendlyName}
+              onChange={(e) => setFriendlyName(e.target.value)}
+              placeholder="e.g. Salary, Freelance Income"
+              maxLength={200}
+            />
+            <p className="text-xs text-muted-foreground">
+              A short display name shown instead of the raw source name
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

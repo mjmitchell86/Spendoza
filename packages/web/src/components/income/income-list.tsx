@@ -108,8 +108,20 @@ export function IncomeList({
               <TableRow key={entry.id}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
-                    <span className="font-medium">{entry.source_name}</span>
+                    <span className="font-medium">
+                      {entry.friendly_name || entry.source_name}
+                    </span>
+                    {entry.friendly_name && (
+                      <span className="text-xs text-muted-foreground">
+                        {entry.source_name}
+                      </span>
+                    )}
                     <div className="flex flex-wrap gap-1">
+                      {entry.auto_detected && (
+                        <Badge variant="outline" className="text-xs">
+                          Auto-detected
+                        </Badge>
+                      )}
                       {entry.is_ai_suggested && (
                         <Badge variant="secondary" className="text-xs">
                           AI Suggested
