@@ -45,11 +45,12 @@ export function usePersonalDashboard(month?: string) {
   });
 }
 
-export function useHouseholdDashboard(month?: string) {
+export function useHouseholdDashboard(month?: string, enabled = true) {
   const qs = month ? `?month=${month}` : "";
   return useQuery<HouseholdDashboardData>({
     queryKey: ["dashboard", "household", month],
     queryFn: () => apiClient(`/dashboard/household${qs}`),
+    enabled,
   });
 }
 

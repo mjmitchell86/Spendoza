@@ -102,7 +102,8 @@ function MemberContributions({
 
 export function HouseholdDashboardPage() {
   const { data: household, isLoading: householdLoading } = useHousehold();
-  const { data, isLoading, error, refetch } = useHouseholdDashboard();
+  const hasHousehold = !!household?.household;
+  const { data, isLoading, error, refetch } = useHouseholdDashboard(undefined, hasHousehold);
   const generateReport = useGenerateReport();
 
   // If no household, show prompt
