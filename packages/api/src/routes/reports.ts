@@ -104,7 +104,10 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     });
   }
 
-  // Increment the request count
+  // Generate the report for the current month (force=true to bypass cache)
+  const report = await generateUserReport(user.id, now, true);
+
+  // Increment the request count only after successful generation
   await supabaseAdmin.from("report_requests").upsert(
     {
       user_id: user.id,
@@ -113,9 +116,6 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     },
     { onConflict: "user_id,report_month" }
   );
-
-  // Generate the report for the current month
-  const report = await generateUserReport(user.id, now);
 
   return res.status(200).json(report);
 });

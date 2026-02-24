@@ -367,6 +367,34 @@ describe("generateUserReport", () => {
     expect(mockGenerateInsights).not.toHaveBeenCalled();
   });
 
+  it("bypasses cache when force=true", async () => {
+    adminResults.reports.selectMaybeSingle = {
+      data: cachedReport,
+      error: null,
+    };
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH, true);
+
+    // Should regenerate even though has_new_data is false
+    expect(mockGenerateInsights).toHaveBeenCalledTimes(1);
+    // Should use transaction data, not cached report data
+    expect(result.report_data.total_income).toBe(3000);
+  });
+
+  it("saves report even when AI insight generation fails", async () => {
+    mockGenerateInsights.mockImplementation(() =>
+      Promise.reject(new Error("OpenAI API failed"))
+    );
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
+
+    // Report should still be saved with financial data
+    expect(result.report_data.total_income).toBe(3000);
+    expect(result.report_data.total_expenses).toBe(150);
+    // Insights should be null
+    expect(result.ai_insights).toBeNull();
+  });
+
   it("regenerates when has_new_data is true", async () => {
     // Report exists but has new data
     adminResults.reports.selectMaybeSingle = {

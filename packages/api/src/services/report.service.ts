@@ -65,7 +65,8 @@ function isDateInMonth(dateStr: string, monthStartStr: string, monthEndStr: stri
 
 export async function generateUserReport(
   userId: string,
-  month: Date
+  month: Date,
+  force = false
 ): Promise<any> {
   const monthStart = startOfMonth(month);
   const monthEnd = endOfMonth(month);
@@ -80,7 +81,7 @@ export async function generateUserReport(
     .eq("report_month", monthStr)
     .maybeSingle();
 
-  if (existingReport && !existingReport.has_new_data) {
+  if (!force && existingReport && !existingReport.has_new_data) {
     return existingReport;
   }
 
@@ -235,8 +236,13 @@ export async function generateUserReport(
     month_over_month: monthOverMonth,
   };
 
-  // 8. Generate AI insights
-  const aiInsights = await generateInsights(reportData, "user");
+  // 8. Generate AI insights (non-fatal — save report even if AI fails)
+  let aiInsights: string | null = null;
+  try {
+    aiInsights = await generateInsights(reportData, "user");
+  } catch (err) {
+    console.error("[report] AI insight generation failed, saving report without insights:", err);
+  }
 
   // 9. Upsert report
   const { data: upsertedReport } = await supabaseAdmin
@@ -273,7 +279,8 @@ export async function generateUserReport(
 
 export async function generateHouseholdReport(
   householdId: string,
-  month: Date
+  month: Date,
+  force = false
 ): Promise<any> {
   const monthStart = startOfMonth(month);
   const monthEnd = endOfMonth(month);
@@ -288,7 +295,7 @@ export async function generateHouseholdReport(
     .eq("report_month", monthStr)
     .maybeSingle();
 
-  if (existingReport && !existingReport.has_new_data) {
+  if (!force && existingReport && !existingReport.has_new_data) {
     return existingReport;
   }
 
@@ -450,8 +457,13 @@ export async function generateHouseholdReport(
     month_over_month: monthOverMonth,
   };
 
-  // 8. Generate AI insights
-  const aiInsights = await generateInsights(reportData, "household");
+  // 8. Generate AI insights (non-fatal — save report even if AI fails)
+  let aiInsights: string | null = null;
+  try {
+    aiInsights = await generateInsights(reportData, "household");
+  } catch (err) {
+    console.error("[report] AI insight generation failed, saving report without insights:", err);
+  }
 
   // 9. Upsert report
   const { data: upsertedReport } = await supabaseAdmin

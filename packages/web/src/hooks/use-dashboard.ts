@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 
 export interface DashboardSummary {
@@ -59,7 +60,13 @@ export function useGenerateReport() {
   return useMutation({
     mutationFn: () => apiClient("/reports/generate", { method: "POST" }),
     onSuccess: () => {
+      toast.success("Report generated");
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to generate report"
+      );
     },
   });
 }
