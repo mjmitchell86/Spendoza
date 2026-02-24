@@ -151,13 +151,22 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
     throw new Error("No pdf_text found in parsed_data");
   }
 
-  const parsedTransactions = await withTimeout(
+  const { transactions: parsedTransactions, detectedBankName } = await withTimeout(
     extractTransactions(pdfText, statement.bank_name ?? undefined),
     110_000,
     "OpenAI transaction extraction"
   );
 
-  console.log(`[ai-pipeline] [${statementId}] extracted ${parsedTransactions.length} transactions`);
+  console.log(`[ai-pipeline] [${statementId}] extracted ${parsedTransactions.length} transactions, detected bank: ${detectedBankName ?? "none"}`);
+
+  // Update bank_name if not already set by user
+  if (!statement.bank_name && detectedBankName) {
+    await supabaseAdmin
+      .from("bank_statements")
+      .update({ bank_name: detectedBankName })
+      .eq("id", statementId);
+    console.log(`[ai-pipeline] [${statementId}] set bank_name to: ${detectedBankName}`);
+  }
 
   if (parsedTransactions.length === 0) {
     // No transactions — mark as parsed immediately

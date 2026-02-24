@@ -63,7 +63,12 @@ export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
 // AI-powered transaction extraction
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You are a financial data extraction assistant. Your job is to extract individual transactions from bank statement text.
+export interface ExtractionResult {
+  transactions: ParsedTransaction[];
+  detectedBankName: string | null;
+}
+
+const SYSTEM_PROMPT = `You are a financial data extraction assistant. Your job is to extract individual transactions from bank statement text and identify the bank.
 
 For each transaction, extract:
 - date: in YYYY-MM-DD format
@@ -71,18 +76,22 @@ For each transaction, extract:
 - amount: a positive number (no currency symbols, no commas)
 - type: "credit" for deposits/income, "debit" for charges/withdrawals
 
-Respond ONLY with valid JSON in this exact format:
-{"transactions": [{"date": "YYYY-MM-DD", "description": "...", "amount": 0.00, "type": "credit|debit"}]}
+Also identify the bank or financial institution from the statement text (e.g. "Chase", "Bank of America", "Wells Fargo", "Capital One").
 
-If there are no transactions, return: {"transactions": []}`;
+Respond ONLY with valid JSON in this exact format:
+{"bank_name": "...", "transactions": [{"date": "YYYY-MM-DD", "description": "...", "amount": 0.00, "type": "credit|debit"}]}
+
+If you cannot determine the bank, set bank_name to null.
+If there are no transactions, return: {"bank_name": "...", "transactions": []}`;
 
 /**
  * Uses ChatOpenAI to extract structured transaction data from bank statement text.
+ * Also detects the bank name from the PDF content.
  */
 export async function extractTransactions(
   pdfText: string,
   bankName?: string
-): Promise<ParsedTransaction[]> {
+): Promise<ExtractionResult> {
   console.log(
     `[pdf-parser] Starting AI transaction extraction (${pdfText.length} chars, bank: ${bankName ?? "unknown"})`
   );
@@ -140,15 +149,22 @@ export async function extractTransactions(
     ? parsed
     : parsed.transactions ?? [];
 
+  const detectedBankName: string | null =
+    !Array.isArray(parsed) && parsed.bank_name
+      ? String(parsed.bank_name)
+      : null;
+
   console.log(
-    `[pdf-parser] Extracted ${rawTransactions.length} transaction(s) from AI response`
+    `[pdf-parser] Extracted ${rawTransactions.length} transaction(s), detected bank: ${detectedBankName ?? "none"}`
   );
 
   // Normalize: ensure amounts are positive
-  return rawTransactions.map((t) => ({
+  const transactions = rawTransactions.map((t) => ({
     date: t.date,
     description: t.description,
     amount: Math.abs(t.amount),
     type: t.type as "credit" | "debit",
   }));
+
+  return { transactions, detectedBankName };
 }

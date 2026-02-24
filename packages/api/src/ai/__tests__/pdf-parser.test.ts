@@ -153,17 +153,24 @@ describe("extractTextFromPDF", () => {
 
 describe("extractTransactions", () => {
   it("sends text to ChatOpenAI and returns parsed transactions", async () => {
+    mockInvoke.mockImplementation(() =>
+      Promise.resolve({
+        content: JSON.stringify({ bank_name: "Chase", transactions: EXPECTED_TRANSACTIONS }),
+      })
+    );
+
     const result = await extractTransactions(SAMPLE_BANK_TEXT);
 
     expect(mockInvoke).toHaveBeenCalledTimes(1);
-    expect(result).toHaveLength(5);
-    expect(result[0]).toEqual({
+    expect(result.transactions).toHaveLength(5);
+    expect(result.detectedBankName).toBe("Chase");
+    expect(result.transactions[0]).toEqual({
       date: "2026-01-05",
       description: "WALMART SUPERCENTER #1234",
       amount: 52.43,
       type: "debit",
     });
-    expect(result[2]).toEqual({
+    expect(result.transactions[2]).toEqual({
       date: "2026-01-15",
       description: "PAYROLL DEPOSIT",
       amount: 2500.0,
@@ -188,12 +195,13 @@ describe("extractTransactions", () => {
   it("handles empty transactions response", async () => {
     mockInvoke.mockImplementation(() =>
       Promise.resolve({
-        content: JSON.stringify({ transactions: [] }),
+        content: JSON.stringify({ bank_name: null, transactions: [] }),
       })
     );
 
     const result = await extractTransactions("Empty statement text");
-    expect(result).toEqual([]);
+    expect(result.transactions).toEqual([]);
+    expect(result.detectedBankName).toBeNull();
   });
 
   it("handles AI returning transactions as top-level array", async () => {
@@ -204,14 +212,16 @@ describe("extractTransactions", () => {
     );
 
     const result = await extractTransactions(SAMPLE_BANK_TEXT);
-    expect(result).toHaveLength(1);
-    expect(result[0].description).toBe("WALMART SUPERCENTER #1234");
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].description).toBe("WALMART SUPERCENTER #1234");
+    expect(result.detectedBankName).toBeNull();
   });
 
   it("ensures all amounts are positive numbers", async () => {
     mockInvoke.mockImplementation(() =>
       Promise.resolve({
         content: JSON.stringify({
+          bank_name: "Chase",
           transactions: [
             {
               date: "2026-01-05",
@@ -225,7 +235,7 @@ describe("extractTransactions", () => {
     );
 
     const result = await extractTransactions(SAMPLE_BANK_TEXT);
-    expect(result[0].amount).toBe(52.43);
-    expect(result[0].amount).toBeGreaterThan(0);
+    expect(result.transactions[0].amount).toBe(52.43);
+    expect(result.transactions[0].amount).toBeGreaterThan(0);
   });
 });
