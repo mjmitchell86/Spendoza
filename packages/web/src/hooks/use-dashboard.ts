@@ -33,6 +33,10 @@ export interface DashboardData {
   trends: DashboardTrends;
   insights: string | null;
   insights_month?: string;
+  /** Whether the displayed month has bank statement transactions */
+  has_transactions?: boolean;
+  /** The actual month being displayed (may differ from requested if auto-switched) */
+  month?: string;
 }
 
 export interface HouseholdDashboardData extends DashboardData {

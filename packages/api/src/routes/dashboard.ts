@@ -122,7 +122,27 @@ function toDashboardResponse(report: any) {
 router.get("/personal", async (req: Request, res: Response) => {
   res.set("Cache-Control", "no-store");
   const { user } = req as AuthenticatedRequest;
-  const month = (req.query.month as string) ?? currentMonthStr();
+  const requestedMonth = (req.query.month as string) ?? currentMonthStr();
+
+  // Check if the requested month has bank statement transactions
+  const { startDate: reqStart, nextMonth: reqNext } = monthRange(requestedMonth);
+  const { count: txnCount } = await supabaseAdmin
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gte("date", reqStart)
+    .lt("date", reqNext);
+
+  const hasTransactions = (txnCount ?? 0) > 0;
+
+  // If no transactions this month, fall back to latest month with uploaded data
+  let month = requestedMonth;
+  if (!hasTransactions) {
+    const latestMonth = await findLatestTransactionMonth(user.id);
+    if (latestMonth && latestMonth !== requestedMonth) {
+      month = latestMonth;
+    }
+  }
 
   const { data: report } = await supabaseAdmin
     .from("reports")
@@ -136,22 +156,18 @@ router.get("/personal", async (req: Request, res: Response) => {
   if (report) {
     const rd = report.report_data as any;
     if (rd.total_income > 0 || rd.total_expenses > 0) {
-      return res.status(200).json(toDashboardResponse(report));
+      return res.status(200).json({
+        ...toDashboardResponse(report),
+        has_transactions: month === requestedMonth ? hasTransactions : true,
+        month,
+      });
     }
   }
 
   // No report or report has no data — compute from transactions
-  // If the requested month has no transactions, try the latest month with data
   let dashboard = await computeFromTransactions(user.id, month) as any;
 
-  if (dashboard.summary.total_income === 0 && dashboard.summary.total_expenses === 0) {
-    const latestMonth = await findLatestTransactionMonth(user.id);
-    if (latestMonth && latestMonth !== month) {
-      dashboard = await computeFromTransactions(user.id, latestMonth);
-    }
-  }
-
-  // Merge AI insights — try current month's report first, then find latest
+  // Merge AI insights — try displayed month's report first, then find latest
   if (report?.ai_insights && !dashboard.insights) {
     dashboard.insights = report.ai_insights;
     dashboard.insights_month = month;
@@ -173,6 +189,9 @@ router.get("/personal", async (req: Request, res: Response) => {
       dashboard.insights_month = latestReport.report_month;
     }
   }
+
+  dashboard.has_transactions = month === requestedMonth ? hasTransactions : true;
+  dashboard.month = month;
 
   return res.status(200).json(dashboard);
 });
@@ -287,7 +306,7 @@ async function findLatestHouseholdTransactionMonth(householdId: string): Promise
 // ---------------------------------------------------------------------------
 router.get("/household", async (req: Request, res: Response) => {
   const { user } = req as AuthenticatedRequest;
-  const month = (req.query.month as string) ?? currentMonthStr();
+  const requestedMonth = (req.query.month as string) ?? currentMonthStr();
 
   // Look up user's household
   const { data: profile } = await supabaseAdmin
@@ -304,6 +323,34 @@ router.get("/household", async (req: Request, res: Response) => {
 
   const householdId = profile.household_id;
 
+  // Check if the requested month has bank statement transactions
+  const { data: hhMembers } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("household_id", householdId);
+  const hhMemberIds = (hhMembers ?? []).map((m: any) => m.id);
+
+  let hasTransactions = false;
+  if (hhMemberIds.length > 0) {
+    const { startDate: reqStart, nextMonth: reqNext } = monthRange(requestedMonth);
+    const { count: txnCount } = await supabaseAdmin
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .in("user_id", hhMemberIds)
+      .gte("date", reqStart)
+      .lt("date", reqNext);
+    hasTransactions = (txnCount ?? 0) > 0;
+  }
+
+  // If no transactions this month, fall back to latest month with uploaded data
+  let month = requestedMonth;
+  if (!hasTransactions) {
+    const latestMonth = await findLatestHouseholdTransactionMonth(householdId);
+    if (latestMonth && latestMonth !== requestedMonth) {
+      month = latestMonth;
+    }
+  }
+
   const { data: report } = await supabaseAdmin
     .from("reports")
     .select("*")
@@ -319,6 +366,8 @@ router.get("/household", async (req: Request, res: Response) => {
       return res.status(200).json({
         ...toDashboardResponse(report),
         member_contributions: rd.member_contributions ?? [],
+        has_transactions: month === requestedMonth ? hasTransactions : true,
+        month,
       });
     }
   }
@@ -326,14 +375,7 @@ router.get("/household", async (req: Request, res: Response) => {
   // No report or report has no data — compute from transactions
   let dashboard = await computeHouseholdFromTransactions(householdId, month) as any;
 
-  if (dashboard.summary.total_income === 0 && dashboard.summary.total_expenses === 0) {
-    const latestMonth = await findLatestHouseholdTransactionMonth(householdId);
-    if (latestMonth && latestMonth !== month) {
-      dashboard = await computeHouseholdFromTransactions(householdId, latestMonth);
-    }
-  }
-
-  // Merge AI insights — try current month's report first, then find latest
+  // Merge AI insights — try displayed month's report first, then find latest
   if (report?.ai_insights && !dashboard.insights) {
     dashboard.insights = report.ai_insights;
     dashboard.insights_month = month;
@@ -355,6 +397,9 @@ router.get("/household", async (req: Request, res: Response) => {
       dashboard.insights_month = latestReport.report_month;
     }
   }
+
+  dashboard.has_transactions = month === requestedMonth ? hasTransactions : true;
+  dashboard.month = month;
 
   return res.status(200).json(dashboard);
 });

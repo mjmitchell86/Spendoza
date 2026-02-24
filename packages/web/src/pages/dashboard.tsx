@@ -97,18 +97,20 @@ export function DashboardPage() {
   const { data: statements } = useBankStatements();
   const didAutoSwitch = useRef(false);
 
-  // If "this_month" loads with zero data, auto-switch to "last_month"
+  // If the API auto-switched to a different month (no transactions for
+  // the requested month), update the time period to match.
   useEffect(() => {
     if (
       !didAutoSwitch.current &&
       !isLoading &&
-      data &&
-      timePeriod === "this_month" &&
-      data.summary.total_income === 0 &&
-      data.summary.total_expenses === 0
+      data?.month &&
+      timePeriod === "this_month"
     ) {
-      didAutoSwitch.current = true;
-      setTimePeriod("last_month");
+      const requested = getMonthParam("this_month");
+      if (data.month !== requested) {
+        didAutoSwitch.current = true;
+        setTimePeriod(`month:${data.month.slice(0, 7)}`);
+      }
     }
   }, [data, isLoading, timePeriod]);
 
@@ -180,7 +182,7 @@ export function DashboardPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => exportReport.mutate(month)}
+            onClick={() => exportReport.mutate(data?.month ?? month)}
             disabled={exportReport.isPending}
           >
             <Download className="size-4" />

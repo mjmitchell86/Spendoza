@@ -243,7 +243,7 @@ export function HouseholdPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => exportHouseholdReport.mutate(undefined)}
+                  onClick={() => exportHouseholdReport.mutate(data?.month)}
                   disabled={exportHouseholdReport.isPending}
                 >
                   <Download className="size-4" />
@@ -301,7 +301,15 @@ export function HouseholdPage() {
                     >
                       {formatCurrency(data.summary.net)}
                     </p>
-                    <span className="text-xs text-muted-foreground">This month</span>
+                    <span className="text-xs text-muted-foreground">
+                      {data.month
+                        ? new Date(data.month + "T00:00:00Z").toLocaleDateString("en-US", {
+                            month: "long",
+                            year: "numeric",
+                            timeZone: "UTC",
+                          })
+                        : "This month"}
+                    </span>
                   </CardContent>
                 </Card>
               </div>
