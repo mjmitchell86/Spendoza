@@ -155,6 +155,11 @@ export function ExpenseList({
                         AI Adjusted
                       </Badge>
                     )}
+                    {expense.auto_detected && (
+                      <Badge variant="outline" className="text-xs">
+                        Auto-detected
+                      </Badge>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="font-mono">

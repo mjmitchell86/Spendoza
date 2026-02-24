@@ -1,6 +1,7 @@
 import { CalendarClock, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/lib/api";
 
 interface RecurringExpense {
@@ -8,6 +9,7 @@ interface RecurringExpense {
   description: string;
   amount: number;
   next_due_date: string;
+  auto_detected: boolean;
 }
 
 function formatCurrency(value: number) {
@@ -68,9 +70,16 @@ export function UpcomingBillsList() {
                 >
                   <CalendarClock className="size-4 shrink-0 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {bill.description}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-medium">
+                        {bill.description}
+                      </p>
+                      {bill.auto_detected && (
+                        <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
+                          Auto
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {formatDate(bill.next_due_date)}
                       {daysUntil >= 0 && (

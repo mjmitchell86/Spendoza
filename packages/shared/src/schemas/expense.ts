@@ -53,6 +53,8 @@ export interface Expense {
   is_ai_adjusted: boolean;
   original_amount: number | null;
   bank_statement_id: string | null;
+  auto_detected: boolean;
+  last_seen_at: string | null;
   created_at: string;
   updated_at: string;
 }

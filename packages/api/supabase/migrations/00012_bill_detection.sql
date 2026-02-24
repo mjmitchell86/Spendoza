@@ -1,0 +1,3 @@
+ALTER TABLE expenses
+  ADD COLUMN auto_detected BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN last_seen_at TIMESTAMPTZ;
