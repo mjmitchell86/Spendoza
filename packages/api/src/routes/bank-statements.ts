@@ -37,13 +37,21 @@ router.post(
     // Check for duplicates
     const { data: existing } = await supabaseAdmin
       .from("bank_statements")
-      .select("id")
+      .select("id, status")
       .eq("user_id", user.id)
       .eq("file_hash", fileHash)
       .maybeSingle();
 
     if (existing) {
-      return res.status(409).json({ error: "Duplicate statement" });
+      if (existing.status === "failed") {
+        // Allow re-upload by deleting the failed record first
+        await supabaseAdmin
+          .from("bank_statements")
+          .delete()
+          .eq("id", existing.id);
+      } else {
+        return res.status(409).json({ error: "Duplicate statement" });
+      }
     }
 
     // Upload to Supabase Storage
@@ -154,6 +162,35 @@ router.post("/:id/reprocess", async (req, res: Response) => {
   console.log(`[reprocess] statement ${data.id} pipeline trigger will fire`);
 
   return res.status(200).json({ message: "Reprocessing started" });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /:id — remove a failed statement
+// ---------------------------------------------------------------------------
+router.delete("/:id", async (req, res: Response) => {
+  const { user } = req as AuthenticatedRequest;
+
+  const { data: statement } = await supabaseAdmin
+    .from("bank_statements")
+    .select("id, status")
+    .eq("id", req.params.id)
+    .eq("user_id", user.id)
+    .single();
+
+  if (!statement) {
+    return res.status(404).json({ error: "Statement not found" });
+  }
+
+  if (statement.status !== "failed") {
+    return res.status(400).json({ error: "Only failed statements can be deleted" });
+  }
+
+  await supabaseAdmin
+    .from("bank_statements")
+    .delete()
+    .eq("id", statement.id);
+
+  return res.status(204).send();
 });
 
 export default router;
