@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -40,6 +40,12 @@ import { MemberList } from "@/components/household/member-list";
 import { InviteForm } from "@/components/household/invite-form";
 import { SharingConfig } from "@/components/household/sharing-config";
 import { cn } from "@/lib/utils";
+import {
+  TimePeriodFilter,
+  getMonthParam,
+  getDateRange,
+  type TimePeriod,
+} from "@/components/filters/time-period-filter";
 import type { MemberContribution } from "@/hooks/use-dashboard";
 
 function formatCurrency(value: number) {
@@ -66,6 +72,40 @@ function TrendBadge({ value }: { value: number }) {
       {Math.abs(value).toFixed(1)}%
     </span>
   );
+}
+
+function formatPeriodLabel(period: TimePeriod): string {
+  const fmt = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00Z");
+    return d.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  };
+
+  if (period.startsWith("month:")) {
+    return fmt(period.slice(6) + "-01");
+  }
+
+  const range = getDateRange(period);
+
+  switch (period) {
+    case "this_month":
+    case "last_month":
+      return range.from_date ? fmt(range.from_date) : "";
+    case "last_3_months":
+      return range.from_date && range.to_date
+        ? `${fmt(range.from_date)} – ${fmt(range.to_date)}`
+        : "";
+    case "this_year":
+    case "last_year":
+      return range.from_date ? range.from_date.slice(0, 4) : "";
+    case "all_time":
+      return "All Time";
+    default:
+      return "";
+  }
 }
 
 function MemberContributions({
@@ -123,8 +163,11 @@ export function HouseholdPage() {
   const { user } = useAuth();
   const { data: householdData, isLoading: householdLoading, error: householdError, refetch: refetchHousehold } = useHousehold();
   const hasHousehold = !!householdData?.household;
-  const { data, isLoading, error, refetch } = useHouseholdDashboard(undefined, hasHousehold);
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+  const month = getMonthParam(timePeriod);
+  const { data, isLoading, error, refetch } = useHouseholdDashboard(month, hasHousehold);
   const generateReport = useGenerateReport();
+  const didAutoSwitch = useRef(false);
   const exportHouseholdReport = useExportHouseholdReport();
 
   const leaveHousehold = useLeaveHousehold();
@@ -137,6 +180,23 @@ export function HouseholdPage() {
   const isSoleMember = members.length <= 1;
   const canLeave = !isHead || isSoleMember;
   const currentMember = members.find((m) => m.id === currentUserId);
+
+  // If the API auto-switched to a different month (no transactions for
+  // the requested month), update the time period to match.
+  useEffect(() => {
+    if (
+      !didAutoSwitch.current &&
+      !isLoading &&
+      data?.month &&
+      timePeriod === "this_month"
+    ) {
+      const requested = getMonthParam("this_month");
+      if (data.month !== requested) {
+        didAutoSwitch.current = true;
+        setTimePeriod(`month:${data.month.slice(0, 7)}`);
+      }
+    }
+  }, [data, isLoading, timePeriod]);
 
   async function handleLeave() {
     try {
@@ -226,29 +286,35 @@ export function HouseholdPage() {
             </div>
           ) : !data ? null : (
             <div className="flex flex-col gap-6">
-              {/* Refresh button */}
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => generateReport.mutate()}
-                  disabled={generateReport.isPending}
-                >
-                  <RefreshCw
-                    className={cn(
-                      "size-4",
-                      generateReport.isPending && "animate-spin"
-                    )}
-                  />
-                  {generateReport.isPending ? "Generating..." : "Refresh Report"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => exportHouseholdReport.mutate(data?.month)}
-                  disabled={exportHouseholdReport.isPending}
-                >
-                  <Download className="size-4" />
-                  {exportHouseholdReport.isPending ? "Exporting..." : "Export PDF"}
-                </Button>
+              {/* Filter + actions */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {formatPeriodLabel(timePeriod)}
+                </p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <TimePeriodFilter value={timePeriod} onValueChange={setTimePeriod} />
+                  <Button
+                    variant="outline"
+                    onClick={() => generateReport.mutate()}
+                    disabled={generateReport.isPending}
+                  >
+                    <RefreshCw
+                      className={cn(
+                        "size-4",
+                        generateReport.isPending && "animate-spin"
+                      )}
+                    />
+                    {generateReport.isPending ? "Generating..." : "Refresh Report"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => exportHouseholdReport.mutate(data?.month)}
+                    disabled={exportHouseholdReport.isPending}
+                  >
+                    <Download className="size-4" />
+                    {exportHouseholdReport.isPending ? "Exporting..." : "Export PDF"}
+                  </Button>
+                </div>
               </div>
 
               {/* Summary Cards */}
@@ -302,13 +368,7 @@ export function HouseholdPage() {
                       {formatCurrency(data.summary.net)}
                     </p>
                     <span className="text-xs text-muted-foreground">
-                      {data.month
-                        ? new Date(data.month + "T00:00:00Z").toLocaleDateString("en-US", {
-                            month: "long",
-                            year: "numeric",
-                            timeZone: "UTC",
-                          })
-                        : "This month"}
+                      {timePeriod === "this_month" ? "This month" : formatPeriodLabel(timePeriod)}
                     </span>
                   </CardContent>
                 </Card>
