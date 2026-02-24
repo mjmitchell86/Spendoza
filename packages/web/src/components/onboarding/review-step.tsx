@@ -1,9 +1,11 @@
 import { RefreshCw } from "lucide-react";
+import { useQueries } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { useTransactions } from "@/hooks/use-bank-statements";
+import { apiClient } from "@/lib/api";
+import type { Transaction } from "@spendoza/shared";
 
 interface ReviewStepProps {
-  statementId: string;
+  statementIds: string[];
   onNext: () => void;
 }
 
@@ -16,8 +18,19 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-export function ReviewStep({ statementId, onNext }: ReviewStepProps) {
-  const { data: transactions, isLoading } = useTransactions(statementId);
+export function ReviewStep({ statementIds, onNext }: ReviewStepProps) {
+  const queries = useQueries({
+    queries: statementIds.map((id) => ({
+      queryKey: ["transactions", id],
+      queryFn: async (): Promise<Transaction[]> => {
+        const res = await apiClient(`/bank-statements/${id}`);
+        return res.transactions;
+      },
+    })),
+  });
+
+  const isLoading = queries.some((q) => q.isLoading);
+  const transactions = queries.flatMap((q) => q.data ?? []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -26,7 +39,8 @@ export function ReviewStep({ statementId, onNext }: ReviewStepProps) {
           Review Transactions
         </h2>
         <p className="text-sm text-muted-foreground">
-          Here are the transactions we extracted from your statement. You can
+          Here are the transactions we extracted from your{" "}
+          {statementIds.length === 1 ? "statement" : "statements"}. You can
           review and adjust them later.
         </p>
       </div>
@@ -89,8 +103,10 @@ export function ReviewStep({ statementId, onNext }: ReviewStepProps) {
 
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {transactions?.length ?? 0} transaction
-          {(transactions?.length ?? 0) !== 1 ? "s" : ""} found
+          {transactions.length} transaction
+          {transactions.length !== 1 ? "s" : ""} found
+          {statementIds.length > 1 &&
+            ` across ${statementIds.length} statements`}
         </p>
         <Button onClick={onNext}>Continue</Button>
       </div>
