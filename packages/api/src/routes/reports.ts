@@ -104,8 +104,20 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     });
   }
 
-  // Generate the report for the current month (force=true to bypass cache)
-  const report = await generateUserReport(user.id, now, true);
+  // Find the latest month with transactions; skip current month if empty
+  const { data: latestTxn } = await supabaseAdmin
+    .from("transactions")
+    .select("date")
+    .eq("user_id", user.id)
+    .order("date", { ascending: false })
+    .limit(1);
+
+  const reportDate = latestTxn && latestTxn.length > 0
+    ? new Date(latestTxn[0].date + "T00:00:00Z")
+    : now;
+
+  // Generate the report for the month with data (force=true to bypass cache)
+  const report = await generateUserReport(user.id, reportDate, true);
 
   // Increment the request count only after successful generation
   await supabaseAdmin.from("report_requests").upsert(

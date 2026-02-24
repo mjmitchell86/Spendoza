@@ -31,7 +31,8 @@ export interface DashboardData {
   summary: DashboardSummary;
   by_category: CategoryBreakdown[];
   trends: DashboardTrends;
-  insights: string;
+  insights: string | null;
+  insights_month?: string;
 }
 
 export interface HouseholdDashboardData extends DashboardData {

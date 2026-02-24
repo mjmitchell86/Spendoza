@@ -243,7 +243,7 @@ export function HouseholdDashboardPage() {
       {/* Bottom Row */}
       <div className="grid gap-6 lg:grid-cols-2">
         <TopExpensesList categories={data.by_category} />
-        <AiInsightsCard insights={data.insights} />
+        <AiInsightsCard insights={data.insights} insightsMonth={data.insights_month} />
       </div>
     </div>
   );

@@ -226,7 +226,7 @@ export function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <TopExpensesList categories={data.by_category} />
         <UpcomingBillsList />
-        <AiInsightsCard insights={data.insights} />
+        <AiInsightsCard insights={data.insights} insightsMonth={data.insights_month} />
       </div>
     </div>
   );

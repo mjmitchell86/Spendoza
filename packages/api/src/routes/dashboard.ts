@@ -142,7 +142,7 @@ router.get("/personal", async (req: Request, res: Response) => {
 
   // No report or report has no data — compute from transactions
   // If the requested month has no transactions, try the latest month with data
-  let dashboard = await computeFromTransactions(user.id, month);
+  let dashboard = await computeFromTransactions(user.id, month) as any;
 
   if (dashboard.summary.total_income === 0 && dashboard.summary.total_expenses === 0) {
     const latestMonth = await findLatestTransactionMonth(user.id);
@@ -151,9 +151,27 @@ router.get("/personal", async (req: Request, res: Response) => {
     }
   }
 
-  // Merge AI insights from the report if we have them
+  // Merge AI insights — try current month's report first, then find latest
   if (report?.ai_insights && !dashboard.insights) {
     dashboard.insights = report.ai_insights;
+    dashboard.insights_month = month;
+  }
+
+  if (!dashboard.insights) {
+    const { data: latestReport } = await supabaseAdmin
+      .from("reports")
+      .select("ai_insights, report_month")
+      .eq("entity_type", "user")
+      .eq("entity_id", user.id)
+      .not("ai_insights", "is", null)
+      .order("report_month", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestReport?.ai_insights) {
+      dashboard.insights = latestReport.ai_insights;
+      dashboard.insights_month = latestReport.report_month;
+    }
   }
 
   return res.status(200).json(dashboard);
@@ -306,7 +324,7 @@ router.get("/household", async (req: Request, res: Response) => {
   }
 
   // No report or report has no data — compute from transactions
-  let dashboard = await computeHouseholdFromTransactions(householdId, month);
+  let dashboard = await computeHouseholdFromTransactions(householdId, month) as any;
 
   if (dashboard.summary.total_income === 0 && dashboard.summary.total_expenses === 0) {
     const latestMonth = await findLatestHouseholdTransactionMonth(householdId);
@@ -315,9 +333,27 @@ router.get("/household", async (req: Request, res: Response) => {
     }
   }
 
-  // Merge AI insights from report if available
+  // Merge AI insights — try current month's report first, then find latest
   if (report?.ai_insights && !dashboard.insights) {
     dashboard.insights = report.ai_insights;
+    dashboard.insights_month = month;
+  }
+
+  if (!dashboard.insights) {
+    const { data: latestReport } = await supabaseAdmin
+      .from("reports")
+      .select("ai_insights, report_month")
+      .eq("entity_type", "household")
+      .eq("entity_id", householdId)
+      .not("ai_insights", "is", null)
+      .order("report_month", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestReport?.ai_insights) {
+      dashboard.insights = latestReport.ai_insights;
+      dashboard.insights_month = latestReport.report_month;
+    }
   }
 
   return res.status(200).json(dashboard);

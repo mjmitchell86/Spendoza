@@ -57,6 +57,8 @@ function buildChain(results: Record<string, any>, calls: typeof adminCalls) {
       lte: (...args: any[]) => makeEqChain(depth + 1),
       lt: (...args: any[]) => makeEqChain(depth + 1),
       or: (...args: any[]) => makeEqChain(depth + 1),
+      not: (...args: any[]) => makeEqChain(depth + 1),
+      in: (...args: any[]) => makeEqChain(depth + 1),
       is: (...args: any[]) => makeEqChain(depth + 1),
       order: (...args: any[]) => makeEqChain(depth + 1),
       limit: (...args: any[]) => makeEqChain(depth + 1),
