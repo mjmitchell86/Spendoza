@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../lib/supabase";
 import { similarity } from "../ai/expense-matcher";
+import { generateFriendlyNames } from "../ai/friendly-name-generator";
 import type { RecurrenceInterval } from "@spendoza/shared";
 
 // ---------------------------------------------------------------------------
@@ -193,21 +194,32 @@ export async function detectRecurringBills(userId: string): Promise<void> {
     ])
   );
 
-  // 5. Fetch existing auto-detected expenses
+  // 5. Generate friendly names for detected bills (non-fatal)
+  let friendlyNames = new Map<string, string>();
+  try {
+    const rawDescriptions = detectedBills.map((b) => b.description);
+    friendlyNames = await generateFriendlyNames(rawDescriptions);
+  } catch (err) {
+    console.error("[bill-detection] friendly name generation failed:", err);
+  }
+
+  // 6. Fetch existing auto-detected expenses
   const { data: existingExpenses } = await supabaseAdmin
     .from("expenses")
-    .select("id, description, amount, auto_detected, end_date, recurrence_interval, last_seen_at")
+    .select("id, description, friendly_name, amount, auto_detected, end_date, recurrence_interval, last_seen_at")
     .eq("user_id", userId)
     .eq("auto_detected", true);
 
   const existing = existingExpenses ?? [];
 
-  // 6. Upsert detected bills
+  // 7. Upsert detected bills
   const matchedExistingIds = new Set<string>();
 
   for (const bill of detectedBills) {
     const categoryId = resolveCategoryId(bill.categoryName, categoryMap);
     if (!categoryId) continue; // Skip if we can't map to a category
+
+    const friendlyName = friendlyNames.get(bill.description) ?? null;
 
     // Try to match to existing auto-detected expense
     const match = existing.find(
@@ -216,16 +228,20 @@ export async function detectRecurringBills(userId: string): Promise<void> {
 
     if (match) {
       matchedExistingIds.add(match.id);
-      // Update existing
+      // Update existing — only set friendly_name if it doesn't already have one
+      const update: Record<string, unknown> = {
+        amount: bill.amount,
+        recurrence_interval: bill.interval,
+        next_due_date: bill.nextDueDate,
+        last_seen_at: bill.lastDate,
+        end_date: null, // Re-activate if previously expired
+      };
+      if (!match.friendly_name && friendlyName) {
+        update.friendly_name = friendlyName;
+      }
       await supabaseAdmin
         .from("expenses")
-        .update({
-          amount: bill.amount,
-          recurrence_interval: bill.interval,
-          next_due_date: bill.nextDueDate,
-          last_seen_at: bill.lastDate,
-          end_date: null, // Re-activate if previously expired
-        })
+        .update(update)
         .eq("id", match.id);
     } else {
       // Create new
@@ -233,6 +249,7 @@ export async function detectRecurringBills(userId: string): Promise<void> {
         user_id: userId,
         category_id: categoryId,
         description: bill.description,
+        friendly_name: friendlyName,
         amount: bill.amount,
         frequency: "recurring" as const,
         recurrence_interval: bill.interval,
@@ -244,7 +261,7 @@ export async function detectRecurringBills(userId: string): Promise<void> {
     }
   }
 
-  // 7. Expire stale bills
+  // 8. Expire stale bills
   await expireStaleBills(userId, Array.from(matchedExistingIds));
 }
 
