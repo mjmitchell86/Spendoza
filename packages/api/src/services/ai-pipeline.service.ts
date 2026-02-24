@@ -159,16 +159,58 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
 
   console.log(`[ai-pipeline] [${statementId}] extracted ${parsedTransactions.length} transactions, detected bank: ${detectedBankName ?? "none"}`);
 
-  // Update bank_name if not already set by user
+  // Auto-fill bank_name and statement_month if not set by user
+  const updates: Record<string, string> = {};
+
   if (!statement.bank_name && detectedBankName) {
+    updates.bank_name = detectedBankName;
+  }
+
+  if (!statement.statement_month && parsedTransactions.length > 0) {
+    // Count occurrences of each YYYY-MM month across transaction dates
+    const monthCounts = new Map<string, number>();
+    for (const t of parsedTransactions) {
+      if (t.date) {
+        const month = t.date.slice(0, 7); // "YYYY-MM"
+        monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
+      }
+    }
+    // Pick the most frequent month
+    let bestMonth = "";
+    let bestCount = 0;
+    for (const [month, count] of monthCounts) {
+      if (count > bestCount) {
+        bestMonth = month;
+        bestCount = count;
+      }
+    }
+    if (bestMonth) {
+      updates.statement_month = bestMonth + "-01";
+      console.log(`[ai-pipeline] [${statementId}] auto-detected statement_month: ${updates.statement_month}`);
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
     await supabaseAdmin
       .from("bank_statements")
-      .update({ bank_name: detectedBankName })
+      .update(updates)
       .eq("id", statementId);
-    console.log(`[ai-pipeline] [${statementId}] set bank_name to: ${detectedBankName}`);
+    if (updates.bank_name) {
+      console.log(`[ai-pipeline] [${statementId}] set bank_name to: ${updates.bank_name}`);
+    }
   }
 
   if (parsedTransactions.length === 0) {
+    // Fallback: if statement_month is still null, use current month
+    if (!statement.statement_month && !updates.statement_month) {
+      const fallbackMonth = new Date().toISOString().slice(0, 7) + "-01";
+      await supabaseAdmin
+        .from("bank_statements")
+        .update({ statement_month: fallbackMonth })
+        .eq("id", statementId);
+      console.log(`[ai-pipeline] [${statementId}] no transactions, fallback statement_month: ${fallbackMonth}`);
+    }
+
     // No transactions — mark as parsed immediately
     await supabaseAdmin
       .from("bank_statements")
