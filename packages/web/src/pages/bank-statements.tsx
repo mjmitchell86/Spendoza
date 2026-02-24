@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { Upload, RefreshCw, CheckCircle2, Circle } from "lucide-react";
+import { Upload, RefreshCw, CheckCircle2, Circle, RotateCcw, Trash2 } from "lucide-react";
 import type { BankStatement } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { useBankStatements } from "@/hooks/use-bank-statements";
+import {
+  useBankStatements,
+  useReprocessStatement,
+  useDeleteStatement,
+} from "@/hooks/use-bank-statements";
 import { useCategories } from "@/hooks/use-categories";
 import { useHousehold } from "@/hooks/use-household";
 import { UploadForm } from "@/components/bank-statements/upload-form";
@@ -117,7 +121,11 @@ export function BankStatementsPage() {
               {selectedStatement.status === "processing" ? (
                 <ProcessingStatus parsedData={selectedStatement.parsed_data} />
               ) : selectedStatement.status === "failed" ? (
-                <FailedStatus parsedData={selectedStatement.parsed_data} />
+                <FailedStatus
+                  statementId={selectedStatement.id}
+                  parsedData={selectedStatement.parsed_data}
+                  onDeleted={() => setSelectedId(null)}
+                />
               ) : (
                 <p className="text-muted-foreground">
                   This statement has been uploaded and is waiting to be
@@ -204,7 +212,17 @@ function ProcessingStatus({ parsedData }: { parsedData: unknown }) {
   );
 }
 
-function FailedStatus({ parsedData }: { parsedData: unknown }) {
+function FailedStatus({
+  statementId,
+  parsedData,
+  onDeleted,
+}: {
+  statementId: string;
+  parsedData: unknown;
+  onDeleted: () => void;
+}) {
+  const reprocess = useReprocessStatement();
+  const deleteStatement = useDeleteStatement();
   const failedStep = (parsedData as any)?.failed_step as string | undefined;
   const errorMsg = (parsedData as any)?.error as string | undefined;
   const stepLabel = PIPELINE_STEPS.find((s) => s.key === failedStep)?.label;
@@ -224,6 +242,29 @@ function FailedStatus({ parsedData }: { parsedData: unknown }) {
           {errorMsg}
         </p>
       )}
+      <div className="mt-4 flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => reprocess.mutate(statementId)}
+          disabled={reprocess.isPending}
+        >
+          <RotateCcw className="size-4" />
+          {reprocess.isPending ? "Retrying..." : "Retry"}
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={async () => {
+            await deleteStatement.mutateAsync(statementId);
+            onDeleted();
+          }}
+          disabled={deleteStatement.isPending}
+        >
+          <Trash2 className="size-4" />
+          {deleteStatement.isPending ? "Removing..." : "Remove"}
+        </Button>
+      </div>
     </>
   );
 }

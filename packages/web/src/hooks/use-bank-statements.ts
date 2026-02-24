@@ -75,6 +75,28 @@ export function useUploadBankStatement() {
   });
 }
 
+export function useReprocessStatement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (statementId: string) =>
+      apiClient(`/bank-statements/${statementId}/reprocess`, { method: "POST" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["bank-statements"] });
+    },
+  });
+}
+
+export function useDeleteStatement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (statementId: string) =>
+      apiClient(`/bank-statements/${statementId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["bank-statements"] });
+    },
+  });
+}
+
 export function useUpdateTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
