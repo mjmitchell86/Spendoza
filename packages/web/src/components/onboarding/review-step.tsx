@@ -42,7 +42,7 @@ export function ReviewStep({ statementId, onNext }: ReviewStepProps) {
           </p>
         </div>
       ) : (
-        <div className="max-h-[400px] overflow-y-auto rounded-lg border">
+        <div className="max-h-[400px] overflow-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="sticky top-0 border-b bg-card">
               <tr className="text-left">
@@ -71,7 +71,7 @@ export function ReviewStep({ statementId, onNext }: ReviewStepProps) {
                         )
                       : "-"}
                   </td>
-                  <td className="max-w-[200px] truncate px-4 py-2.5">
+                  <td className="max-w-[120px] truncate px-4 py-2.5 sm:max-w-[200px]">
                     {tx.description}
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">

@@ -151,12 +151,12 @@ export function TransactionReview({
   return (
     <div className="flex flex-col gap-4">
       {isSharedAccount && householdMembers && householdMembers.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <span className="text-sm text-muted-foreground">
             {selectedIds.size} selected
           </span>
           <Select value={bulkAssignTo} onValueChange={setBulkAssignTo}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Assign to..." />
             </SelectTrigger>
             <SelectContent>
@@ -217,7 +217,7 @@ export function TransactionReview({
                 </TableCell>
               )}
               <TableCell>{formatDate(tx.date)}</TableCell>
-              <TableCell className="max-w-[200px] truncate">
+              <TableCell className="max-w-[120px] truncate sm:max-w-[200px]">
                 {tx.description}
               </TableCell>
               <TableCell className="font-mono">
@@ -237,7 +237,7 @@ export function TransactionReview({
                     void handleCategoryChange(tx.id, v)
                   }
                 >
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger className="w-full sm:w-[150px]">
                     <SelectValue placeholder="Uncategorized" />
                   </SelectTrigger>
                   <SelectContent>
@@ -256,7 +256,7 @@ export function TransactionReview({
                     value={tx.attributed_to_user_id ?? ""}
                     onValueChange={(v) => void handleAssignTo(tx.id, v)}
                   >
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-full sm:w-[140px]">
                       <SelectValue placeholder="Unassigned" />
                     </SelectTrigger>
                     <SelectContent>

@@ -91,7 +91,7 @@ export function ExpenseList({
     <>
       <div className="flex flex-wrap gap-2 pb-4">
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="All Categories" />
           </SelectTrigger>
           <SelectContent>
@@ -105,7 +105,7 @@ export function ExpenseList({
         </Select>
 
         <Select value={frequencyFilter} onValueChange={setFrequencyFilter}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-full sm:w-[150px]">
             <SelectValue placeholder="All Types" />
           </SelectTrigger>
           <SelectContent>
@@ -130,6 +130,7 @@ export function ExpenseList({
           )}
         </div>
       ) : (
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -205,6 +206,7 @@ export function ExpenseList({
             ))}
           </TableBody>
         </Table>
+        </div>
       )}
 
       <Dialog

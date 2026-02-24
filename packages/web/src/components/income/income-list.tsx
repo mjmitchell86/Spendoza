@@ -86,6 +86,7 @@ export function IncomeList({
 
   return (
     <>
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -154,6 +155,7 @@ export function IncomeList({
           })}
         </TableBody>
       </Table>
+      </div>
 
       <Dialog
         open={!!deleteTarget}

@@ -70,7 +70,7 @@ export function TransactionTable({
             <TableCell className="whitespace-nowrap">
               {formatDate(txn.date)}
             </TableCell>
-            <TableCell className="max-w-[300px] truncate">
+            <TableCell className="max-w-[150px] truncate sm:max-w-[300px]">
               {txn.description}
             </TableCell>
             <TableCell
