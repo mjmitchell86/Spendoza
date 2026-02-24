@@ -12,6 +12,7 @@ import transactionsRouter from "./routes/transactions";
 import householdsRouter from "./routes/households";
 import reportsRouter from "./routes/reports";
 import dashboardRouter from "./routes/dashboard";
+import goalsRouter from "./routes/goals";
 import inviteCodesRouter from "./routes/invite-codes";
 import internalRouter from "./routes/internal";
 import { requireAuth } from "./middleware/auth";
@@ -62,6 +63,7 @@ app.use("/api/invite-codes", requireAuth, inviteCodesRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/internal", internalRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
+app.use("/api/goals", requireAuth, goalsRouter);
 
 // Global error handler (must be LAST middleware)
 app.use(errorHandler);

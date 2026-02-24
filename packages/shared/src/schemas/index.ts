@@ -7,3 +7,4 @@ export * from "./expense";
 export * from "./bank-statement";
 export * from "./transaction";
 export * from "./report";
+export * from "./goal";

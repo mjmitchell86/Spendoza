@@ -7,6 +7,7 @@ import {
   FileText,
   Users,
   ArrowLeftRight,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const navItems = [
   { to: "/categories", label: "Categories", icon: Tags },
   { to: "/bank-statements", label: "Bank Statements", icon: FileText },
   { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
+  { to: "/goals", label: "Goals", icon: Target },
   { to: "/household", label: "Household", icon: Users },
 ];
 
