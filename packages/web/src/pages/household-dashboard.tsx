@@ -7,19 +7,26 @@ import {
   ArrowDownRight,
   Users,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useHouseholdDashboard,
   useGenerateReport,
 } from "@/hooks/use-dashboard";
+import { useAuth } from "@/hooks/use-auth";
 import { useHousehold } from "@/hooks/use-household";
 import { IncomeVsExpensesChart } from "@/components/dashboard/income-vs-expenses-chart";
 import { SpendingByCategoryChart } from "@/components/dashboard/spending-by-category-chart";
 import { SavingsRateCard } from "@/components/dashboard/savings-rate-card";
 import { TopExpensesList } from "@/components/dashboard/top-expenses-list";
 import { AiInsightsCard } from "@/components/dashboard/ai-insights-card";
+import { CreateHousehold } from "@/components/household/create-household";
+import { JoinHousehold } from "@/components/household/join-household";
+import { MemberList } from "@/components/household/member-list";
+import { InviteForm } from "@/components/household/invite-form";
+import { SharingConfig } from "@/components/household/sharing-config";
 import { cn } from "@/lib/utils";
 import type { MemberContribution } from "@/hooks/use-dashboard";
 
@@ -100,31 +107,21 @@ function MemberContributions({
   );
 }
 
-export function HouseholdDashboardPage() {
-  const { data: household, isLoading: householdLoading } = useHousehold();
-  const hasHousehold = !!household?.household;
+export function HouseholdPage() {
+  const { user } = useAuth();
+  const { data: householdData, isLoading: householdLoading, error: householdError, refetch: refetchHousehold } = useHousehold();
+  const hasHousehold = !!householdData?.household;
   const { data, isLoading, error, refetch } = useHouseholdDashboard(undefined, hasHousehold);
   const generateReport = useGenerateReport();
 
-  // If no household, show prompt
-  if (!householdLoading && !household?.household) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20">
-        <Users className="size-12 text-muted-foreground" />
-        <div className="text-center">
-          <h2 className="text-lg font-semibold">No Household</h2>
-          <p className="text-sm text-muted-foreground">
-            Create or join a household to see the household dashboard.
-          </p>
-        </div>
-        <Button asChild>
-          <Link to="/household">Go to Household</Link>
-        </Button>
-      </div>
-    );
-  }
+  const household = householdData?.household;
+  const members = householdData?.members ?? [];
+  const currentUserId = user?.id ?? "";
+  const isHead = household?.head_of_household_id === currentUserId;
+  const currentMember = members.find((m) => m.id === currentUserId);
 
-  if (isLoading || householdLoading) {
+  // Loading state
+  if (householdLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <RefreshCw className="size-5 animate-spin text-muted-foreground" />
@@ -132,119 +129,216 @@ export function HouseholdDashboardPage() {
     );
   }
 
-  if (error) {
+  // Error state
+  if (householdError) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-12">
         <p className="text-sm text-destructive">
-          {error instanceof Error
-            ? error.message
-            : "Failed to load household dashboard"}
+          {householdError instanceof Error
+            ? householdError.message
+            : "Failed to load household"}
         </p>
-        <Button variant="outline" size="sm" onClick={() => void refetch()}>
+        <Button variant="outline" size="sm" onClick={() => void refetchHousehold()}>
           Retry
         </Button>
       </div>
     );
   }
 
-  if (!data) return null;
+  // No household — show create/join
+  if (!household) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Household</h1>
+          <p className="text-sm text-muted-foreground">
+            Create or join a household to share finances with your family
+          </p>
+        </div>
+        <div className="grid gap-6 sm:grid-cols-2">
+          <CreateHousehold />
+          <JoinHousehold />
+        </div>
+      </div>
+    );
+  }
 
+  // Has household — show tabbed view
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Household Dashboard
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {household?.household.name ?? "Household"} financial overview
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => generateReport.mutate()}
-          disabled={generateReport.isPending}
-        >
-          <RefreshCw
-            className={cn(
-              "size-4",
-              generateReport.isPending && "animate-spin"
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Household</h1>
+        <p className="text-sm text-muted-foreground">
+          {household.name} — financial overview and settings
+        </p>
+      </div>
+
+      <Tabs defaultValue="dashboard">
+        <TabsList>
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+        </TabsList>
+
+        {/* Dashboard Tab */}
+        <TabsContent value="dashboard">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-12">
+              <p className="text-sm text-destructive">
+                {error instanceof Error
+                  ? error.message
+                  : "Failed to load household dashboard"}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => void refetch()}>
+                Retry
+              </Button>
+            </div>
+          ) : !data ? null : (
+            <div className="flex flex-col gap-6">
+              {/* Refresh button */}
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => generateReport.mutate()}
+                  disabled={generateReport.isPending}
+                >
+                  <RefreshCw
+                    className={cn(
+                      "size-4",
+                      generateReport.isPending && "animate-spin"
+                    )}
+                  />
+                  {generateReport.isPending ? "Generating..." : "Refresh Report"}
+                </Button>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="pb-0">
+                    <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                      Total Income
+                      <TrendingUp className="size-4" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">
+                      {formatCurrency(data.summary.total_income)}
+                    </p>
+                    <TrendBadge value={data.trends.income_change} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-0">
+                    <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                      Total Expenses
+                      <TrendingDown className="size-4" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">
+                      {formatCurrency(data.summary.total_expenses)}
+                    </p>
+                    <TrendBadge value={data.trends.expense_change} />
+                  </CardContent>
+                </Card>
+
+                <SavingsRateCard summary={data.summary} />
+
+                <Card>
+                  <CardHeader className="pb-0">
+                    <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                      Net
+                      <DollarSign className="size-4" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p
+                      className={cn(
+                        "text-2xl font-bold",
+                        data.summary.net >= 0 ? "text-green-600" : "text-red-600"
+                      )}
+                    >
+                      {formatCurrency(data.summary.net)}
+                    </p>
+                    <span className="text-xs text-muted-foreground">This month</span>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Member Contributions */}
+              <MemberContributions contributions={data.member_contributions ?? []} />
+
+              {/* Charts Row */}
+              <div className="grid gap-6 lg:grid-cols-2">
+                <IncomeVsExpensesChart summary={data.summary} />
+                <SpendingByCategoryChart categories={data.by_category} />
+              </div>
+
+              {/* Bottom Row */}
+              <div className="grid gap-6 lg:grid-cols-2">
+                <TopExpensesList categories={data.by_category} />
+                <AiInsightsCard insights={data.insights} insightsMonth={data.insights_month} />
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Settings Tab */}
+        <TabsContent value="settings">
+          <div className="flex flex-col gap-6">
+            {/* Members */}
+            <Card>
+              <CardHeader className="pb-0">
+                <CardTitle>Members</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MemberList
+                  members={members}
+                  headId={household.head_of_household_id}
+                  currentUserId={currentUserId}
+                  isHead={isHead}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Invite (head only) */}
+            {isHead && (
+              <Card>
+                <CardHeader className="pb-0">
+                  <CardTitle>Invite Members</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <InviteForm inviteCode={household.invite_code} />
+                </CardContent>
+              </Card>
             )}
-          />
-          {generateReport.isPending ? "Generating..." : "Refresh Report"}
-        </Button>
-      </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-0">
-            <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-              Total Income
-              <TrendingUp className="size-4" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {formatCurrency(data.summary.total_income)}
-            </p>
-            <TrendBadge value={data.trends.income_change} />
-          </CardContent>
-        </Card>
+            <Separator />
 
-        <Card>
-          <CardHeader className="pb-0">
-            <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-              Total Expenses
-              <TrendingDown className="size-4" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {formatCurrency(data.summary.total_expenses)}
-            </p>
-            <TrendBadge value={data.trends.expense_change} />
-          </CardContent>
-        </Card>
-
-        <SavingsRateCard summary={data.summary} />
-
-        <Card>
-          <CardHeader className="pb-0">
-            <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-              Net
-              <DollarSign className="size-4" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p
-              className={cn(
-                "text-2xl font-bold",
-                data.summary.net >= 0 ? "text-green-600" : "text-red-600"
-              )}
-            >
-              {formatCurrency(data.summary.net)}
-            </p>
-            <span className="text-xs text-muted-foreground">This month</span>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Member Contributions */}
-      <MemberContributions contributions={data.member_contributions ?? []} />
-
-      {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <IncomeVsExpensesChart summary={data.summary} />
-        <SpendingByCategoryChart categories={data.by_category} />
-      </div>
-
-      {/* Bottom Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <TopExpensesList categories={data.by_category} />
-        <AiInsightsCard insights={data.insights} insightsMonth={data.insights_month} />
-      </div>
+            {/* Sharing Config */}
+            {currentMember && (
+              <Card>
+                <CardHeader className="pb-0">
+                  <CardTitle>Your Sharing Preferences</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SharingConfig
+                    currentIncomeMode={currentMember.income_sharing_mode}
+                    currentExpenseMode={currentMember.expense_sharing_mode}
+                    currentSharedAmount={null}
+                  />
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

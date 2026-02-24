@@ -10,9 +10,8 @@ import { IncomePage } from "@/pages/income";
 import { ExpensesPage } from "@/pages/expenses";
 import { CategoriesPage } from "@/pages/categories";
 import { BankStatementsPage } from "@/pages/bank-statements";
-import { HouseholdPage } from "@/pages/household";
 import { TransactionsPage } from "@/pages/transactions";
-import { HouseholdDashboardPage } from "@/pages/household-dashboard";
+import { HouseholdPage } from "@/pages/household-dashboard";
 import { OnboardingPage } from "@/pages/onboarding";
 
 const queryClient = new QueryClient();
@@ -42,7 +41,7 @@ function App() {
                 <Route path="/household" element={<HouseholdPage />} />
                 <Route
                   path="/household-dashboard"
-                  element={<HouseholdDashboardPage />}
+                  element={<Navigate to="/household" replace />}
                 />
               </Route>
               <Route path="/onboarding" element={<OnboardingPage />} />
