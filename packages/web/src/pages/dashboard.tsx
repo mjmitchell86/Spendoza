@@ -57,6 +57,22 @@ export function DashboardPage() {
   const { data, isLoading, error, refetch } = usePersonalDashboard(month);
   const generateReport = useGenerateReport();
   const { data: statements } = useBankStatements();
+  const didAutoSwitch = useRef(false);
+
+  // If "this_month" loads with zero data, auto-switch to "last_month"
+  useEffect(() => {
+    if (
+      !didAutoSwitch.current &&
+      !isLoading &&
+      data &&
+      timePeriod === "this_month" &&
+      data.summary.total_income === 0 &&
+      data.summary.total_expenses === 0
+    ) {
+      didAutoSwitch.current = true;
+      setTimePeriod("last_month");
+    }
+  }, [data, isLoading, timePeriod]);
 
   const processingStatements = (statements ?? []).filter(
     (s) => s.status === "processing" || s.status === "uploaded"
