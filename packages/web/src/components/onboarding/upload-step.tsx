@@ -1,5 +1,6 @@
 import { useState, useRef, type FormEvent, type DragEvent } from "react";
 import { Upload, FileText } from "lucide-react";
+import { MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,17 +12,13 @@ interface UploadStepProps {
   onSkip: () => void;
 }
 
-const MAX_SIZE_MB = 10;
-
 export function UploadStep({ onNext, onSkip }: UploadStepProps) {
   const upload = useUploadBankStatement();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [bankName, setBankName] = useState("");
-  const [statementMonth, setStatementMonth] = useState(
-    new Date().toISOString().slice(0, 7)
-  );
+  const [statementMonth, setStatementMonth] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,8 +29,8 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
       setError("Only PDF files are supported");
       return;
     }
-    if (f.size > MAX_SIZE_MB * 1024 * 1024) {
-      setError(`File must be under ${MAX_SIZE_MB}MB`);
+    if (f.size > MAX_BANK_STATEMENT_SIZE_MB * 1024 * 1024) {
+      setError(`File must be under ${MAX_BANK_STATEMENT_SIZE_MB}MB`);
       return;
     }
     setError(null);
@@ -66,7 +63,9 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("statement_month", statementMonth + "-01");
+    if (statementMonth) {
+      formData.append("statement_month", statementMonth + "-01");
+    }
     if (bankName.trim()) {
       formData.append("bank_name", bankName.trim());
     }
@@ -127,7 +126,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
                 Drop a PDF here or click to browse
               </p>
               <p className="text-xs text-muted-foreground">
-                Max {MAX_SIZE_MB}MB
+                Max {MAX_BANK_STATEMENT_SIZE_MB}MB
               </p>
             </>
           )}
@@ -147,18 +146,20 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
               id="ob_bank_name"
               value={bankName}
               onChange={(e) => setBankName(e.target.value)}
-              placeholder="e.g. Chase"
+              placeholder="e.g. Chase, Wells Fargo"
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="ob_statement_month">Statement Month</Label>
+            <Label htmlFor="ob_statement_month">Statement Month (optional)</Label>
             <Input
               id="ob_statement_month"
               type="month"
               value={statementMonth}
               onChange={(e) => setStatementMonth(e.target.value)}
-              required
             />
+            <p className="text-xs text-muted-foreground">
+              Auto-detected from transactions if not provided
+            </p>
           </div>
         </div>
 
