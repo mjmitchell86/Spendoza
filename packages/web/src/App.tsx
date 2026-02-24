@@ -13,6 +13,7 @@ import { BankStatementsPage } from "@/pages/bank-statements";
 import { TransactionsPage } from "@/pages/transactions";
 import { HouseholdPage } from "@/pages/household-dashboard";
 import { GoalsPage } from "@/pages/goals";
+import { ProfilePage } from "@/pages/profile";
 import { OnboardingPage } from "@/pages/onboarding";
 
 const queryClient = new QueryClient();
@@ -45,11 +46,11 @@ function App() {
                   path="/household-dashboard"
                   element={<Navigate to="/household" replace />}
                 />
+                <Route path="/profile" element={<ProfilePage />} />
               </Route>
               <Route path="/onboarding" element={<OnboardingPage />} />
             </Route>
-            <Route path="/profile" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/settings" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/settings" element={<Navigate to="/profile" replace />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
