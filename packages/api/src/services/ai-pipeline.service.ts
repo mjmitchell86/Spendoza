@@ -426,29 +426,31 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     console.error(`[ai-pipeline] [${statementId}] bill detection failed:`, err);
   }
 
-  // Auto-generate report if the statement is for this month or last month (non-fatal)
+  // Auto-generate reports for every month that had transactions inserted (non-fatal)
   try {
-    const stmtMonth = statement.statement_month as string | null;
-    if (stmtMonth) {
-      const now = new Date();
-      const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+    const monthSet = new Set<string>();
+    for (const t of matchedTransactions) {
+      if (t.date) {
+        monthSet.add(t.date.slice(0, 7)); // "YYYY-MM"
+      }
+    }
 
-      if (stmtMonth === thisMonth || stmtMonth === lastMonth) {
-        const reportMonth = new Date(stmtMonth + "T00:00:00Z");
-        console.log(`[ai-pipeline] [${statementId}] generating report for ${stmtMonth}`);
+    if (monthSet.size > 0) {
+      const months = Array.from(monthSet).sort();
+
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("household_id")
+        .eq("id", user_id)
+        .single();
+
+      for (const ym of months) {
+        const reportMonth = new Date(ym + "-01T00:00:00Z");
+        console.log(`[ai-pipeline] [${statementId}] generating report for ${ym}`);
         await generateUserReport(user_id, reportMonth, true);
 
-        // Also generate household report if user belongs to one
-        const { data: profile } = await supabaseAdmin
-          .from("profiles")
-          .select("household_id")
-          .eq("id", user_id)
-          .single();
-
         if (profile?.household_id) {
-          console.log(`[ai-pipeline] [${statementId}] generating household report for ${stmtMonth}`);
+          console.log(`[ai-pipeline] [${statementId}] generating household report for ${ym}`);
           await generateHouseholdReport(profile.household_id, reportMonth, true);
         }
       }
