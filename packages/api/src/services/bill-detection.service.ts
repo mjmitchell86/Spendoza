@@ -6,10 +6,36 @@ import type { RecurrenceInterval } from "@spendoza/shared";
 // Constants
 // ---------------------------------------------------------------------------
 const LOOKBACK_MONTHS = 12;
-const MIN_OCCURRENCES = 2;
-const AMOUNT_TOLERANCE = 0.2;
+const MIN_OCCURRENCES = 3;
+const AMOUNT_TOLERANCE = 0.1;
 const STALENESS_MULTIPLIER = 2;
 const SIMILARITY_THRESHOLD = 0.6;
+
+/**
+ * Category keywords that indicate a likely recurring bill.
+ * Only transactions whose ai_category matches one of these patterns will be
+ * auto-detected. This prevents flagging regular spending at the same store
+ * (groceries, dining, shopping) as a "bill".
+ */
+const BILL_CATEGORY_KEYWORDS = [
+  // Subscriptions & streaming
+  "subscription", "streaming", "membership",
+  // Utilities
+  "utility", "utilities", "electric", "power", "energy",
+  "water", "sewer", "internet", "phone", "cable", "telecom",
+  // Housing
+  "housing", "rent", "mortgage",
+  // Automotive
+  "automotive", "car", "auto", "vehicle",
+  // Insurance
+  "insurance",
+  // Loans
+  "loan",
+  // Health & fitness (gym memberships)
+  "health", "fitness", "gym",
+  // Software / SaaS
+  "software", "cloud", "saas",
+];
 
 // ---------------------------------------------------------------------------
 // Helpers (exported for testing)
@@ -23,6 +49,13 @@ export function normalizeDescription(desc: string): string {
     .replace(/\b\d{5,}\b/g, "") // remove long numbers (refs, phone numbers)
     .replace(/\s+/g, " ") // collapse whitespace
     .trim();
+}
+
+/** Check if an ai_category matches a bill-like category. */
+export function isBillLikeCategory(aiCategory: string | null): boolean {
+  if (!aiCategory) return false;
+  const lower = aiCategory.toLowerCase();
+  return BILL_CATEGORY_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 /** Interval definitions in days. */
@@ -298,6 +331,9 @@ function detectPatterns(
         bestCount = count;
       }
     }
+
+    // Only auto-detect bills in bill-like categories
+    if (!isBillLikeCategory(bestCategory)) continue;
 
     const sortedDates = [...dates].sort();
     const lastDate = sortedDates[sortedDates.length - 1];

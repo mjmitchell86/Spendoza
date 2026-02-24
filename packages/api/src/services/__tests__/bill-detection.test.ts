@@ -43,10 +43,33 @@ const highVariance = [
   makeTx("RANDOM STORE", 10.0, "2025-12-01"),
 ];
 
+// Same store, varying amounts (should be rejected — not a bill)
+const groceryStore = [
+  makeTx("WHOLE FOODS MKT", 45.23, "2025-10-01", "Groceries"),
+  makeTx("WHOLE FOODS MKT", 67.89, "2025-11-01", "Groceries"),
+  makeTx("WHOLE FOODS MKT", 52.14, "2025-12-01", "Groceries"),
+];
+
+// Consistent amounts but non-bill category (should be rejected by category filter)
+const coffeeshop = [
+  makeTx("STARBUCKS 12345", 5.99, "2025-10-01", "Dining"),
+  makeTx("STARBUCKS 56789", 5.99, "2025-11-01", "Dining"),
+  makeTx("STARBUCKS 99999", 5.99, "2025-12-01", "Dining"),
+];
+
+// Utility with moderate variation (should be accepted — real bill)
+const electricBill = [
+  makeTx("CITY ELECTRIC CO", 102.50, "2025-10-01", "Utilities"),
+  makeTx("CITY ELECTRIC CO", 98.75, "2025-11-01", "Utilities"),
+  makeTx("CITY ELECTRIC CO", 105.20, "2025-12-01", "Utilities"),
+];
+
 const userCategories = [
   { id: "cat-sub", name: "Subscriptions" },
   { id: "cat-health", name: "Health" },
   { id: "cat-food", name: "Food" },
+  { id: "cat-util", name: "Utilities" },
+  { id: "cat-dining", name: "Dining" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -170,6 +193,7 @@ const {
   normalizeDescription,
   detectInterval,
   calculateNextDueDate,
+  isBillLikeCategory,
 } = await import("../bill-detection.service");
 
 // ---------------------------------------------------------------------------
@@ -273,6 +297,51 @@ describe("calculateNextDueDate", () => {
   });
 });
 
+describe("isBillLikeCategory", () => {
+  it("accepts subscription categories", () => {
+    expect(isBillLikeCategory("Subscriptions")).toBe(true);
+    expect(isBillLikeCategory("Streaming")).toBe(true);
+    expect(isBillLikeCategory("Membership")).toBe(true);
+  });
+
+  it("accepts utility categories", () => {
+    expect(isBillLikeCategory("Utilities")).toBe(true);
+    expect(isBillLikeCategory("Electric")).toBe(true);
+    expect(isBillLikeCategory("Internet & Phone")).toBe(true);
+  });
+
+  it("accepts housing categories", () => {
+    expect(isBillLikeCategory("Rent")).toBe(true);
+    expect(isBillLikeCategory("Housing")).toBe(true);
+    expect(isBillLikeCategory("Mortgage")).toBe(true);
+  });
+
+  it("accepts automotive and insurance", () => {
+    expect(isBillLikeCategory("Automotive")).toBe(true);
+    expect(isBillLikeCategory("Car Insurance")).toBe(true);
+    expect(isBillLikeCategory("Insurance")).toBe(true);
+  });
+
+  it("accepts health/fitness (gym memberships)", () => {
+    expect(isBillLikeCategory("Health")).toBe(true);
+    expect(isBillLikeCategory("Gym")).toBe(true);
+    expect(isBillLikeCategory("Fitness")).toBe(true);
+  });
+
+  it("rejects non-bill categories", () => {
+    expect(isBillLikeCategory("Groceries")).toBe(false);
+    expect(isBillLikeCategory("Dining")).toBe(false);
+    expect(isBillLikeCategory("Shopping")).toBe(false);
+    expect(isBillLikeCategory("Entertainment")).toBe(false);
+    expect(isBillLikeCategory("Travel")).toBe(false);
+    expect(isBillLikeCategory("Food")).toBe(false);
+  });
+
+  it("returns false for null", () => {
+    expect(isBillLikeCategory(null)).toBe(false);
+  });
+});
+
 // ===========================================================================
 // detectRecurringBills integration tests
 // ===========================================================================
@@ -313,6 +382,23 @@ describe("detectRecurringBills", () => {
   it("ignores groups with only 1 transaction", async () => {
     adminResults.transactions.selectList = {
       data: [makeTx("ONE TIME PURCHASE", 100.0, "2025-12-01")],
+      error: null,
+    };
+
+    await detectRecurringBills(TEST_USER_ID);
+
+    const inserts = adminCalls.filter(
+      (c) => c.table === "expenses" && c.op === "insert"
+    );
+    expect(inserts.length).toBe(0);
+  });
+
+  it("ignores groups with only 2 transactions (needs 3+)", async () => {
+    adminResults.transactions.selectList = {
+      data: [
+        makeTx("HULU STREAMING", 7.99, "2025-11-01"),
+        makeTx("HULU STREAMING", 7.99, "2025-12-01"),
+      ],
       error: null,
     };
 
@@ -552,5 +638,49 @@ describe("detectRecurringBills", () => {
       (c) => c.table === "expenses" && c.op === "insert"
     );
     expect(inserts.length).toBe(0);
+  });
+
+  it("rejects same store with varying amounts (grocery pattern)", async () => {
+    adminResults.transactions.selectList = {
+      data: groceryStore,
+      error: null,
+    };
+
+    await detectRecurringBills(TEST_USER_ID);
+
+    const inserts = adminCalls.filter(
+      (c) => c.table === "expenses" && c.op === "insert"
+    );
+    expect(inserts.length).toBe(0);
+  });
+
+  it("rejects non-bill category even with consistent amounts", async () => {
+    adminResults.transactions.selectList = {
+      data: coffeeshop,
+      error: null,
+    };
+
+    await detectRecurringBills(TEST_USER_ID);
+
+    const inserts = adminCalls.filter(
+      (c) => c.table === "expenses" && c.op === "insert"
+    );
+    expect(inserts.length).toBe(0);
+  });
+
+  it("accepts utility bills with moderate amount variation", async () => {
+    adminResults.transactions.selectList = {
+      data: electricBill,
+      error: null,
+    };
+
+    await detectRecurringBills(TEST_USER_ID);
+
+    const inserts = adminCalls.filter(
+      (c) => c.table === "expenses" && c.op === "insert"
+    );
+    expect(inserts.length).toBe(1);
+    expect(inserts[0].args.category_id).toBe("cat-util");
+    expect(inserts[0].args.recurrence_interval).toBe("monthly");
   });
 });
