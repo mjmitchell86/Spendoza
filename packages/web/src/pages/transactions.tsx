@@ -64,14 +64,14 @@ export function TransactionsPage() {
             placeholder="Search descriptions..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-[250px] pl-9"
+            className="w-full pl-9 sm:w-[250px]"
           />
         </div>
         <Select
           value={typeFilter}
           onValueChange={(v) => setTypeFilter(v as TransactionType | "all")}
         >
-          <SelectTrigger className="w-[140px]">
+          <SelectTrigger className="w-full sm:w-[140px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

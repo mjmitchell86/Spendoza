@@ -57,6 +57,7 @@ export function StatementList({
   }
 
   return (
+    <div className="overflow-x-auto">
     <Table>
       <TableHeader>
         <TableRow>
@@ -105,5 +106,6 @@ export function StatementList({
         })}
       </TableBody>
     </Table>
+    </div>
   );
 }

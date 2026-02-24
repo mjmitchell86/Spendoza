@@ -129,7 +129,7 @@ export function IncomeForm({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="amount">Amount</Label>
               <Input
@@ -164,7 +164,7 @@ export function IncomeForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="effective_date">Effective Date</Label>
               <Input

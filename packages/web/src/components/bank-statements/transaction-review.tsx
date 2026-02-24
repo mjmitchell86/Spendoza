@@ -181,6 +181,7 @@ export function TransactionReview({
         </div>
       )}
 
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -272,6 +273,7 @@ export function TransactionReview({
           ))}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

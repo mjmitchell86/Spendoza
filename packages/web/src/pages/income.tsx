@@ -164,7 +164,7 @@ export function IncomePage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Income</h1>
           <p className="text-sm text-muted-foreground">
@@ -257,11 +257,11 @@ export function IncomePage() {
                 placeholder="Search sources..."
                 value={merchantSearch}
                 onChange={(e) => setMerchantSearch(e.target.value)}
-                className="w-[220px] pl-9"
+                className="w-full pl-9 sm:w-[220px]"
               />
             </div>
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
@@ -298,7 +298,7 @@ export function IncomePage() {
               <CardTitle>By Category</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[280px] w-full">
+              <div className="h-[240px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -307,13 +307,10 @@ export function IncomePage() {
                       nameKey="category"
                       cx="50%"
                       cy="50%"
-                      outerRadius={80}
-                      innerRadius={40}
+                      outerRadius={75}
+                      innerRadius={35}
                       paddingAngle={2}
-                      label={({ category, percentage }) =>
-                        `${category} ${percentage.toFixed(0)}%`
-                      }
-                      labelLine={{ strokeWidth: 1 }}
+                      label={false}
                     >
                       {categoryBreakdown.map((_entry, index) => (
                         <Cell
@@ -356,12 +353,12 @@ export function IncomePage() {
               <CardTitle>Top Sources</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[280px] w-full">
+              <div className="h-[240px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={topSources}
                     layout="vertical"
-                    margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                   >
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -377,7 +374,7 @@ export function IncomePage() {
                     <YAxis
                       type="category"
                       dataKey="source"
-                      width={130}
+                      width={80}
                       tick={{ fontSize: 11 }}
                       className="fill-muted-foreground"
                       tickFormatter={(v: string) =>

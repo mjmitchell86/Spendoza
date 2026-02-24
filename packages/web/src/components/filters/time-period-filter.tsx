@@ -72,9 +72,9 @@ export function TimePeriodFilter({ value, onValueChange }: TimePeriodFilterProps
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <Select value={selectValue} onValueChange={handleSelectChange}>
-        <SelectTrigger className="w-[160px]">
+        <SelectTrigger className="w-full sm:w-[160px]">
           <SelectValue>{displayLabel}</SelectValue>
         </SelectTrigger>
         <SelectContent>
@@ -91,7 +91,7 @@ export function TimePeriodFilter({ value, onValueChange }: TimePeriodFilterProps
           type="month"
           value={customMonth}
           onChange={(e) => handleMonthChange(e.target.value)}
-          className="w-[160px]"
+          className="w-full sm:w-[160px]"
         />
       )}
     </div>

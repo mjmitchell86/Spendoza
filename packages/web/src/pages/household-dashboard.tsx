@@ -75,7 +75,7 @@ function MemberContributions({
               const incomeWidth = (member.income / maxIncome) * 100;
               return (
                 <div key={member.user_id} className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between text-sm">
+                  <div className="flex flex-col gap-0.5 text-sm sm:flex-row sm:items-center sm:justify-between">
                     <span className="font-medium">{member.display_name}</span>
                     <span className="text-muted-foreground">
                       {formatCurrency(member.income)} income /{" "}
@@ -152,7 +152,7 @@ export function HouseholdDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
             Household Dashboard

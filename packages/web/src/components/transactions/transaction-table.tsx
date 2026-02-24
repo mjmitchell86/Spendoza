@@ -53,6 +53,7 @@ export function TransactionTable({
   }
 
   return (
+    <div className="overflow-x-auto">
     <Table>
       <TableHeader>
         <TableRow>
@@ -116,5 +117,6 @@ export function TransactionTable({
         ))}
       </TableBody>
     </Table>
+    </div>
   );
 }

@@ -57,6 +57,7 @@ export function MemberList({
 
   return (
     <>
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -108,6 +109,7 @@ export function MemberList({
           ))}
         </TableBody>
       </Table>
+      </div>
 
       <Dialog
         open={!!removeTarget}

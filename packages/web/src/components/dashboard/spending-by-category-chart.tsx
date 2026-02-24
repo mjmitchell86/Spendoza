@@ -70,13 +70,10 @@ export function SpendingByCategoryChart({
                 nameKey="category"
                 cx="50%"
                 cy="50%"
-                outerRadius={80}
-                innerRadius={40}
+                outerRadius={75}
+                innerRadius={35}
                 paddingAngle={2}
-                label={({ category, percentage }) =>
-                  `${category} ${percentage.toFixed(0)}%`
-                }
-                labelLine={{ strokeWidth: 1 }}
+                label={false}
               >
                 {categories.map((_entry, index) => (
                   <Cell
