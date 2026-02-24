@@ -8,6 +8,7 @@ import {
   ArrowDownRight,
   Users,
   LogOut,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import {
   useHouseholdDashboard,
   useGenerateReport,
 } from "@/hooks/use-dashboard";
+import { useExportHouseholdReport } from "@/hooks/use-export-report";
 import {
   Dialog,
   DialogContent,
@@ -123,6 +125,7 @@ export function HouseholdPage() {
   const hasHousehold = !!householdData?.household;
   const { data, isLoading, error, refetch } = useHouseholdDashboard(undefined, hasHousehold);
   const generateReport = useGenerateReport();
+  const exportHouseholdReport = useExportHouseholdReport();
 
   const leaveHousehold = useLeaveHousehold();
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
@@ -224,7 +227,7 @@ export function HouseholdPage() {
           ) : !data ? null : (
             <div className="flex flex-col gap-6">
               {/* Refresh button */}
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"
                   onClick={() => generateReport.mutate()}
@@ -237,6 +240,14 @@ export function HouseholdPage() {
                     )}
                   />
                   {generateReport.isPending ? "Generating..." : "Refresh Report"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => exportHouseholdReport.mutate(undefined)}
+                  disabled={exportHouseholdReport.isPending}
+                >
+                  <Download className="size-4" />
+                  {exportHouseholdReport.isPending ? "Exporting..." : "Export PDF"}
                 </Button>
               </div>
 
