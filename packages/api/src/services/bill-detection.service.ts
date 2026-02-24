@@ -30,8 +30,8 @@ const BILL_CATEGORY_KEYWORDS = [
   "automotive", "car", "auto", "vehicle",
   // Insurance
   "insurance",
-  // Loans
-  "loan",
+  // Loans & debt
+  "loan", "debt",
   // Health & fitness (gym memberships)
   "health", "fitness", "gym",
   // Software / SaaS
