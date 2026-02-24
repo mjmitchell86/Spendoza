@@ -19,6 +19,12 @@ export function AuthGuard() {
       return;
     }
 
+    // Skip re-fetch if we already know onboarding is completed
+    if (onboardingCompleted === true) {
+      setInitialLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function fetchProfile() {
@@ -44,7 +50,7 @@ export function AuthGuard() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, location.pathname]);
 
   // Show spinner while auth or profile is loading
   if (authLoading || (user && initialLoading)) {
@@ -58,6 +64,11 @@ export function AuthGuard() {
   // If no user, redirect to login
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // If navigating from onboarding with completed state, update our local state
+  if (location.state?.onboardingCompleted && onboardingCompleted === false) {
+    setOnboardingCompleted(true);
   }
 
   // If onboarding not completed, redirect to onboarding
