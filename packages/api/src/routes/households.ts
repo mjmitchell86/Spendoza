@@ -13,6 +13,45 @@ import { generateInviteCode } from "../services/household.service";
 const router = Router();
 
 // ---------------------------------------------------------------------------
+// GET / — get current user's household + members
+// ---------------------------------------------------------------------------
+router.get("/", async (req, res: Response) => {
+  const { user } = req as AuthenticatedRequest;
+
+  // Look up user's household_id
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("household_id")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile?.household_id) {
+    return res.status(404).json({ error: "Not a member of any household" });
+  }
+
+  const householdId = profile.household_id;
+
+  // Get household details
+  const { data: household, error: hhError } = await supabaseAdmin
+    .from("households")
+    .select("*")
+    .eq("id", householdId)
+    .single();
+
+  if (hhError || !household) {
+    return res.status(404).json({ error: "Household not found" });
+  }
+
+  // Get members
+  const { data: members } = await supabaseAdmin
+    .from("profiles")
+    .select("id, display_name, income_sharing_mode, expense_sharing_mode")
+    .eq("household_id", householdId);
+
+  return res.status(200).json({ household, members: members ?? [] });
+});
+
+// ---------------------------------------------------------------------------
 // POST / — create household
 // ---------------------------------------------------------------------------
 router.post("/", validate(createHouseholdSchema), async (req, res: Response) => {
