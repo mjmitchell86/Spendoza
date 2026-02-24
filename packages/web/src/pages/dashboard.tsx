@@ -7,10 +7,12 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   FileText,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePersonalDashboard, useGenerateReport } from "@/hooks/use-dashboard";
+import { useExportPersonalReport } from "@/hooks/use-export-report";
 import { useBankStatements } from "@/hooks/use-bank-statements";
 import { IncomeVsExpensesChart } from "@/components/dashboard/income-vs-expenses-chart";
 import { SpendingByCategoryChart } from "@/components/dashboard/spending-by-category-chart";
@@ -91,6 +93,7 @@ export function DashboardPage() {
   const month = getMonthParam(timePeriod);
   const { data, isLoading, error, refetch } = usePersonalDashboard(month);
   const generateReport = useGenerateReport();
+  const exportReport = useExportPersonalReport();
   const { data: statements } = useBankStatements();
   const didAutoSwitch = useRef(false);
 
@@ -174,6 +177,14 @@ export function DashboardPage() {
               )}
             />
             {generateReport.isPending ? "Generating..." : "Refresh Report"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => exportReport.mutate(month)}
+            disabled={exportReport.isPending}
+          >
+            <Download className="size-4" />
+            {exportReport.isPending ? "Exporting..." : "Export PDF"}
           </Button>
         </div>
       </div>

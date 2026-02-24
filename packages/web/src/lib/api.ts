@@ -20,3 +20,25 @@ export async function apiClient(path: string, options?: RequestInit) {
   }
   return response.json();
 }
+
+export async function apiClientBlob(path: string): Promise<Blob> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const response = await fetch(`${API_BASE}/api${path}`, {
+    headers: {
+      Authorization: `Bearer ${session?.access_token}`,
+    },
+  });
+  if (!response.ok) {
+    let message = "API request failed";
+    try {
+      const error = await response.json();
+      message = error.error || message;
+    } catch {
+      // Response may not be JSON
+    }
+    throw new Error(message);
+  }
+  return response.blob();
+}
