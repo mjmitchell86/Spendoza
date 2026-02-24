@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api";
 interface RecurringExpense {
   id: string;
   description: string;
+  friendly_name: string | null;
   amount: number;
   next_due_date: string;
   auto_detected: boolean;
@@ -72,7 +73,7 @@ export function UpcomingBillsList() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <p className="truncate text-sm font-medium">
-                        {bill.description}
+                        {bill.friendly_name || bill.description}
                       </p>
                       {bill.auto_detected && (
                         <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">

@@ -50,6 +50,7 @@ export function ExpenseForm({
   const updateExpense = useUpdateExpense();
 
   const [description, setDescription] = useState(expense?.description ?? "");
+  const [friendlyName, setFriendlyName] = useState(expense?.friendly_name ?? "");
   const [amount, setAmount] = useState(expense?.amount?.toString() ?? "");
   const [categoryId, setCategoryId] = useState(expense?.category_id ?? "");
   const [frequency, setFrequency] = useState<ExpenseFrequency>(
@@ -67,6 +68,7 @@ export function ExpenseForm({
 
   function resetForm() {
     setDescription("");
+    setFriendlyName("");
     setAmount("");
     setCategoryId("");
     setFrequency("one_time");
@@ -82,6 +84,7 @@ export function ExpenseForm({
 
     const data = {
       description: description.trim(),
+      friendly_name: friendlyName.trim() || null,
       amount: parseFloat(amount),
       category_id: categoryId,
       frequency,
@@ -134,6 +137,19 @@ export function ExpenseForm({
               placeholder="e.g. Rent, Netflix"
               required
             />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="friendly_name">Friendly Name (optional)</Label>
+            <Input
+              id="friendly_name"
+              value={friendlyName}
+              onChange={(e) => setFriendlyName(e.target.value)}
+              placeholder="e.g. Netflix, Gym Membership"
+            />
+            <p className="text-xs text-muted-foreground">
+              A short display name shown instead of the raw description
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

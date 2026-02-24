@@ -21,6 +21,7 @@ export type RecurrenceInterval = z.infer<typeof recurrenceIntervalSchema>;
 export const createExpenseSchema = z.object({
   category_id: z.string().uuid(),
   description: z.string().min(1).max(500),
+  friendly_name: z.string().max(200).nullable().optional(),
   amount: z.number().positive(),
   frequency: expenseFrequencySchema,
   recurrence_interval: recurrenceIntervalSchema.nullable().optional(),
@@ -45,6 +46,7 @@ export interface Expense {
   user_id: string;
   category_id: string;
   description: string;
+  friendly_name: string | null;
   amount: number;
   frequency: ExpenseFrequency;
   recurrence_interval: RecurrenceInterval | null;

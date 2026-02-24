@@ -149,17 +149,26 @@ export function ExpenseList({
               <TableRow key={expense.id}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
-                    <span className="font-medium">{expense.description}</span>
-                    {expense.is_ai_adjusted && (
-                      <Badge variant="secondary" className="text-xs">
-                        AI Adjusted
-                      </Badge>
+                    <span className="font-medium">
+                      {expense.friendly_name || expense.description}
+                    </span>
+                    {expense.friendly_name && (
+                      <span className="text-xs text-muted-foreground">
+                        {expense.description}
+                      </span>
                     )}
-                    {expense.auto_detected && (
-                      <Badge variant="outline" className="text-xs">
-                        Auto-detected
-                      </Badge>
-                    )}
+                    <div className="flex flex-wrap gap-1">
+                      {expense.is_ai_adjusted && (
+                        <Badge variant="secondary" className="text-xs">
+                          AI Adjusted
+                        </Badge>
+                      )}
+                      {expense.auto_detected && (
+                        <Badge variant="outline" className="text-xs">
+                          Auto-detected
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="font-mono">
@@ -225,7 +234,7 @@ export function ExpenseList({
             <DialogTitle>Delete Expense</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete &ldquo;
-              {deleteTarget?.description}&rdquo;? This action cannot be undone.
+              {deleteTarget?.friendly_name || deleteTarget?.description}&rdquo;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
