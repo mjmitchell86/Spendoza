@@ -1,6 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import type { TransactionType } from "@spendoza/shared";
+import {
+  TimePeriodFilter,
+  getDateRange,
+  type TimePeriod,
+} from "@/components/filters/time-period-filter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,9 +23,16 @@ import { useCategories } from "@/hooks/use-categories";
 export function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState<TransactionType | "all">("all");
   const [search, setSearch] = useState("");
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+
+  const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
+  const filters = useMemo(() => ({
+    ...(typeFilter !== "all" ? { type: typeFilter as TransactionType } : {}),
+    ...dateRange,
+  }), [typeFilter, dateRange]);
 
   const { data: transactions, isLoading, error, refetch } = useAllTransactions(
-    typeFilter === "all" ? undefined : { type: typeFilter }
+    Object.keys(filters).length > 0 ? filters : undefined
   );
   const { data: categories } = useCategories();
   const updateCategory = useUpdateTransactionCategory();
@@ -45,6 +57,7 @@ export function TransactionsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        <TimePeriodFilter value={timePeriod} onValueChange={setTimePeriod} />
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input

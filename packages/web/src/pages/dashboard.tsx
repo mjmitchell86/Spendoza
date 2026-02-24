@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -19,6 +19,11 @@ import { TopExpensesList } from "@/components/dashboard/top-expenses-list";
 import { UpcomingBillsList } from "@/components/dashboard/upcoming-bills-list";
 import { AiInsightsCard } from "@/components/dashboard/ai-insights-card";
 import { cn } from "@/lib/utils";
+import {
+  TimePeriodFilter,
+  getMonthParam,
+  type TimePeriod,
+} from "@/components/filters/time-period-filter";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -47,7 +52,9 @@ function TrendBadge({ value }: { value: number }) {
 }
 
 export function DashboardPage() {
-  const { data, isLoading, error, refetch } = usePersonalDashboard();
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+  const month = getMonthParam(timePeriod);
+  const { data, isLoading, error, refetch } = usePersonalDashboard(month);
   const generateReport = useGenerateReport();
   const { data: statements } = useBankStatements();
 
@@ -102,19 +109,22 @@ export function DashboardPage() {
             Your personal financial overview
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => generateReport.mutate()}
-          disabled={generateReport.isPending}
-        >
-          <RefreshCw
-            className={cn(
-              "size-4",
-              generateReport.isPending && "animate-spin"
-            )}
-          />
-          {generateReport.isPending ? "Generating..." : "Refresh Report"}
-        </Button>
+        <div className="flex items-center gap-3">
+          <TimePeriodFilter value={timePeriod} onValueChange={setTimePeriod} />
+          <Button
+            variant="outline"
+            onClick={() => generateReport.mutate()}
+            disabled={generateReport.isPending}
+          >
+            <RefreshCw
+              className={cn(
+                "size-4",
+                generateReport.isPending && "animate-spin"
+              )}
+            />
+            {generateReport.isPending ? "Generating..." : "Refresh Report"}
+          </Button>
+        </div>
       </div>
 
       {/* Processing Banner */}

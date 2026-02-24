@@ -27,6 +27,11 @@ import {
 import { useExpenses } from "@/hooks/use-expenses";
 import { useCategories } from "@/hooks/use-categories";
 import { useAllTransactions, useUpdateTransactionCategory } from "@/hooks/use-transactions";
+import {
+  TimePeriodFilter,
+  getDateRange,
+  type TimePeriod,
+} from "@/components/filters/time-period-filter";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
 import { TransactionTable } from "@/components/transactions/transaction-table";
@@ -48,12 +53,18 @@ function formatCurrency(value: number) {
 export function ExpensesPage() {
   const { data: expenses, isLoading, error, refetch } = useExpenses();
   const { data: categories } = useCategories();
-  const { data: debitTransactions } = useAllTransactions({ type: "debit" });
   const updateCategory = useUpdateTransactionCategory();
   const [formOpen, setFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("__all__");
   const [merchantSearch, setMerchantSearch] = useState("");
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+
+  const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
+  const { data: debitTransactions } = useAllTransactions({
+    type: "debit",
+    ...dateRange,
+  });
 
   // Apply both category and merchant filters
   const filteredTransactions = useMemo(() => {
@@ -236,6 +247,7 @@ export function ExpensesPage() {
       {/* Filter Bar */}
       {hasTransactions && (
         <div className="flex flex-wrap items-center gap-3">
+          <TimePeriodFilter value={timePeriod} onValueChange={setTimePeriod} />
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input

@@ -37,17 +37,19 @@ export interface HouseholdDashboardData extends DashboardData {
   member_contributions: MemberContribution[];
 }
 
-export function usePersonalDashboard() {
+export function usePersonalDashboard(month?: string) {
+  const qs = month ? `?month=${month}` : "";
   return useQuery<DashboardData>({
-    queryKey: ["dashboard", "personal"],
-    queryFn: () => apiClient("/dashboard/personal"),
+    queryKey: ["dashboard", "personal", month],
+    queryFn: () => apiClient(`/dashboard/personal${qs}`),
   });
 }
 
-export function useHouseholdDashboard() {
+export function useHouseholdDashboard(month?: string) {
+  const qs = month ? `?month=${month}` : "";
   return useQuery<HouseholdDashboardData>({
-    queryKey: ["dashboard", "household"],
-    queryFn: () => apiClient("/dashboard/household"),
+    queryKey: ["dashboard", "household", month],
+    queryFn: () => apiClient(`/dashboard/household${qs}`),
   });
 }
 

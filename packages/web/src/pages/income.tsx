@@ -28,6 +28,11 @@ import { useIncome } from "@/hooks/use-income";
 import { useHousehold } from "@/hooks/use-household";
 import { useCategories } from "@/hooks/use-categories";
 import { useAllTransactions, useUpdateTransactionCategory } from "@/hooks/use-transactions";
+import {
+  TimePeriodFilter,
+  getDateRange,
+  type TimePeriod,
+} from "@/components/filters/time-period-filter";
 import { IncomeForm } from "@/components/income/income-form";
 import { IncomeList } from "@/components/income/income-list";
 import { TransactionTable } from "@/components/transactions/transaction-table";
@@ -49,13 +54,19 @@ function formatCurrency(value: number) {
 export function IncomePage() {
   const { data: entries, isLoading, error, refetch } = useIncome();
   const { data: household } = useHousehold();
-  const { data: creditTransactions } = useAllTransactions({ type: "credit" });
   const { data: categories } = useCategories();
   const updateCategory = useUpdateTransactionCategory();
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<IncomeEntry | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("__all__");
   const [merchantSearch, setMerchantSearch] = useState("");
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+
+  const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
+  const { data: creditTransactions } = useAllTransactions({
+    type: "credit",
+    ...dateRange,
+  });
 
   // Apply both category and merchant filters
   const filteredTransactions = useMemo(() => {
@@ -238,6 +249,7 @@ export function IncomePage() {
       {/* Filter Bar */}
       {hasTransactions && (
         <div className="flex flex-wrap items-center gap-3">
+          <TimePeriodFilter value={timePeriod} onValueChange={setTimePeriod} />
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input
