@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Plus, RefreshCw, Search, TrendingUp, Hash, Layers, Crown } from "lucide-react";
 import {
   PieChart,
@@ -51,6 +51,40 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+function formatPeriodLabel(period: TimePeriod): string {
+  const fmt = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00Z");
+    return d.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  };
+
+  if (period.startsWith("month:")) {
+    return fmt(period.slice(6) + "-01");
+  }
+
+  const range = getDateRange(period);
+
+  switch (period) {
+    case "this_month":
+    case "last_month":
+      return range.from_date ? fmt(range.from_date) : "";
+    case "last_3_months":
+      return range.from_date && range.to_date
+        ? `${fmt(range.from_date)} – ${fmt(range.to_date)}`
+        : "";
+    case "this_year":
+    case "last_year":
+      return range.from_date ? range.from_date.slice(0, 4) : "";
+    case "all_time":
+      return "All Time";
+    default:
+      return "";
+  }
+}
+
 export function IncomePage() {
   const { data: entries, isLoading, error, refetch } = useIncome();
   const { data: household } = useHousehold();
@@ -61,12 +95,27 @@ export function IncomePage() {
   const [selectedCategory, setSelectedCategory] = useState("__all__");
   const [merchantSearch, setMerchantSearch] = useState("");
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+  const didAutoSwitch = useRef(false);
 
   const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
-  const { data: creditTransactions } = useAllTransactions({
+  const { data: creditTransactions, isLoading: txLoading } = useAllTransactions({
     type: "credit",
     ...dateRange,
   });
+
+  // Auto-switch to last_month when this_month has no data
+  useEffect(() => {
+    if (
+      !didAutoSwitch.current &&
+      !txLoading &&
+      creditTransactions &&
+      timePeriod === "this_month" &&
+      creditTransactions.length === 0
+    ) {
+      didAutoSwitch.current = true;
+      setTimePeriod("last_month");
+    }
+  }, [creditTransactions, txLoading, timePeriod]);
 
   // Apply both category and merchant filters
   const filteredTransactions = useMemo(() => {
@@ -168,7 +217,7 @@ export function IncomePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Income</h1>
           <p className="text-sm text-muted-foreground">
-            Manage your income sources
+            {formatPeriodLabel(timePeriod) || "Manage your income sources"}
           </p>
         </div>
         <Button onClick={() => setFormOpen(true)}>

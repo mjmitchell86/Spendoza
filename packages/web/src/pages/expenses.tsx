@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Plus, RefreshCw, Search, TrendingDown, Hash, Layers, Crown } from "lucide-react";
 import {
   PieChart,
@@ -50,6 +50,40 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+function formatPeriodLabel(period: TimePeriod): string {
+  const fmt = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00Z");
+    return d.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  };
+
+  if (period.startsWith("month:")) {
+    return fmt(period.slice(6) + "-01");
+  }
+
+  const range = getDateRange(period);
+
+  switch (period) {
+    case "this_month":
+    case "last_month":
+      return range.from_date ? fmt(range.from_date) : "";
+    case "last_3_months":
+      return range.from_date && range.to_date
+        ? `${fmt(range.from_date)} – ${fmt(range.to_date)}`
+        : "";
+    case "this_year":
+    case "last_year":
+      return range.from_date ? range.from_date.slice(0, 4) : "";
+    case "all_time":
+      return "All Time";
+    default:
+      return "";
+  }
+}
+
 export function ExpensesPage() {
   const { data: expenses, isLoading, error, refetch } = useExpenses();
   const { data: categories } = useCategories();
@@ -59,12 +93,27 @@ export function ExpensesPage() {
   const [selectedCategory, setSelectedCategory] = useState("__all__");
   const [merchantSearch, setMerchantSearch] = useState("");
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+  const didAutoSwitch = useRef(false);
 
   const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
-  const { data: debitTransactions } = useAllTransactions({
+  const { data: debitTransactions, isLoading: txLoading } = useAllTransactions({
     type: "debit",
     ...dateRange,
   });
+
+  // Auto-switch to last_month when this_month has no data
+  useEffect(() => {
+    if (
+      !didAutoSwitch.current &&
+      !txLoading &&
+      debitTransactions &&
+      timePeriod === "this_month" &&
+      debitTransactions.length === 0
+    ) {
+      didAutoSwitch.current = true;
+      setTimePeriod("last_month");
+    }
+  }, [debitTransactions, txLoading, timePeriod]);
 
   // Apply both category and merchant filters
   const filteredTransactions = useMemo(() => {
@@ -166,7 +215,7 @@ export function ExpensesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Expenses</h1>
           <p className="text-sm text-muted-foreground">
-            Track and manage your expenses
+            {formatPeriodLabel(timePeriod) || "Track and manage your expenses"}
           </p>
         </div>
         <Button onClick={() => setFormOpen(true)}>
