@@ -292,8 +292,7 @@ describe("Report Flow: Generate -> Verify -> Rate Limit -> Cache", () => {
         selectMaybeSingle: { data: sampleReport, error: null },
       },
       report_requests: {
-        selectMaybeSingle: { data: { request_count: 0 }, error: null },
-        upsertResult: { data: null, error: null },
+        insertResult: { data: null, error: null },
       },
       profiles: {
         selectSingle: {
@@ -359,8 +358,7 @@ describe("Report Flow: Generate -> Verify -> Rate Limit -> Cache", () => {
         selectMaybeSingle: { data: sampleReport, error: null },
       },
       report_requests: {
-        selectMaybeSingle: { data: { request_count: 1 }, error: null },
-        upsertResult: { data: null, error: null },
+        insertResult: { data: null, error: null },
       },
     };
 
@@ -378,27 +376,33 @@ describe("Report Flow: Generate -> Verify -> Rate Limit -> Cache", () => {
     expect(mockGenerateUserReport).toHaveBeenCalledTimes(1);
   });
 
-  it("Step 4: Hits rate limit on third attempt (count=2)", async () => {
+  it("Step 4: Hits rate limit on third attempt in production (count=2)", async () => {
     resetMocks();
+    const originalEnv = process.env.VERCEL_ENV;
+    process.env.VERCEL_ENV = "production";
 
     adminResults = {
       report_requests: {
-        selectMaybeSingle: { data: { request_count: 2 }, error: null },
+        selectList: { data: null, count: 2, error: null },
       },
     };
 
-    const res = await fetch(`${baseUrl}/api/reports/generate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${TEST_TOKEN}`,
-      },
-    });
+    try {
+      const res = await fetch(`${baseUrl}/api/reports/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TEST_TOKEN}`,
+        },
+      });
 
-    expect(res.status).toBe(429);
-    const body = await res.json();
-    expect(body.error).toContain("Monthly report refresh limit reached");
-    expect(mockGenerateUserReport).not.toHaveBeenCalled();
+      expect(res.status).toBe(429);
+      const body = await res.json();
+      expect(body.error).toContain("2 per 24 hours");
+      expect(mockGenerateUserReport).not.toHaveBeenCalled();
+    } finally {
+      process.env.VERCEL_ENV = originalEnv;
+    }
   });
 
   it("Step 5: Verifies cached report via dashboard endpoint", async () => {

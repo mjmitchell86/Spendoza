@@ -81,27 +81,30 @@ router.get("/household", requireAuth, async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /generate — manual trigger (max 2/month)
+// POST /generate — manual trigger (max 2 per 24h in production)
 // ---------------------------------------------------------------------------
 router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   const { user } = req as AuthenticatedRequest;
   const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const isProduction = process.env.VERCEL_ENV === "production";
 
-  // Check report_requests count for this month
-  const { data: requestRecord } = await supabaseAdmin
-    .from("report_requests")
-    .select("request_count")
-    .eq("user_id", user.id)
-    .eq("report_month", currentMonth)
-    .maybeSingle();
+  // Rate-limit: 2 requests per 24-hour rolling window (production only)
+  if (isProduction) {
+    const twentyFourHoursAgo = new Date(
+      now.getTime() - 24 * 60 * 60 * 1000
+    ).toISOString();
 
-  const currentCount = requestRecord?.request_count ?? 0;
+    const { count } = await supabaseAdmin
+      .from("report_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", twentyFourHoursAgo);
 
-  if (currentCount >= 2) {
-    return res.status(429).json({
-      error: "Monthly report refresh limit reached (2/2)",
-    });
+    if ((count ?? 0) >= 2) {
+      return res.status(429).json({
+        error: "Report generation limit reached (2 per 24 hours)",
+      });
+    }
   }
 
   // Find the latest month with transactions; skip current month if empty
@@ -134,15 +137,11 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     }
   }
 
-  // Increment the request count only after successful generation
-  await supabaseAdmin.from("report_requests").upsert(
-    {
-      user_id: user.id,
-      report_month: currentMonth,
-      request_count: currentCount + 1,
-    },
-    { onConflict: "user_id,report_month" }
-  );
+  // Record the request for rate-limiting
+  await supabaseAdmin.from("report_requests").insert({
+    user_id: user.id,
+    report_month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+  });
 
   return res.status(200).json(report);
 });
