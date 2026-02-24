@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import type {
   Expense,
   ExpenseFrequency,
@@ -63,6 +63,21 @@ export function ExpenseForm({
   );
   const [endDate, setEndDate] = useState(expense?.end_date ?? "");
   const [error, setError] = useState<string | null>(null);
+
+  // Sync form state when expense prop changes (e.g. clicking Edit on a different expense)
+  useEffect(() => {
+    if (expense) {
+      setDescription(expense.description);
+      setFriendlyName(expense.friendly_name ?? "");
+      setAmount(expense.amount.toString());
+      setCategoryId(expense.category_id);
+      setFrequency(expense.frequency);
+      setRecurrenceInterval(expense.recurrence_interval ?? "monthly");
+      setNextDueDate(expense.next_due_date);
+      setEndDate(expense.end_date ?? "");
+      setError(null);
+    }
+  }, [expense]);
 
   const isPending = createExpense.isPending || updateExpense.isPending;
 
