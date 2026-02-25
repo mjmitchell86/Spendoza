@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -27,6 +27,7 @@ import {
   getDateRange,
   type TimePeriod,
 } from "@/components/filters/time-period-filter";
+import { useTimePeriod } from "@/hooks/use-time-period";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -89,30 +90,28 @@ function TrendBadge({ value }: { value: number }) {
 }
 
 export function DashboardPage() {
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+  const { timePeriod, setTimePeriod, isExplicit } = useTimePeriod();
   const month = getMonthParam(timePeriod);
   const { data, isLoading, error, refetch } = usePersonalDashboard(month);
   const generateReport = useGenerateReport();
   const exportReport = useExportPersonalReport();
   const { data: statements } = useBankStatements();
-  const didAutoSwitch = useRef(false);
 
-  // If the API auto-switched to a different month (no transactions for
-  // the requested month), update the time period to match.
+  // On initial load (no explicit filter), auto-switch to the latest month
+  // with transactions if the current month has none.
   useEffect(() => {
     if (
-      !didAutoSwitch.current &&
+      !isExplicit &&
       !isLoading &&
-      data?.month &&
-      timePeriod === "this_month"
+      data &&
+      data.has_transactions === false &&
+      data.latest_transaction_month
     ) {
-      const requested = getMonthParam("this_month");
-      if (data.month !== requested) {
-        didAutoSwitch.current = true;
-        setTimePeriod(`month:${data.month.slice(0, 7)}`);
-      }
+      setTimePeriod(
+        `month:${data.latest_transaction_month.slice(0, 7)}`
+      );
     }
-  }, [data, isLoading, timePeriod]);
+  }, [isExplicit, isLoading, data, setTimePeriod]);
 
   const processingStatements = (statements ?? []).filter(
     (s) => s.status === "processing" || s.status === "uploaded"
@@ -170,7 +169,8 @@ export function DashboardPage() {
           <Button
             variant="outline"
             onClick={() => generateReport.mutate()}
-            disabled={generateReport.isPending}
+            disabled={generateReport.isPending || data.has_transactions === false}
+            title={data.has_transactions === false ? "No transactions for this period" : undefined}
           >
             <RefreshCw
               className={cn(

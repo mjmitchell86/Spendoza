@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, RefreshCw, Search, TrendingDown, Hash, Layers, Crown } from "lucide-react";
 import {
   PieChart,
@@ -32,6 +32,7 @@ import {
   getDateRange,
   type TimePeriod,
 } from "@/components/filters/time-period-filter";
+import { useTimePeriod } from "@/hooks/use-time-period";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ExpenseList } from "@/components/expenses/expense-list";
 import { TransactionTable } from "@/components/transactions/transaction-table";
@@ -92,8 +93,7 @@ export function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("__all__");
   const [merchantSearch, setMerchantSearch] = useState("");
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
-  const didAutoSwitch = useRef(false);
+  const { timePeriod, setTimePeriod, isExplicit } = useTimePeriod();
 
   const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
   const { data: debitTransactions, isLoading: txLoading } = useAllTransactions({
@@ -101,19 +101,19 @@ export function ExpensesPage() {
     ...dateRange,
   });
 
-  // Auto-switch to last_month when this_month has no data
+  // On initial load (no explicit filter), auto-switch to last_month when
+  // this_month has no data
   useEffect(() => {
     if (
-      !didAutoSwitch.current &&
+      !isExplicit &&
       !txLoading &&
       debitTransactions &&
       timePeriod === "this_month" &&
       debitTransactions.length === 0
     ) {
-      didAutoSwitch.current = true;
       setTimePeriod("last_month");
     }
-  }, [debitTransactions, txLoading, timePeriod]);
+  }, [isExplicit, debitTransactions, txLoading, timePeriod, setTimePeriod]);
 
   // Apply both category and merchant filters
   const filteredTransactions = useMemo(() => {

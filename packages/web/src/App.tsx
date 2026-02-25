@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/auth-context";
+import { TimePeriodProvider } from "@/contexts/time-period-context";
 import { AuthGuard } from "@/components/auth-guard";
 import { AppShell } from "@/components/layout/app-shell";
 import { LoginPage } from "@/pages/login";
@@ -27,7 +28,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route element={<AuthGuard />}>
-              <Route element={<AppShell />}>
+              <Route element={<TimePeriodProvider><AppShell /></TimePeriodProvider>}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/income" element={<IncomePage />} />
                 <Route path="/expenses" element={<ExpensesPage />} />
