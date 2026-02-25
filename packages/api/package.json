@@ -8,7 +8,8 @@
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'no lint configured yet'",
-    "test": "bash run-tests.sh"
+    "test": "bash run-tests.sh",
+    "seed": "bun --env-file=.env src/scripts/seed-test-user.ts"
   },
   "dependencies": {
     "@langchain/community": "^0.3",
