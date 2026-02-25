@@ -80,8 +80,21 @@ router.put("/onboarding", async (req, res: Response) => {
       await generateUserReport(user.id, lastMonth, true);
 
       if (data.household_id) {
-        await generateHouseholdReport(data.household_id, thisMonth, true);
-        await generateHouseholdReport(data.household_id, lastMonth, true);
+        // Find all months with user reports (from AI pipeline + above)
+        const { data: userReports } = await supabaseAdmin
+          .from("reports")
+          .select("report_month")
+          .eq("entity_type", "user")
+          .eq("entity_id", user.id);
+
+        const months = [...new Set((userReports ?? []).map(r => r.report_month))];
+        for (const month of months) {
+          await generateHouseholdReport(
+            data.household_id,
+            new Date(month + "T00:00:00Z"),
+            true
+          );
+        }
       }
     } catch (err) {
       console.error(`[onboarding] report generation failed for ${user.id}:`, err);
