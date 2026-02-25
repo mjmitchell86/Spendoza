@@ -8,6 +8,7 @@ import {
   useCreateHousehold,
   useJoinHousehold,
 } from "@/hooks/use-household";
+import { SharingConfig } from "@/components/household/sharing-config";
 
 interface HouseholdStepProps {
   onNext: () => void;
@@ -21,13 +22,14 @@ export function HouseholdStep({ onNext, onSkip }: HouseholdStepProps) {
   const [householdName, setHouseholdName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [householdCreated, setHouseholdCreated] = useState(false);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     setError(null);
     try {
       await createHousehold.mutateAsync({ name: householdName.trim() });
-      onNext();
+      setHouseholdCreated(true);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create household"
@@ -40,12 +42,41 @@ export function HouseholdStep({ onNext, onSkip }: HouseholdStepProps) {
     setError(null);
     try {
       await joinHousehold.mutateAsync({ invite_code: inviteCode.trim() });
-      onNext();
+      setHouseholdCreated(true);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to join household"
       );
     }
+  }
+
+  if (householdCreated) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
+            <Users className="size-6 text-primary" />
+          </div>
+          <h2 className="text-xl font-semibold tracking-tight">
+            Sharing Preferences
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Configure how your income and expenses are shared with your
+            household. You can change these later in settings.
+          </p>
+        </div>
+
+        <SharingConfig
+          currentIncomeMode="none"
+          currentExpenseMode="none"
+          currentSharedAmount={null}
+        />
+
+        <div className="text-center">
+          <Button onClick={onNext}>Continue</Button>
+        </div>
+      </div>
+    );
   }
 
   return (
