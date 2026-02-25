@@ -90,7 +90,7 @@ export function TransactionReview({
   ) {
     await updateTransaction.mutateAsync({
       transactionId,
-      data: { ai_category: category || null },
+      data: { ai_category: category === "__uncategorized__" ? null : category },
     });
   }
 
@@ -232,7 +232,7 @@ export function TransactionReview({
               </TableCell>
               <TableCell>
                 <Select
-                  value={tx.ai_category ?? ""}
+                  value={tx.ai_category ?? "__uncategorized__"}
                   onValueChange={(v) =>
                     void handleCategoryChange(tx.id, v)
                   }
@@ -241,7 +241,7 @@ export function TransactionReview({
                     <SelectValue placeholder="Uncategorized" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Uncategorized</SelectItem>
+                    <SelectItem value="__uncategorized__">Uncategorized</SelectItem>
                     {categories.map((c) => (
                       <SelectItem key={c.id} value={c.name}>
                         {c.name}
