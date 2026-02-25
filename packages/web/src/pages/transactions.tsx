@@ -4,8 +4,8 @@ import type { TransactionType } from "@spendoza/shared";
 import {
   TimePeriodFilter,
   getDateRange,
-  type TimePeriod,
 } from "@/components/filters/time-period-filter";
+import { useTimePeriod } from "@/hooks/use-time-period";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,7 +23,7 @@ import { useCategories } from "@/hooks/use-categories";
 export function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState<TransactionType | "all">("all");
   const [search, setSearch] = useState("");
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+  const { timePeriod, setTimePeriod } = useTimePeriod();
 
   const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
   const filters = useMemo(() => ({

@@ -134,15 +134,12 @@ router.get("/personal", async (req: Request, res: Response) => {
     .lt("date", reqNext);
 
   const hasTransactions = (txnCount ?? 0) > 0;
+  const month = requestedMonth;
 
-  // If no transactions this month, fall back to latest month with uploaded data
-  let month = requestedMonth;
-  if (!hasTransactions) {
-    const latestMonth = await findLatestTransactionMonth(user.id);
-    if (latestMonth && latestMonth !== requestedMonth) {
-      month = latestMonth;
-    }
-  }
+  // Always tell the frontend which month has the latest transactions
+  const latestTransactionMonth = hasTransactions
+    ? null
+    : await findLatestTransactionMonth(user.id);
 
   const { data: report } = await supabaseAdmin
     .from("reports")
@@ -158,7 +155,8 @@ router.get("/personal", async (req: Request, res: Response) => {
     if (rd.total_income > 0 || rd.total_expenses > 0) {
       return res.status(200).json({
         ...toDashboardResponse(report),
-        has_transactions: month === requestedMonth ? hasTransactions : true,
+        has_transactions: hasTransactions,
+        latest_transaction_month: latestTransactionMonth,
         month,
       });
     }
@@ -190,7 +188,8 @@ router.get("/personal", async (req: Request, res: Response) => {
     }
   }
 
-  dashboard.has_transactions = month === requestedMonth ? hasTransactions : true;
+  dashboard.has_transactions = hasTransactions;
+  dashboard.latest_transaction_month = latestTransactionMonth;
   dashboard.month = month;
 
   return res.status(200).json(dashboard);
@@ -342,14 +341,12 @@ router.get("/household", async (req: Request, res: Response) => {
     hasTransactions = (txnCount ?? 0) > 0;
   }
 
-  // If no transactions this month, fall back to latest month with uploaded data
-  let month = requestedMonth;
-  if (!hasTransactions) {
-    const latestMonth = await findLatestHouseholdTransactionMonth(householdId);
-    if (latestMonth && latestMonth !== requestedMonth) {
-      month = latestMonth;
-    }
-  }
+  const month = requestedMonth;
+
+  // Always tell the frontend which month has the latest transactions
+  const latestTransactionMonth = hasTransactions
+    ? null
+    : await findLatestHouseholdTransactionMonth(householdId);
 
   const { data: report } = await supabaseAdmin
     .from("reports")
@@ -366,7 +363,8 @@ router.get("/household", async (req: Request, res: Response) => {
       return res.status(200).json({
         ...toDashboardResponse(report),
         member_contributions: rd.member_contributions ?? [],
-        has_transactions: month === requestedMonth ? hasTransactions : true,
+        has_transactions: hasTransactions,
+        latest_transaction_month: latestTransactionMonth,
         month,
       });
     }
@@ -398,7 +396,8 @@ router.get("/household", async (req: Request, res: Response) => {
     }
   }
 
-  dashboard.has_transactions = month === requestedMonth ? hasTransactions : true;
+  dashboard.has_transactions = hasTransactions;
+  dashboard.latest_transaction_month = latestTransactionMonth;
   dashboard.month = month;
 
   return res.status(200).json(dashboard);

@@ -35,7 +35,9 @@ export interface DashboardData {
   insights_month?: string;
   /** Whether the displayed month has bank statement transactions */
   has_transactions?: boolean;
-  /** The actual month being displayed (may differ from requested if auto-switched) */
+  /** The most recent month that has transactions (only set when has_transactions is false) */
+  latest_transaction_month?: string | null;
+  /** The month being displayed */
   month?: string;
 }
 

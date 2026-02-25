@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -46,6 +46,7 @@ import {
   getDateRange,
   type TimePeriod,
 } from "@/components/filters/time-period-filter";
+import { useTimePeriod } from "@/hooks/use-time-period";
 import type { MemberContribution } from "@/hooks/use-dashboard";
 
 function formatCurrency(value: number) {
@@ -163,11 +164,10 @@ export function HouseholdPage() {
   const { user } = useAuth();
   const { data: householdData, isLoading: householdLoading, error: householdError, refetch: refetchHousehold } = useHousehold();
   const hasHousehold = !!householdData?.household;
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>("this_month");
+  const { timePeriod, setTimePeriod, isExplicit } = useTimePeriod();
   const month = getMonthParam(timePeriod);
   const { data, isLoading, error, refetch } = useHouseholdDashboard(month, hasHousehold);
   const generateReport = useGenerateReport();
-  const didAutoSwitch = useRef(false);
   const exportHouseholdReport = useExportHouseholdReport();
 
   const leaveHousehold = useLeaveHousehold();
@@ -181,22 +181,21 @@ export function HouseholdPage() {
   const canLeave = !isHead || isSoleMember;
   const currentMember = members.find((m) => m.id === currentUserId);
 
-  // If the API auto-switched to a different month (no transactions for
-  // the requested month), update the time period to match.
+  // On initial load (no explicit filter), auto-switch to the latest month
+  // with transactions if the current month has none.
   useEffect(() => {
     if (
-      !didAutoSwitch.current &&
+      !isExplicit &&
       !isLoading &&
-      data?.month &&
-      timePeriod === "this_month"
+      data &&
+      data.has_transactions === false &&
+      data.latest_transaction_month
     ) {
-      const requested = getMonthParam("this_month");
-      if (data.month !== requested) {
-        didAutoSwitch.current = true;
-        setTimePeriod(`month:${data.month.slice(0, 7)}`);
-      }
+      setTimePeriod(
+        `month:${data.latest_transaction_month.slice(0, 7)}`
+      );
     }
-  }, [data, isLoading, timePeriod]);
+  }, [isExplicit, isLoading, data, setTimePeriod]);
 
   async function handleLeave() {
     try {
@@ -296,7 +295,8 @@ export function HouseholdPage() {
                   <Button
                     variant="outline"
                     onClick={() => generateReport.mutate()}
-                    disabled={generateReport.isPending}
+                    disabled={generateReport.isPending || data?.has_transactions === false}
+                    title={data?.has_transactions === false ? "No transactions for this period" : undefined}
                   >
                     <RefreshCw
                       className={cn(
