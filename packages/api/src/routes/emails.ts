@@ -217,7 +217,16 @@ router.post("/send-test", requireAuth, async (req: Request, res: Response) => {
       profile.timezone || "America/New_York"
     );
 
-    // Create email job for personal report (skip all eligibility checks)
+    // Force report regeneration so email uses fresh data
+    await supabaseAdmin
+      .from("reports")
+      .update({ has_new_data: true })
+      .eq("entity_type", "user")
+      .eq("entity_id", userId)
+      .eq("report_month", reportMonth);
+
+    // Insert with status 'processing' to bypass the pg_net trigger
+    // (trigger only fires for status = 'pending')
     const { data: job, error } = await supabaseAdmin
       .from("email_jobs")
       .insert({
@@ -225,6 +234,7 @@ router.post("/send-test", requireAuth, async (req: Request, res: Response) => {
         entity_type: "user",
         entity_id: userId,
         report_month: reportMonth,
+        status: "processing",
       })
       .select("id")
       .single();
@@ -233,7 +243,7 @@ router.post("/send-test", requireAuth, async (req: Request, res: Response) => {
       return res.status(500).json({ error: "Failed to create email job" });
     }
 
-    // Process immediately (don't wait for pg_net trigger)
+    // Process directly (no pg_net trigger will fire)
     waitUntil(processEmailJob(job.id));
 
     return res
