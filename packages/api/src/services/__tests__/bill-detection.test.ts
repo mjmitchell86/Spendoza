@@ -174,6 +174,10 @@ const mockAdminFrom = mock((table: string) => buildAdminChain(table));
 // ---------------------------------------------------------------------------
 // Mock @supabase/supabase-js
 // ---------------------------------------------------------------------------
+mock.module("../../ai/friendly-name-generator", () => ({
+  generateFriendlyNames: async () => new Map<string, string>(),
+}));
+
 mock.module("@supabase/supabase-js", () => ({
   createClient: (_url: string, _key: string, _options?: any) => ({
     auth: {
