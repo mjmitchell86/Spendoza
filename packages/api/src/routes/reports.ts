@@ -7,8 +7,95 @@ import {
   generateAllReports,
 } from "../services/report.service";
 import { buildReportPdf } from "../services/pdf-report.service";
+import type { ReportData } from "../ai/report-insights";
 
 const router = Router();
+
+// ---------------------------------------------------------------------------
+// Helper: build savings recommendations from spending data
+// ---------------------------------------------------------------------------
+function buildSavingsRecommendations(
+  reportData: ReportData,
+  subscriptions: Array<{ name: string; amount: number; category: string | null; recurrence_interval: string }>
+): Array<{
+  category: string;
+  amount: number;
+  percentage: number;
+  suggestion: string;
+}> {
+  const recommendations: Array<{
+    category: string;
+    amount: number;
+    percentage: number;
+    suggestion: string;
+  }> = [];
+
+  if (reportData.total_expenses === 0) return recommendations;
+
+  // Categorize spending and identify high-spend areas
+  const sortedCategories = [...reportData.by_category].sort(
+    (a, b) => b.amount - a.amount
+  );
+
+  // Flag categories that take up more than 20% of expenses
+  for (const cat of sortedCategories) {
+    if (cat.percentage >= 20) {
+      recommendations.push({
+        category: cat.category,
+        amount: cat.amount,
+        percentage: cat.percentage,
+        suggestion: `This is your largest spending category. Consider setting a budget goal to reduce it by 10-15% next month.`,
+      });
+    } else if (cat.percentage >= 10) {
+      recommendations.push({
+        category: cat.category,
+        amount: cat.amount,
+        percentage: cat.percentage,
+        suggestion: `This category is a significant portion of expenses. Review individual transactions for potential cuts.`,
+      });
+    }
+  }
+
+  // Check subscription burden
+  const totalSubs = subscriptions.reduce((sum, s) => sum + s.amount, 0);
+  if (totalSubs > 0 && reportData.total_expenses > 0) {
+    const subPct = (totalSubs / reportData.total_expenses) * 100;
+    if (subPct >= 15) {
+      recommendations.push({
+        category: "Subscriptions",
+        amount: totalSubs,
+        percentage: Math.round(subPct * 10) / 10,
+        suggestion: `Subscriptions make up ${subPct.toFixed(0)}% of your expenses. Review each subscription to identify any you no longer use.`,
+      });
+    }
+  }
+
+  // Check savings rate health
+  if (reportData.savings_rate < 20 && reportData.total_income > 0) {
+    const targetSavings = reportData.total_income * 0.2;
+    const currentSavings = reportData.total_income - reportData.total_expenses;
+    const gap = targetSavings - currentSavings;
+    if (gap > 0) {
+      recommendations.push({
+        category: "Overall Savings",
+        amount: gap,
+        percentage: reportData.savings_rate,
+        suggestion: `Your savings rate is ${reportData.savings_rate.toFixed(1)}%. Aim for 20% by finding ${formatCurrencySimple(gap)} in monthly savings.`,
+      });
+    }
+  }
+
+  return recommendations.slice(0, 5); // Limit to top 5 recommendations
+}
+
+function formatCurrencySimple(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
 // ---------------------------------------------------------------------------
 // Helper: parse month query param or default to current month
@@ -211,25 +298,87 @@ router.get(
       }
 
       // Fetch supplementary data in parallel
-      const [{ data: recurringBills }, { data: incomeSources }, { data: profile }] =
-        await Promise.all([
-          supabaseAdmin
-            .from("expenses")
-            .select(
-              "description, friendly_name, amount, recurrence_interval, next_due_date"
-            )
-            .eq("user_id", user.id)
-            .eq("frequency", "recurring"),
-          supabaseAdmin
-            .from("income_entries")
-            .select("source_name, amount, frequency, attributed_to_name")
-            .eq("user_id", user.id),
-          supabaseAdmin
-            .from("profiles")
-            .select("display_name")
-            .eq("id", user.id)
-            .single(),
-        ]);
+      const monthDate = new Date(month + "T00:00:00Z");
+      const monthEndDate = new Date(
+        Date.UTC(monthDate.getFullYear(), monthDate.getMonth() + 1, 0)
+      );
+      const monthEndStr = monthEndDate.toISOString().slice(0, 10);
+
+      const [
+        { data: recurringBills },
+        { data: incomeSources },
+        { data: profile },
+        { data: allRecurringExpenses },
+        { data: goals },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from("expenses")
+          .select(
+            "description, friendly_name, amount, recurrence_interval, next_due_date"
+          )
+          .eq("user_id", user.id)
+          .eq("frequency", "recurring"),
+        supabaseAdmin
+          .from("income_entries")
+          .select("source_name, amount, frequency, attributed_to_name")
+          .eq("user_id", user.id),
+        supabaseAdmin
+          .from("profiles")
+          .select("display_name")
+          .eq("id", user.id)
+          .single(),
+        supabaseAdmin
+          .from("expenses")
+          .select("description, friendly_name, amount, recurrence_interval, category_id, categories(name)")
+          .eq("user_id", user.id)
+          .eq("frequency", "recurring")
+          .or(`end_date.is.null,end_date.gte.${month}`),
+        supabaseAdmin
+          .from("goals")
+          .select("*, categories(name)")
+          .eq("user_id", user.id),
+      ]);
+
+      // Build subscriptions paid this month from recurring expenses
+      const subscriptionsPaid = (allRecurringExpenses ?? []).map((e: any) => ({
+        name: e.friendly_name || e.description,
+        amount: e.amount ?? 0,
+        category: e.categories?.name ?? null,
+        recurrence_interval: e.recurrence_interval ?? "monthly",
+      }));
+
+      // Build goal progress
+      const reportData = report.report_data as import("../ai/report-insights").ReportData;
+      const goalProgress = (goals ?? []).map((goal: any) => {
+        let current = 0;
+        if (goal.goal_type === "budget") {
+          const catName = goal.categories?.name?.toLowerCase();
+          if (catName && reportData.by_category) {
+            const match = reportData.by_category.find(
+              (c) => c.category?.toLowerCase() === catName
+            );
+            current = match?.amount ?? 0;
+          }
+        } else if (goal.goal_type === "monthly_savings") {
+          current = reportData.total_income - reportData.total_expenses;
+        } else if (goal.goal_type === "total_savings") {
+          current = goal.current_amount ?? 0;
+        }
+        return {
+          name: goal.name,
+          goal_type: goal.goal_type,
+          current,
+          target: goal.target_amount,
+          category_name: goal.categories?.name ?? null,
+          target_date: goal.target_date ?? null,
+        };
+      });
+
+      // Build savings recommendations from category spending
+      const savingsRecommendations = buildSavingsRecommendations(
+        reportData,
+        subscriptionsPaid
+      );
 
       const monthLabel = new Date(month + "T00:00:00Z").toLocaleDateString(
         "en-US",
@@ -239,10 +388,13 @@ router.get(
       const pdfBuffer = await buildReportPdf({
         title: profile?.display_name ?? "Personal",
         month: monthLabel,
-        reportData: report.report_data as import("../ai/report-insights").ReportData,
+        reportData,
         aiInsights: report.ai_insights ?? null,
         recurringBills: recurringBills ?? [],
         incomeSources: incomeSources ?? [],
+        subscriptionsPaid,
+        goalProgress,
+        savingsRecommendations,
       });
 
       const filename = `spendoza-report-${month.slice(0, 7)}.pdf`;
@@ -329,21 +481,76 @@ router.get(
 
       const memberIds = (members ?? []).map((m) => m.id);
 
-      // Fetch recurring bills and income for all members in parallel
-      const [{ data: recurringBills }, { data: incomeSources }] =
-        await Promise.all([
-          supabaseAdmin
-            .from("expenses")
-            .select(
-              "description, friendly_name, amount, recurrence_interval, next_due_date"
-            )
-            .in("user_id", memberIds)
-            .eq("frequency", "recurring"),
-          supabaseAdmin
-            .from("income_entries")
-            .select("source_name, amount, frequency, attributed_to_name")
-            .in("user_id", memberIds),
-        ]);
+      // Fetch recurring bills, income, subscriptions, and goals for all members in parallel
+      const [
+        { data: recurringBills },
+        { data: incomeSources },
+        { data: allRecurringExpenses },
+        { data: goals },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from("expenses")
+          .select(
+            "description, friendly_name, amount, recurrence_interval, next_due_date"
+          )
+          .in("user_id", memberIds)
+          .eq("frequency", "recurring"),
+        supabaseAdmin
+          .from("income_entries")
+          .select("source_name, amount, frequency, attributed_to_name")
+          .in("user_id", memberIds),
+        supabaseAdmin
+          .from("expenses")
+          .select("description, friendly_name, amount, recurrence_interval, category_id, categories(name)")
+          .in("user_id", memberIds)
+          .eq("frequency", "recurring")
+          .or(`end_date.is.null,end_date.gte.${month}`),
+        supabaseAdmin
+          .from("goals")
+          .select("*, categories(name)")
+          .in("user_id", memberIds),
+      ]);
+
+      // Build subscriptions paid this month
+      const subscriptionsPaid = (allRecurringExpenses ?? []).map((e: any) => ({
+        name: e.friendly_name || e.description,
+        amount: e.amount ?? 0,
+        category: e.categories?.name ?? null,
+        recurrence_interval: e.recurrence_interval ?? "monthly",
+      }));
+
+      // Build goal progress
+      const reportData = report.report_data as import("../ai/report-insights").ReportData;
+      const goalProgress = (goals ?? []).map((goal: any) => {
+        let current = 0;
+        if (goal.goal_type === "budget") {
+          const catName = goal.categories?.name?.toLowerCase();
+          if (catName && reportData.by_category) {
+            const match = reportData.by_category.find(
+              (c) => c.category?.toLowerCase() === catName
+            );
+            current = match?.amount ?? 0;
+          }
+        } else if (goal.goal_type === "monthly_savings") {
+          current = reportData.total_income - reportData.total_expenses;
+        } else if (goal.goal_type === "total_savings") {
+          current = goal.current_amount ?? 0;
+        }
+        return {
+          name: goal.name,
+          goal_type: goal.goal_type,
+          current,
+          target: goal.target_amount,
+          category_name: goal.categories?.name ?? null,
+          target_date: goal.target_date ?? null,
+        };
+      });
+
+      // Build savings recommendations
+      const savingsRecommendations = buildSavingsRecommendations(
+        reportData,
+        subscriptionsPaid
+      );
 
       // Compute member contributions from transactions
       const monthStart = month;
@@ -387,11 +594,14 @@ router.get(
       const pdfBuffer = await buildReportPdf({
         title: household?.name ?? "Household",
         month: monthLabel,
-        reportData: report.report_data as import("../ai/report-insights").ReportData,
+        reportData,
         aiInsights: report.ai_insights ?? null,
         recurringBills: recurringBills ?? [],
         incomeSources: incomeSources ?? [],
         memberContributions,
+        subscriptionsPaid,
+        goalProgress,
+        savingsRecommendations,
       });
 
       const filename = `spendoza-household-report-${month.slice(0, 7)}.pdf`;
