@@ -286,7 +286,7 @@ function drawMetricCards(doc: PDFKit.PDFDocument, cards: MetricCard[], pageWidth
 // Drawing: Section title
 // ---------------------------------------------------------------------------
 function drawSectionTitle(doc: PDFKit.PDFDocument, title: string, pageWidth: number) {
-  ensureSpace(doc, 90);
+  ensureSpace(doc, 120);
   const left = doc.page.margins.left;
   doc.fontSize(13).fillColor(C.dark).text(title, left, doc.y);
   const lineY = doc.y + 3;
@@ -382,6 +382,7 @@ function drawBarChart(
     doc.y = y + rowHeight;
   }
 
+  ensureSpace(doc, 30);
   doc
     .moveTo(left, doc.y + 2)
     .lineTo(left + pageWidth, doc.y + 2)
