@@ -75,10 +75,10 @@ SELECT cron.schedule(
   '0 * * * *',
   $$
   SELECT net.http_post(
-    url := current_setting('app.settings.api_base_url') || '/api/emails/dispatch-weekly',
+    url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'api_base_url') || '/api/emails/dispatch-weekly',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.cron_secret')
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret')
     ),
     body := '{}'::jsonb
   );
