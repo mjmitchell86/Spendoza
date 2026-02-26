@@ -35,3 +35,12 @@ export interface Goal {
   created_at: string;
   updated_at: string;
 }
+
+export const goalSuggestionSchema = z.object({
+  name: z.string(),
+  goal_type: goalTypeSchema,
+  category: z.string().nullable(),
+  target_amount: z.number().positive(),
+  rationale: z.string(),
+});
+export type GoalSuggestion = z.infer<typeof goalSuggestionSchema>;
