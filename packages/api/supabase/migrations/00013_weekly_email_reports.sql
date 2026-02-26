@@ -1,7 +1,8 @@
 -- Add timezone and email preference to profiles
 ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/New_York',
-  ADD COLUMN IF NOT EXISTS email_reports_enabled BOOLEAN NOT NULL DEFAULT true;
+  ADD COLUMN IF NOT EXISTS email_reports_enabled BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS last_email_sent_at TIMESTAMPTZ;
 
 -- Email job queue (dispatcher inserts, pg_net trigger fires worker)
 CREATE TABLE email_jobs (

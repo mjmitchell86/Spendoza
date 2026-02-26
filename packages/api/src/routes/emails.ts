@@ -14,8 +14,8 @@ import {
 
 const router = Router();
 
-const APP_URL = process.env.APP_URL || "https://spendoza.io";
-const API_URL = process.env.API_URL || "https://api.spendoza.io";
+const getAppUrl = () => process.env.APP_URL || "https://spendoza.io";
+const getApiUrl = () => process.env.API_URL || "https://api.spendoza.io";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,7 +78,7 @@ router.post("/dispatch-weekly", async (req: Request, res: Response) => {
 
     if (usersError) {
       console.error("[emails/dispatch-weekly] Error fetching users:", usersError);
-      return res.status(500).json({ error: "Failed to fetch users" });
+      return res.status(200).json({ dispatched: 0, error: usersError.message });
     }
 
     let dispatched = 0;
@@ -165,9 +165,9 @@ router.post("/dispatch-weekly", async (req: Request, res: Response) => {
     }
 
     return res.status(200).json({ dispatched });
-  } catch (err) {
+  } catch (err: any) {
     console.error("[emails/dispatch-weekly] Unexpected error:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(200).json({ dispatched: 0, error: err?.message ?? "Internal server error" });
   }
 });
 
@@ -235,7 +235,7 @@ router.get("/unsubscribe", async (req: Request, res: Response) => {
   <div style="background:#ffffff;border-radius:12px;padding:40px;max-width:480px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
     <h1 style="margin:0 0 16px;font-size:24px;color:#27272a;">Unsubscribed</h1>
     <p style="margin:0 0 24px;color:#71717a;font-size:16px;">You've been unsubscribed from Spendoza weekly email reports.</p>
-    <p style="margin:0;color:#a1a1aa;font-size:14px;">You can re-enable email reports in your <a href="${APP_URL}/profile" style="color:#10b981;">profile settings</a>.</p>
+    <p style="margin:0;color:#a1a1aa;font-size:14px;">You can re-enable email reports in your <a href="${getAppUrl()}/profile" style="color:#10b981;">profile settings</a>.</p>
   </div>
 </body>
 </html>`;
@@ -330,14 +330,14 @@ async function processEmailJob(jobId: string): Promise<void> {
 
     // Build unsubscribe URL
     const unsubscribeToken = createUnsubscribeToken(job.user_id);
-    const unsubscribeUrl = `${API_URL}/api/emails/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+    const unsubscribeUrl = `${getApiUrl()}/api/emails/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
 
     // Build app report URL
     const reportPath =
       job.entity_type === "household"
         ? `/reports/household?month=${job.report_month}`
         : `/reports/personal?month=${job.report_month}`;
-    const appReportUrl = `${APP_URL}${reportPath}`;
+    const appReportUrl = `${getAppUrl()}${reportPath}`;
 
     // Parse AI insights into array
     const insightsArray = aiInsights
@@ -381,14 +381,17 @@ async function processEmailJob(jobId: string): Promise<void> {
     }
 
     // Log to email_report_log
-    await supabaseAdmin.from("email_report_log").insert({
-      user_id: job.user_id,
-      entity_type: job.entity_type,
-      entity_id: job.entity_id,
-      report_month: job.report_month,
-      email_subject: subject,
-      email_preview: `Income: $${totalIncome}, Expenses: $${totalExpenses}`,
-    });
+    await supabaseAdmin.from("email_report_log").upsert(
+      {
+        user_id: job.user_id,
+        entity_type: job.entity_type,
+        entity_id: job.entity_id,
+        report_month: job.report_month,
+        email_subject: subject,
+        email_preview: `Income: $${totalIncome}, Expenses: $${totalExpenses}`,
+      },
+      { onConflict: "user_id,entity_type,entity_id,report_month" }
+    );
 
     // Update profile last_email_sent_at
     await supabaseAdmin

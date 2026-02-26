@@ -11,6 +11,14 @@ interface ReportEmailData {
   unsubscribeUrl: string;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function formatCurrency(amount: number): string {
   return (
     "$" +
@@ -28,7 +36,7 @@ export function buildReportEmailHtml(data: ReportEmailData): string {
         <div style="background-color:#f0fdf4;border-radius:8px;padding:16px 20px;margin:24px 0;">
           <h3 style="margin:0 0 12px;font-size:16px;color:#166534;">AI Insights</h3>
           <ul style="margin:0;padding-left:20px;color:#15803d;">
-            ${data.aiInsights.map((insight) => `<li style="margin-bottom:8px;">${insight}</li>`).join("")}
+            ${data.aiInsights.map((insight) => `<li style="margin-bottom:8px;">${escapeHtml(insight)}</li>`).join("")}
           </ul>
         </div>`
       : "";
@@ -50,8 +58,8 @@ export function buildReportEmailHtml(data: ReportEmailData): string {
 
     <!-- Body -->
     <div style="background-color:#ffffff;padding:32px 24px;border-radius:0 0 12px 12px;">
-      <p style="margin:0 0 8px;font-size:16px;color:#27272a;">Hi ${data.userName},</p>
-      <p style="margin:0 0 24px;font-size:14px;color:#71717a;">Here's your ${data.reportTitle.toLowerCase()} for <strong>${data.monthLabel}</strong>.</p>
+      <p style="margin:0 0 8px;font-size:16px;color:#27272a;">Hi ${escapeHtml(data.userName)},</p>
+      <p style="margin:0 0 24px;font-size:14px;color:#71717a;">Here's your ${escapeHtml(data.reportTitle.toLowerCase())} for <strong>${escapeHtml(data.monthLabel)}</strong>.</p>
 
       <!-- Metric Cards -->
       <div style="display:flex;gap:12px;margin-bottom:24px;">
