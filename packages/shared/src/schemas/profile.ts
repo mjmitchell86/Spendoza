@@ -18,6 +18,8 @@ export const updateProfileSchema = z.object({
   shared_income_amount: z.number().positive().nullable().optional(),
   expense_sharing_mode: expenseSharingModeSchema.optional(),
   avatar_url: z.string().url().nullable().optional(),
+  timezone: z.string().min(1).max(100).optional(),
+  email_reports_enabled: z.boolean().optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -34,6 +36,8 @@ export interface Profile {
   shared_income_amount: number | null;
   expense_sharing_mode: ExpenseSharingMode;
   avatar_url: string | null;
+  timezone: string;
+  email_reports_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
