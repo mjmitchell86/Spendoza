@@ -20,9 +20,11 @@ function formatReportMonth(month: string) {
 
 export function SuggestedGoals({
   entityType,
+  entityId,
   categories,
 }: {
   entityType: "user" | "household";
+  entityId?: string;
   categories: Category[];
 }) {
   const { data, isLoading } = useGoalSuggestions(entityType);
@@ -54,6 +56,7 @@ export function SuggestedGoals({
         goal_type: suggestion.goal_type,
         category_id: categoryId,
         target_amount: suggestion.target_amount,
+        ...(entityType && entityId ? { entity_type: entityType, entity_id: entityId } : {}),
       });
       setDismissed((prev) => new Set(prev).add(suggestion.name));
       void queryClient.invalidateQueries({ queryKey: ["goals", "suggestions"] });

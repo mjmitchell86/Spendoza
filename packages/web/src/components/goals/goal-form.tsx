@@ -24,11 +24,15 @@ export function GoalForm({
   onOpenChange,
   goal,
   categories,
+  entityType,
+  entityId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   goal?: Goal | null;
   categories: Category[];
+  entityType?: "user" | "household";
+  entityId?: string;
 }) {
   const isEditing = !!goal;
   const createGoal = useCreateGoal();
@@ -63,6 +67,12 @@ export function GoalForm({
       target_amount: parseFloat(targetAmount),
       target_date: goalType === "total_savings" && targetDate ? targetDate : null,
     };
+
+    // Add entity fields for new goals (not edits — entity can't change)
+    if (!isEditing && entityType && entityId) {
+      data.entity_type = entityType;
+      data.entity_id = entityId;
+    }
 
     try {
       if (isEditing && goal) {
