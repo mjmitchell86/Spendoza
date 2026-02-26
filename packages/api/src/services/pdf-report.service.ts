@@ -286,7 +286,7 @@ function drawMetricCards(doc: PDFKit.PDFDocument, cards: MetricCard[], pageWidth
 // Drawing: Section title
 // ---------------------------------------------------------------------------
 function drawSectionTitle(doc: PDFKit.PDFDocument, title: string, pageWidth: number) {
-  ensureSpace(doc, 40);
+  ensureSpace(doc, 90);
   const left = doc.page.margins.left;
   doc.fontSize(13).fillColor(C.dark).text(title, left, doc.y);
   const lineY = doc.y + 3;
@@ -416,6 +416,10 @@ function drawStyledTable(
   const left = doc.page.margins.left;
   const headerHeight = 20;
   const rowHeight = 18;
+
+  // Ensure header + at least a few data rows fit on the same page
+  const minRows = Math.min(rows.length, 3);
+  ensureSpace(doc, headerHeight + 2 + minRows * rowHeight);
 
   const headerY = doc.y;
   roundedRect(doc, left, headerY, pageWidth, headerHeight, 3, C.headerBg);
