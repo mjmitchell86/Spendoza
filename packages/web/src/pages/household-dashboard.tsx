@@ -170,8 +170,8 @@ function MemberContributions({
   );
 }
 
-function HouseholdGoalsTab() {
-  const { data: progressData, isLoading, error, refetch } = useGoalProgress(6);
+function HouseholdGoalsTab({ householdId }: { householdId: string }) {
+  const { data: progressData, isLoading, error, refetch } = useGoalProgress(6, "household");
   const { data: categories } = useCategories();
   const deleteGoal = useDeleteGoal();
 
@@ -257,7 +257,7 @@ function HouseholdGoalsTab() {
       )}
 
       {/* AI Suggested Goals */}
-      <SuggestedGoals entityType="household" categories={categories ?? []} />
+      <SuggestedGoals entityType="household" entityId={householdId} categories={categories ?? []} />
 
       {/* Goals List */}
       {isLoading ? (
@@ -307,6 +307,8 @@ function HouseholdGoalsTab() {
         onOpenChange={handleFormClose}
         goal={editingGoal}
         categories={categories ?? []}
+        entityType="household"
+        entityId={householdId}
       />
 
       <LogSavingsDialog
@@ -555,7 +557,7 @@ export function HouseholdPage() {
 
         {/* Goals Tab */}
         <TabsContent value="goals">
-          <HouseholdGoalsTab />
+          <HouseholdGoalsTab householdId={household.id} />
         </TabsContent>
 
         {/* Settings Tab */}
