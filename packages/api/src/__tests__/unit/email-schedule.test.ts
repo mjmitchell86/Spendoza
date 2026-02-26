@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isScheduledTime } from "../../routes/emails";
+import { isScheduledTime } from "../../lib/email-schedule";
 
 describe("isScheduledTime", () => {
   // Saturday Feb 21, 2026 at 14:00 UTC = 9:00 AM EST

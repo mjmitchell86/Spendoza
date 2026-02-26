@@ -11,50 +11,12 @@ import {
   createUnsubscribeToken,
   verifyUnsubscribeToken,
 } from "../lib/unsubscribe-token";
+import { isScheduledTime } from "../lib/email-schedule";
 
 const router = Router();
 
 const APP_URL = () => process.env.APP_URL || "https://spendoza.io";
 const API_URL = () => process.env.API_URL || "https://api.spendoza.io";
-
-// ---------------------------------------------------------------------------
-// Helper: check if now matches the user's preferred schedule in their timezone
-// ---------------------------------------------------------------------------
-const DAY_MAP: Record<string, string> = {
-  sunday: "Sun",
-  monday: "Mon",
-  tuesday: "Tue",
-  wednesday: "Wed",
-  thursday: "Thu",
-  friday: "Fri",
-  saturday: "Sat",
-};
-
-export function isScheduledTime(
-  timezone: string,
-  day: string,
-  hour: number,
-  now: Date = new Date()
-): boolean {
-  try {
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      weekday: "short",
-      hour: "numeric",
-      hour12: false,
-    });
-    const parts = formatter.formatToParts(now);
-    const weekday = parts.find((p) => p.type === "weekday")?.value;
-    const currentHour = parseInt(
-      parts.find((p) => p.type === "hour")?.value ?? "-1",
-      10
-    );
-    const targetDay = DAY_MAP[day] ?? "Sat";
-    return weekday === targetDay && currentHour === hour;
-  } catch {
-    return false;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Helper: get the report month string (YYYY-MM-01) for a user's local "now"
