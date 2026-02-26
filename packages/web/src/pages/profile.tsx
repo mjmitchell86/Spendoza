@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 const THEME_OPTIONS = [
@@ -187,6 +188,39 @@ export function ProfilePage() {
                 </button>
               ))}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Notifications</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="email-reports" className="cursor-pointer">
+                  Weekly Email Reports
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Receive your Spendoza report every Saturday at 9am
+                </p>
+              </div>
+              <Switch
+                id="email-reports"
+                checked={profile?.email_reports_enabled ?? true}
+                onCheckedChange={(checked) =>
+                  updateProfile.mutate({ email_reports_enabled: checked })
+                }
+              />
+            </div>
+            {profile?.timezone && (
+              <div className="text-xs text-muted-foreground">
+                Timezone: {profile.timezone}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
