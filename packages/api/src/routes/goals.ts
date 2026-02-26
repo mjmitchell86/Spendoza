@@ -3,8 +3,86 @@ import { createGoalSchema, updateGoalSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { generateGoalSuggestions } from "../ai/goal-suggestions";
+import type { ReportData } from "../ai/report-insights";
 
 const router = Router();
+
+// Get AI-suggested goals based on latest report data
+router.get("/suggestions", async (req, res: Response) => {
+  const { user } = req as AuthenticatedRequest;
+  const entityType = (req.query.entity_type as string) === "household" ? "household" : "user";
+
+  let entityId = user.id;
+
+  if (entityType === "household") {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("household_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.household_id) {
+      return res.status(400).json({ error: "No household found" });
+    }
+    entityId = profile.household_id;
+  }
+
+  // Fetch the latest report for this entity
+  const { data: report } = await supabaseAdmin
+    .from("reports")
+    .select("report_month, report_data")
+    .eq("entity_type", entityType)
+    .eq("entity_id", entityId)
+    .order("report_month", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!report) {
+    return res.status(200).json({ suggestions: [], report_month: null });
+  }
+
+  const reportData = report.report_data as ReportData & { goal_suggestions?: any };
+
+  // Return cached suggestions if available
+  if (reportData.goal_suggestions) {
+    return res.status(200).json({
+      suggestions: reportData.goal_suggestions,
+      report_month: report.report_month,
+    });
+  }
+
+  // Fetch existing goal names for deduplication
+  const { data: existingGoals } = await supabaseAdmin
+    .from("goals")
+    .select("name")
+    .eq("user_id", user.id);
+
+  const existingNames = (existingGoals ?? []).map((g: any) => g.name);
+
+  const suggestions = await generateGoalSuggestions(
+    reportData,
+    entityType,
+    existingNames
+  );
+
+  // Cache suggestions in report_data
+  if (suggestions.length > 0) {
+    await supabaseAdmin
+      .from("reports")
+      .update({
+        report_data: { ...reportData, goal_suggestions: suggestions },
+      })
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId)
+      .eq("report_month", report.report_month);
+  }
+
+  return res.status(200).json({
+    suggestions,
+    report_month: report.report_month,
+  });
+});
 
 // List all goals for the current user
 router.get("/", async (req, res: Response) => {
