@@ -262,7 +262,7 @@ function drawMetricCards(doc: PDFKit.PDFDocument, cards: MetricCard[], pageWidth
       });
 
     if (card.trend) {
-      const arrow = card.trendPositive ? "▲" : "▼";
+      const arrow = card.trendPositive ? "+" : "-";
       const trendColor = card.trendPositive ? C.income : C.expense;
       doc
         .fontSize(8)
@@ -428,7 +428,16 @@ function drawStyledTable(
   doc.y = headerY + headerHeight + 2;
 
   for (let r = 0; r < rows.length; r++) {
-    if (doc.y > doc.page.height - doc.page.margins.bottom - 30) {
+    // Measure actual row height by checking max cell text height
+    doc.fontSize(8);
+    let maxCellH = rowHeight;
+    for (let i = 0; i < rows[r].length; i++) {
+      const cellW = pageWidth * colWidths[i] - 12;
+      const h = doc.heightOfString(rows[r][i], { width: cellW }) + 8;
+      if (h > maxCellH) maxCellH = h;
+    }
+
+    if (doc.y > doc.page.height - doc.page.margins.bottom - maxCellH - 10) {
       newPage(doc);
     }
 
@@ -436,7 +445,7 @@ function drawStyledTable(
     const isAlt = r % 2 === 1;
 
     if (isAlt) {
-      doc.rect(left, rowY, pageWidth, rowHeight).fillColor(C.rowAlt).fill();
+      doc.rect(left, rowY, pageWidth, maxCellH).fillColor(C.rowAlt).fill();
     }
 
     x = left;
@@ -455,16 +464,16 @@ function drawStyledTable(
     }
 
     doc
-      .moveTo(left, rowY + rowHeight)
-      .lineTo(left + pageWidth, rowY + rowHeight)
+      .moveTo(left, rowY + maxCellH)
+      .lineTo(left + pageWidth, rowY + maxCellH)
       .strokeColor(C.divider)
       .lineWidth(0.3)
       .stroke();
 
-    doc.y = rowY + rowHeight;
+    doc.y = rowY + maxCellH;
   }
 
-  doc.moveDown(0.5);
+  doc.moveDown(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -632,7 +641,7 @@ function drawSavingsCards(
     doc
       .fontSize(8)
       .fillColor(C.muted)
-      .text(`→ ${rec.suggestion}`, left + 14, y + 22, {
+      .text(`- ${rec.suggestion}`, left + 14, y + 22, {
         width: pageWidth - 28,
       });
 
