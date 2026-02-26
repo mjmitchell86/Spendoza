@@ -321,35 +321,15 @@ describe("generateUserReport", () => {
     expect(result.report_data.top_categories[1]).toBe("Food");
   });
 
-  it("falls back to manual entries with frequency proration when no transactions", async () => {
+  it("returns zeros when no transactions exist for the month", async () => {
     adminResults.transactions.selectList = { data: [], error: null };
 
     const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
 
-    // Income: $5000 monthly + $1500 biweekly (1500 * 26/12 = $3250) = $8250
-    expect(result.report_data.total_income).toBeCloseTo(8250, 0);
-
-    // Expenses: $1200 monthly + $100 weekly (100 * 52/12 ≈ $433.33) + $500 one-time (in Jan) = $2133.33
-    expect(result.report_data.total_expenses).toBeCloseTo(2133.33, 0);
-  });
-
-  it("excludes one-time expenses outside the report month", async () => {
-    adminResults.transactions.selectList = { data: [], error: null };
-    adminResults.expenses.selectList = {
-      data: [
-        {
-          ...sampleExpenses[2],
-          next_due_date: "2026-03-15", // March, not January
-        },
-      ],
-      error: null,
-    };
-    adminResults.income_entries.selectList = { data: [], error: null };
-
-    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
-
-    // One-time expense in March should not count for January report
+    // No transactions means zero income and expenses (no manual entry fallback)
+    expect(result.report_data.total_income).toBe(0);
     expect(result.report_data.total_expenses).toBe(0);
+    expect(result.report_data.by_category).toEqual([]);
   });
 
   it("returns cached report when has_new_data is false", async () => {

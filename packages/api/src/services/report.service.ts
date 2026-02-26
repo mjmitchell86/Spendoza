@@ -10,13 +10,6 @@ function startOfMonth(date: Date): Date {
   return new Date(Date.UTC(date.getFullYear(), date.getMonth(), 1));
 }
 
-/** Returns the last day of the given month (Date at 23:59:59.999 UTC). */
-function endOfMonth(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999)
-  );
-}
-
 /** Format date as YYYY-MM-DD for Supabase queries. */
 function toDateStr(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -26,37 +19,6 @@ function toDateStr(date: Date): string {
 function pct(part: number, whole: number): number {
   if (whole === 0) return 0;
   return Math.round((part / whole) * 10000) / 100; // 2-decimal places
-}
-
-/**
- * Convert an amount to its monthly equivalent based on frequency.
- * Income uses `frequency` directly; expenses use `recurrence_interval`.
- */
-function toMonthlyAmount(
-  amount: number,
-  interval: string | null | undefined
-): number {
-  switch (interval) {
-    case "weekly":
-      return Math.round((amount * 52) / 12 * 100) / 100;
-    case "biweekly":
-      return Math.round((amount * 26) / 12 * 100) / 100;
-    case "monthly":
-      return amount;
-    case "quarterly":
-      return Math.round((amount / 3) * 100) / 100;
-    case "annually":
-      return Math.round((amount / 12) * 100) / 100;
-    default:
-      return amount;
-  }
-}
-
-/**
- * Check if a date string falls within a month range [start, end].
- */
-function isDateInMonth(dateStr: string, monthStartStr: string, monthEndStr: string): boolean {
-  return dateStr >= monthStartStr && dateStr <= monthEndStr;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +31,7 @@ export async function generateUserReport(
   force = false
 ): Promise<any> {
   const monthStart = startOfMonth(month);
-  const monthEnd = endOfMonth(month);
+
   const monthStr = toDateStr(monthStart);
 
   // 1. Check for cached report with no new data
@@ -102,85 +64,27 @@ export async function generateUserReport(
   let totalExpenses: number;
   let byCategory: Array<{ category: string; amount: number; percentage: number }>;
 
-  if (txns.length > 0) {
-    // Use bank transactions — same data source the dashboard displays
-    totalIncome = txns
-      .filter((t) => t.type === "credit")
-      .reduce((sum, t) => sum + (t.amount ?? 0), 0);
-    totalExpenses = txns
-      .filter((t) => t.type === "debit")
-      .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+  // Use bank transactions only — same data source the dashboard displays
+  totalIncome = txns
+    .filter((t) => t.type === "credit")
+    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+  totalExpenses = txns
+    .filter((t) => t.type === "debit")
+    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
 
-    const categoryMap = new Map<string, number>();
-    for (const t of txns.filter((t) => t.type === "debit")) {
-      const cat = t.ai_category ?? "Uncategorized";
-      categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
-    }
-
-    byCategory = Array.from(categoryMap.entries())
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: pct(amount, totalExpenses),
-      }))
-      .sort((a, b) => b.amount - a.amount);
-  } else {
-    // Fallback to manual entries if no bank transactions exist.
-    // Prorate amounts to monthly equivalents based on frequency.
-
-    // Income: already filtered to entries active during this month
-    const { data: incomeEntries } = await supabaseAdmin
-      .from("income_entries")
-      .select("*")
-      .eq("user_id", userId)
-      .lte("effective_date", toDateStr(monthEnd))
-      .or(`end_date.is.null,end_date.gte.${toDateStr(monthStart)}`);
-
-    totalIncome = (incomeEntries ?? []).reduce((sum: number, e: any) => {
-      if (e.frequency === "one_time") {
-        // Only count one-time income if effective_date falls within this month
-        return isDateInMonth(e.effective_date, toDateStr(monthStart), toDateStr(monthEnd))
-          ? sum + (e.amount ?? 0)
-          : sum;
-      }
-      return sum + toMonthlyAmount(e.amount ?? 0, e.frequency);
-    }, 0);
-
-    // Expenses: filter to active recurring + one-time in this month
-    const { data: expenses } = await supabaseAdmin
-      .from("expenses")
-      .select("*, categories(name)")
-      .eq("user_id", userId)
-      .or(`end_date.is.null,end_date.gte.${toDateStr(monthStart)}`);
-
-    totalExpenses = 0;
-    const categoryMap = new Map<string, number>();
-
-    for (const exp of expenses ?? []) {
-      let monthlyAmt: number;
-      if (exp.frequency === "one_time") {
-        // Only count if next_due_date falls within this month
-        if (!isDateInMonth(exp.next_due_date, toDateStr(monthStart), toDateStr(monthEnd))) {
-          continue;
-        }
-        monthlyAmt = exp.amount ?? 0;
-      } else {
-        monthlyAmt = toMonthlyAmount(exp.amount ?? 0, exp.recurrence_interval);
-      }
-
-      totalExpenses += monthlyAmt;
-      const catName = exp.categories?.name ?? "Uncategorized";
-      categoryMap.set(catName, (categoryMap.get(catName) ?? 0) + monthlyAmt);
-    }
-
-    byCategory = Array.from(categoryMap.entries())
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: pct(amount, totalExpenses),
-      }))
-      .sort((a, b) => b.amount - a.amount);
+  const categoryMap = new Map<string, number>();
+  for (const t of txns.filter((t) => t.type === "debit")) {
+    const cat = t.ai_category ?? "Uncategorized";
+    categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
   }
+
+  byCategory = Array.from(categoryMap.entries())
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: pct(amount, totalExpenses),
+    }))
+    .sort((a, b) => b.amount - a.amount);
 
   const topCategories = byCategory.slice(0, 5).map((c) => c.category);
 
@@ -283,7 +187,7 @@ export async function generateHouseholdReport(
   force = false
 ): Promise<any> {
   const monthStart = startOfMonth(month);
-  const monthEnd = endOfMonth(month);
+
   const monthStr = toDateStr(monthStart);
 
   // 1. Check for cached report
@@ -315,8 +219,6 @@ export async function generateHouseholdReport(
   let totalIncome = 0;
   let totalExpenses = 0;
   const categoryMap = new Map<string, number>();
-  let hasTransactions = false;
-
   for (const member of members ?? []) {
     const includeIncome = member.income_sharing_mode === "all";
     const includeExpenses = member.expense_sharing_mode === "all";
@@ -330,8 +232,6 @@ export async function generateHouseholdReport(
       .lt("date", toDateStr(nextMonthDate));
 
     const txns = transactions ?? [];
-    if (txns.length > 0) hasTransactions = true;
-
     for (const t of txns) {
       if (t.type === "credit" && includeIncome) {
         totalIncome += t.amount ?? 0;
@@ -340,55 +240,6 @@ export async function generateHouseholdReport(
         totalExpenses += t.amount ?? 0;
         const cat = t.ai_category ?? "Uncategorized";
         categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
-      }
-    }
-  }
-
-  // Fallback to manual entries if no bank transactions exist.
-  // Prorate amounts to monthly equivalents based on frequency.
-  if (!hasTransactions) {
-    for (const member of members ?? []) {
-      if (member.income_sharing_mode === "all") {
-        const { data: incomeEntries } = await supabaseAdmin
-          .from("income_entries")
-          .select("*")
-          .eq("user_id", member.id)
-          .lte("effective_date", toDateStr(monthEnd))
-          .or(`end_date.is.null,end_date.gte.${toDateStr(monthStart)}`);
-
-        for (const e of incomeEntries ?? []) {
-          if (e.frequency === "one_time") {
-            if (isDateInMonth(e.effective_date, toDateStr(monthStart), toDateStr(monthEnd))) {
-              totalIncome += e.amount ?? 0;
-            }
-          } else {
-            totalIncome += toMonthlyAmount(e.amount ?? 0, e.frequency);
-          }
-        }
-      }
-
-      if (member.expense_sharing_mode === "all") {
-        const { data: expenses } = await supabaseAdmin
-          .from("expenses")
-          .select("*, categories(name)")
-          .eq("user_id", member.id)
-          .or(`end_date.is.null,end_date.gte.${toDateStr(monthStart)}`);
-
-        for (const exp of expenses ?? []) {
-          let monthlyAmt: number;
-          if (exp.frequency === "one_time") {
-            if (!isDateInMonth(exp.next_due_date, toDateStr(monthStart), toDateStr(monthEnd))) {
-              continue;
-            }
-            monthlyAmt = exp.amount ?? 0;
-          } else {
-            monthlyAmt = toMonthlyAmount(exp.amount ?? 0, exp.recurrence_interval);
-          }
-
-          totalExpenses += monthlyAmt;
-          const catName = exp.categories?.name ?? "Uncategorized";
-          categoryMap.set(catName, (categoryMap.get(catName) ?? 0) + monthlyAmt);
-        }
       }
     }
   }

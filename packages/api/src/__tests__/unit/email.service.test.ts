@@ -32,7 +32,7 @@ describe("email.service", () => {
     expect(mockSend).toHaveBeenCalledTimes(1);
 
     const callArgs = mockSend.mock.calls[0][0] as any;
-    expect(callArgs.from).toBe("Spendoza <no-reply@spendoza.io>");
+    expect(callArgs.from).toBe("Spendoza <reports@spendoza.io>");
     expect(callArgs.to).toBe("user@example.com");
     expect(callArgs.subject).toBe("Your Spendoza Report — January 2026");
     expect(callArgs.attachments).toHaveLength(1);
