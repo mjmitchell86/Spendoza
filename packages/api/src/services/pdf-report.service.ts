@@ -89,9 +89,28 @@ function fmt(value: number): string {
   }).format(value);
 }
 
+// Active footer context — set per buildReportPdf call for safe page breaks
+let activeFooterCtx: {
+  doc: PDFKit.PDFDocument;
+  generatedDate: string;
+  pageCounter: { value: number };
+} | null = null;
+
+/** Draw footer on current page and start a new one. */
+function newPage(doc: PDFKit.PDFDocument) {
+  if (activeFooterCtx) {
+    drawPageFooter(
+      doc,
+      activeFooterCtx.generatedDate,
+      activeFooterCtx.pageCounter
+    );
+  }
+  doc.addPage();
+}
+
 function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
   if (doc.y > doc.page.height - doc.page.margins.bottom - needed) {
-    doc.addPage();
+    newPage(doc);
   }
 }
 
@@ -393,7 +412,7 @@ function drawStyledTable(
 
   for (let r = 0; r < rows.length; r++) {
     if (doc.y > doc.page.height - doc.page.margins.bottom - 30) {
-      doc.addPage();
+      newPage(doc);
     }
 
     const rowY = doc.y;
@@ -621,10 +640,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
     const pageWidth =
       doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-    // Draw footer on every new page
-    doc.on("pageAdded", () => {
-      drawPageFooter(doc, generatedDate, pageCounter);
-    });
+    activeFooterCtx = { doc, generatedDate, pageCounter };
 
     // =====================================================================
     // PAGE 1: Header banner + Metric cards + AI Insights
@@ -684,7 +700,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
       input.reportData.by_category.length > 0 ||
       input.recurringBills.length > 0
     ) {
-      doc.addPage();
+      newPage(doc);
 
       if (input.reportData.by_category.length > 0) {
         drawSectionTitle(doc, "Expense Breakdown", pageWidth);
@@ -724,7 +740,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
       input.subscriptionsPaid.length > 0 ||
       input.goalProgress.length > 0
     ) {
-      doc.addPage();
+      newPage(doc);
 
       if (input.incomeSources.length > 0) {
         drawSectionTitle(doc, "Income Sources", pageWidth);
@@ -793,7 +809,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
       input.memberContributions && input.memberContributions.length > 0;
 
     if (hasSavings || hasMembers) {
-      doc.addPage();
+      newPage(doc);
 
       if (hasSavings) {
         drawSectionTitle(doc, "Savings Opportunities", pageWidth);
@@ -813,6 +829,10 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
         });
       }
     }
+
+    // Final page footer
+    drawPageFooter(doc, generatedDate, pageCounter);
+    activeFooterCtx = null;
 
     doc.end();
   });
