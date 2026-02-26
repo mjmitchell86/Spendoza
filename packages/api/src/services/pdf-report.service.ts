@@ -27,6 +27,26 @@ interface PdfReportInput {
     income: number;
     expenses: number;
   }>;
+  subscriptionsPaid: Array<{
+    name: string;
+    amount: number;
+    category: string | null;
+    recurrence_interval: string;
+  }>;
+  goalProgress: Array<{
+    name: string;
+    goal_type: string;
+    current: number;
+    target: number;
+    category_name: string | null;
+    target_date: string | null;
+  }>;
+  savingsRecommendations: Array<{
+    category: string;
+    amount: number;
+    percentage: number;
+    suggestion: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +181,158 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
       doc.moveDown(1);
     }
 
+    // --- Subscriptions Paid This Month ---
+    if (input.subscriptionsPaid.length > 0) {
+      ensureSpace(doc, 80);
+      drawSectionHeader(doc, "Subscriptions Paid This Month");
+      const subHeaders = ["Subscription", "Amount", "Frequency", "Category"];
+      const subRows = input.subscriptionsPaid.map((s) => [
+        s.name,
+        formatCurrency(s.amount),
+        s.recurrence_interval,
+        s.category ?? "—",
+      ]);
+      drawTable(doc, subHeaders, subRows, [0.35, 0.2, 0.2, 0.25], pageWidth);
+
+      const totalSubs = input.subscriptionsPaid.reduce(
+        (sum, s) => sum + s.amount,
+        0
+      );
+      doc.moveDown(0.3);
+      doc
+        .fontSize(10)
+        .fillColor(COLORS.primary)
+        .text(`Total Subscription Cost: ${formatCurrency(totalSubs)}`, {
+          align: "right",
+        });
+      if (input.reportData.total_expenses > 0) {
+        const subPct = (totalSubs / input.reportData.total_expenses) * 100;
+        doc
+          .fontSize(9)
+          .fillColor(COLORS.muted)
+          .text(
+            `Subscriptions represent ${subPct.toFixed(1)}% of total expenses`,
+            { align: "right" }
+          );
+      }
+      doc.moveDown(1);
+    }
+
+    // --- Goal Progress ---
+    if (input.goalProgress.length > 0) {
+      ensureSpace(doc, 80);
+      drawSectionHeader(doc, "Goal Progress");
+
+      for (const goal of input.goalProgress) {
+        ensureSpace(doc, 50);
+        const progressPct =
+          goal.target > 0
+            ? Math.min((goal.current / goal.target) * 100, 100)
+            : 0;
+        const onTrack = goal.goal_type === "budget"
+          ? goal.current <= goal.target
+          : goal.current >= goal.target;
+
+        // Goal name and type
+        doc
+          .fontSize(10)
+          .fillColor(COLORS.primary)
+          .text(goal.name, { continued: true });
+        doc
+          .fontSize(8)
+          .fillColor(COLORS.muted)
+          .text(
+            `  (${goal.goal_type.replace("_", " ")}${goal.category_name ? " — " + goal.category_name : ""})`,
+            { continued: false }
+          );
+
+        // Progress bar
+        const barY = doc.y + 2;
+        const barWidth = pageWidth * 0.7;
+        const barHeight = 10;
+
+        // Background
+        doc
+          .rect(doc.page.margins.left, barY, barWidth, barHeight)
+          .fillColor("#e5e7eb")
+          .fill();
+
+        // Fill
+        const fillWidth = barWidth * (progressPct / 100);
+        const barColor = goal.goal_type === "budget"
+          ? (onTrack ? COLORS.accent : COLORS.danger)
+          : (onTrack ? COLORS.accent : "#f59e0b");
+        if (fillWidth > 0) {
+          doc
+            .rect(doc.page.margins.left, barY, fillWidth, barHeight)
+            .fillColor(barColor)
+            .fill();
+        }
+
+        // Stats to the right of the bar
+        const statsX = doc.page.margins.left + barWidth + 8;
+        const displayPct = goal.goal_type === "budget"
+          ? `${((goal.current / (goal.target || 1)) * 100).toFixed(0)}% used`
+          : `${progressPct.toFixed(0)}%`;
+        doc
+          .fontSize(9)
+          .fillColor(onTrack ? COLORS.accent : COLORS.danger)
+          .text(displayPct, statsX, barY, {
+            width: pageWidth * 0.3 - 8,
+          });
+
+        doc.y = barY + barHeight + 4;
+
+        // Current vs target
+        const currentLabel = goal.goal_type === "budget" ? "Spent" : "Saved";
+        let detailText = `${currentLabel}: ${formatCurrency(goal.current)} of ${formatCurrency(goal.target)}`;
+        if (goal.target_date) {
+          const targetDate = new Date(goal.target_date + "T00:00:00Z");
+          detailText += ` — Target: ${targetDate.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })}`;
+        }
+
+        const statusIcon = onTrack ? "On Track" : (goal.goal_type === "budget" ? "Over Budget" : "Behind");
+        detailText += ` — ${statusIcon}`;
+
+        doc
+          .fontSize(8)
+          .fillColor(COLORS.muted)
+          .text(detailText, doc.page.margins.left);
+        doc.moveDown(0.6);
+      }
+      doc.moveDown(0.5);
+    }
+
+    // --- Savings Opportunities ---
+    if (input.savingsRecommendations.length > 0) {
+      ensureSpace(doc, 80);
+      drawSectionHeader(doc, "Savings Opportunities");
+
+      doc
+        .fontSize(9)
+        .fillColor(COLORS.muted)
+        .text(
+          "Based on your spending patterns, here are areas where you may be able to save:"
+        );
+      doc.moveDown(0.4);
+
+      for (const rec of input.savingsRecommendations) {
+        ensureSpace(doc, 30);
+        doc
+          .fontSize(10)
+          .fillColor(COLORS.primary)
+          .text(`${rec.category}: ${formatCurrency(rec.amount)} (${rec.percentage.toFixed(1)}% of expenses)`, {
+            indent: 5,
+          });
+        doc
+          .fontSize(9)
+          .fillColor(COLORS.muted)
+          .text(`→ ${rec.suggestion}`, { indent: 15 });
+        doc.moveDown(0.3);
+      }
+      doc.moveDown(0.5);
+    }
+
     // --- Member Contributions (household only) ---
     if (input.memberContributions && input.memberContributions.length > 0) {
       drawSectionHeader(doc, "Member Contributions");
@@ -190,6 +362,12 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
 // ---------------------------------------------------------------------------
 // Drawing helpers
 // ---------------------------------------------------------------------------
+
+function ensureSpace(doc: PDFKit.PDFDocument, minSpace: number) {
+  if (doc.y > doc.page.height - doc.page.margins.bottom - minSpace) {
+    doc.addPage();
+  }
+}
 
 function drawSectionHeader(doc: PDFKit.PDFDocument, title: string) {
   doc.fontSize(13).fillColor(COLORS.primary).text(title);

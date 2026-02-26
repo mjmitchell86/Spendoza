@@ -108,13 +108,16 @@ spendoza/
 
 ```mermaid
 flowchart LR
-    PDF[PDF Upload] --> Extract[Text Extraction<br/><i>pdf-parse</i>]
+    PDF[PDF Upload<br/><i>Batch support</i>] --> Extract[Text Extraction<br/><i>pdf-parse</i>]
     Extract --> Parse[Transaction Parsing<br/><i>GPT-4o-mini</i>]
     Parse --> Classify[Categorization<br/><i>GPT-4o-mini</i>]
     Classify --> Match[Record Matching<br/><i>Jaccard Similarity</i>]
     Match --> DB[(Database)]
     Match --> Bills[Bill Detection<br/><i>Pattern Analysis</i>]
+    Match --> Income[Income Detection<br/><i>Pattern Analysis</i>]
     Bills --> DB
+    Income --> DB
+    DB --> Reports[Auto-Generate<br/>Reports]
 
     style PDF fill:#e3f2fd
     style Extract fill:#fff3e0
@@ -122,15 +125,22 @@ flowchart LR
     style Classify fill:#fff3e0
     style Match fill:#f3e5f5
     style Bills fill:#fce4ec
+    style Income fill:#fce4ec
     style DB fill:#e8f5e9
+    style Reports fill:#e8f5e9
 ```
 
-Upload a bank statement PDF and the pipeline:
+Upload one or more bank statement PDFs (batch upload with drag-and-drop support) and the pipeline:
 1. Extracts raw text from the PDF
 2. Uses GPT-4o-mini to identify individual transactions (with auto-detected bank name and statement month)
 3. Classifies each transaction into user-defined categories
 4. Matches transactions to existing expenses/income records using string similarity and amount proximity
 5. Detects recurring bill patterns and creates auto-tracked expenses
+6. Detects recurring income sources and creates auto-tracked income entries
+7. Auto-generates monthly reports for all months with transaction data
+8. Retries failed steps with exponential backoff for resilient processing
+
+Your bank statement is deleted after processing -- only extracted transaction data is stored, never the original file.
 
 ### Automatic Bill Detection
 
@@ -160,7 +170,15 @@ After each bank statement upload, the system analyzes all user transactions to:
 - Re-activate previously expired bills when the pattern reappears
 - Never modify manually-created expenses
 
-Auto-detected bills appear in the Upcoming Bills dashboard widget and Expenses page with an "Auto" badge.
+Auto-detected bills appear in the Upcoming Bills dashboard widget and Expenses page with an "Auto" badge. AI-generated friendly names (e.g., "Netflix" instead of "NETFLIX COM 12345") are displayed throughout the UI and PDF exports.
+
+### Automatic Income Detection
+
+The same pattern analysis runs for income transactions:
+- Groups similar credit transactions across months
+- Detects recurring income patterns (payroll, freelance payments, etc.)
+- Creates auto-tracked income entries with friendly names
+- Attributes income to household members when applicable
 
 ### Financial Goals
 
@@ -223,6 +241,9 @@ flowchart TB
 - Household dashboard shows aggregate finances and member contributions
 - Household reports aggregate shared data only
 - Head of household manages invitations and member removal (max 10 members)
+- Ownership transfer -- head of household can transfer control to another member
+- Members can leave a household (ownership auto-transfers if head leaves)
+- Income attribution -- track income from non-household sources with custom names (e.g., roommate contributions)
 
 ### AI-Powered Reports
 
@@ -263,11 +284,29 @@ flowchart LR
 - Savings rate, expense-to-income ratio, category breakdowns
 - Month-over-month trend comparison
 - AI-generated bullet-point financial insights
+- Auto-generated after bank statement processing and during onboarding
 - Rate limited to 2 manual refreshes per 24 hours in production; automated via cron
+
+### PDF Export
+
+Download comprehensive PDF reports from both personal and household dashboards:
+
+| Section | Contents |
+|---------|----------|
+| **Financial Summary** | Total income, expenses, net, savings rate |
+| **Month-over-Month Trends** | Income and expense percentage changes |
+| **AI Insights** | AI-generated bullet-point financial analysis |
+| **Expense Breakdown** | Category-by-category spending table with percentages |
+| **Recurring Bills** | All tracked bills with amounts, frequency, and next due dates |
+| **Income Sources** | All income entries with frequency and household attribution |
+| **Subscriptions Paid** | Active recurring expenses for the month with total cost and % of expenses |
+| **Goal Progress** | Visual progress bars for each goal with on-track/behind status |
+| **Savings Opportunities** | Data-driven recommendations for high-spend categories, subscription burden, and savings rate gaps |
+| **Member Contributions** | Per-member income and expense totals (household reports only) |
 
 ### Dashboard
 
-The personal dashboard provides an at-a-glance financial overview:
+The personal dashboard provides an at-a-glance financial overview with a global time period filter that persists across navigation:
 
 | Widget | Description |
 |--------|-------------|
@@ -277,6 +316,15 @@ The personal dashboard provides an at-a-glance financial overview:
 | **Top Expenses** | Horizontal bar chart of highest spending categories |
 | **Upcoming Bills** | Recurring bills with due dates and auto-detection badges |
 | **AI Insights** | Personalized financial observations from GPT-4o-mini |
+| **Export PDF** | Download a comprehensive monthly report as PDF |
+
+### Global Time Period Filter
+
+A persistent time period filter is available across dashboards, transactions, income, and expenses pages:
+- Presets: This Month, Last Month, Last 3 Months, This Year, Last Year, All Time
+- Specific month selection via `month:YYYY-MM` format
+- Smart auto-detection defaults to the most recent month with data
+- Filter state persists in the URL across page navigation
 
 ### Guided Onboarding
 
@@ -305,8 +353,11 @@ New users are guided through a multi-step onboarding flow:
 
 - **Dark mode** -- System, light, and dark themes with full chart support
 - **Profile management** -- Avatar upload, display name editing
-- **Transaction browser** -- Filter by type, time period, and description search
+- **Transaction browser** -- Filter by type, time period, and description search with global time period context
 - **Category management** -- Create, edit, delete, and share categories with household
+- **Batch bank statement upload** -- Drag-and-drop multiple PDFs with per-file status tracking and sequential processing
+- **Invite code registration** -- Gated signup via invite codes (max 3 active codes per user)
+- **Privacy-first design** -- Bank statements are deleted after processing; only extracted data is stored
 - **Responsive design** -- Mobile-friendly layout across all pages
 
 ## Getting Started
@@ -363,6 +414,12 @@ cd packages/api && bun run dev    # API server only (port 3001)
 cd packages/web && bun run dev    # Vite dev server only (port 5173)
 ```
 
+Seed a test user with 6 months of realistic mock bank data:
+
+```bash
+cd packages/api && bun run seed   # Creates test user with transactions from 3 banks
+```
+
 ## API Endpoints
 
 | Group | Base Path | Auth | Endpoints |
@@ -374,10 +431,11 @@ cd packages/web && bun run dev    # Vite dev server only (port 5173)
 | Expenses | `/api/expenses` | Required | CRUD (auto-filters expired bills) |
 | Bank Statements | `/api/bank-statements` | Required | upload, list, get detail, reprocess |
 | Transactions | `/api/transactions` | Required | list, update, attribute, bulk-attribute |
-| Households | `/api/households` | Required | create, get, invite, join, remove, sharing |
-| Reports | `/api/reports` | Mixed | personal, household, generate, generate-all (cron) |
+| Households | `/api/households` | Required | create, get, invite, join, remove, sharing, transfer ownership, leave |
+| Reports | `/api/reports` | Mixed | personal, household, generate, generate-all (cron), export/personal (PDF), export/household (PDF) |
 | Dashboard | `/api/dashboard` | Required | personal summary, household summary |
-| Goals | `/api/goals` | Required | CRUD, log savings |
+| Goals | `/api/goals` | Required | CRUD, progress tracking, log savings |
+| Invite Codes | `/api/invite-codes` | Required | create, list, delete (max 3 active per user) |
 
 ## Database Schema
 
