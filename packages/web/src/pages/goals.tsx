@@ -20,7 +20,7 @@ import { LogSavingsDialog } from "@/components/goals/log-savings-dialog";
 import { SuggestedGoals } from "@/components/goals/suggested-goals";
 
 export function GoalsPage() {
-  const { data: progressData, isLoading, error, refetch } = useGoalProgress(6);
+  const { data: progressData, isLoading, error, refetch } = useGoalProgress(6, "user");
   const { data: categories } = useCategories();
 
   const [formOpen, setFormOpen] = useState(false);
