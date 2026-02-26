@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 
-const FROM_ADDRESS = "Spendoza <no-reply@spendoza.io>";
+const FROM_ADDRESS = "Spendoza <reports@spendoza.io>";
 
 interface SendReportEmailInput {
   to: string;
