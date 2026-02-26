@@ -23,6 +23,16 @@ export const loginSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 
 // ---------------------------------------------------------------------------
+// Waitlist
+// ---------------------------------------------------------------------------
+export const waitlistSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+});
+
+export type WaitlistInput = z.infer<typeof waitlistSchema>;
+
+// ---------------------------------------------------------------------------
 // Invite Codes
 // ---------------------------------------------------------------------------
 export interface InviteCode {
