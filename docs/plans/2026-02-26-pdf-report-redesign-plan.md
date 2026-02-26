@@ -1,3 +1,29 @@
+# PDF Report Redesign — Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Rewrite the PDF report service to produce a colorful, modern financial report with dashboard-style metric cards, horizontal bar charts, visual progress indicators, styled tables, and page footers.
+
+**Architecture:** Single file rewrite of `packages/api/src/services/pdf-report.service.ts`. The `PdfReportInput` interface and `buildReportPdf()` function signature stay identical — only the drawing logic changes. No API routes, frontend code, or other files are modified.
+
+**Tech Stack:** PDFKit (already installed, native drawing APIs for rectangles, arcs, lines, text).
+
+**Design doc:** `docs/plans/2026-02-26-pdf-report-redesign.md`
+
+---
+
+## Task 1: Rewrite color palette and drawing helpers
+
+**Files:**
+- Modify: `packages/api/src/services/pdf-report.service.ts`
+
+**Step 1: Replace the COLORS constant and add helper functions**
+
+Replace the entire file contents with the new implementation. The file keeps the same `PdfReportInput` interface and `buildReportPdf` export signature, but replaces all drawing code.
+
+Replace the full file `packages/api/src/services/pdf-report.service.ts` with:
+
+```typescript
 import PDFDocument from "pdfkit";
 import type { ReportData } from "../ai/report-insights";
 
@@ -95,6 +121,7 @@ function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
   }
 }
 
+/** Rounded rectangle helper — PDFKit's roundedRect. */
 function roundedRect(
   doc: PDFKit.PDFDocument,
   x: number,
@@ -108,19 +135,18 @@ function roundedRect(
 }
 
 // ---------------------------------------------------------------------------
-// Page footer
+// Page footer — called via doc "pageAdded" event + final page
 // ---------------------------------------------------------------------------
-function drawPageFooter(
-  doc: PDFKit.PDFDocument,
-  generatedDate: string,
-  pageCounter: { value: number }
-) {
-  pageCounter.value++;
+let pageNum = 0;
+
+function drawPageFooter(doc: PDFKit.PDFDocument, generatedDate: string) {
+  pageNum++;
   const bottom = doc.page.height - 30;
   const left = doc.page.margins.left;
   const right = doc.page.width - doc.page.margins.right;
   const pageWidth = right - left;
 
+  // Teal line
   doc
     .moveTo(left, bottom - 10)
     .lineTo(right, bottom - 10)
@@ -128,6 +154,7 @@ function drawPageFooter(
     .lineWidth(0.5)
     .stroke();
 
+  // Generated date — centered
   doc
     .fontSize(7)
     .fillColor(C.muted)
@@ -136,10 +163,11 @@ function drawPageFooter(
       align: "center",
     });
 
+  // Page number — right
   doc
     .fontSize(7)
     .fillColor(C.muted)
-    .text(`Page ${pageCounter.value}`, left, bottom - 6, {
+    .text(`Page ${pageNum}`, left, bottom - 6, {
       width: pageWidth,
       align: "right",
     });
@@ -156,20 +184,23 @@ function drawHeaderBanner(
   const bannerHeight = 70;
   const pageFullWidth = doc.page.width;
 
+  // Full-width teal banner (extends into margins)
   doc.rect(0, 0, pageFullWidth, bannerHeight).fillColor(C.headerBg).fill();
 
+  // Decorative lighter strip at bottom
   doc
     .rect(0, bannerHeight - 4, pageFullWidth, 4)
     .fillColor(C.headerLight)
     .fill();
 
+  // Title text
   doc
     .fontSize(22)
     .fillColor(C.white)
     .text("SPENDOZA", 0, 14, { align: "center", width: pageFullWidth });
   doc
     .fontSize(11)
-    .fillColor("#99f6e4")
+    .fillColor("#99f6e4") // teal-200
     .text(`${title} — Monthly Report`, 0, 38, {
       align: "center",
       width: pageFullWidth,
@@ -179,6 +210,7 @@ function drawHeaderBanner(
     width: pageFullWidth,
   });
 
+  // Move cursor below banner
   doc.y = bannerHeight + 20;
   doc.x = doc.page.margins.left;
 }
@@ -210,9 +242,13 @@ function drawMetricCards(doc: PDFKit.PDFDocument, cards: MetricCard[], pageWidth
     const x = left + col * (cardW + gap);
     const y = startY + row * (cardH + gap);
 
+    // Card background
     roundedRect(doc, x, y, cardW, cardH, 4, card.bgColor);
+
+    // Left border accent
     roundedRect(doc, x, y, 4, cardH, 2, card.borderColor);
 
+    // Label
     doc
       .fontSize(8)
       .fillColor(C.muted)
@@ -220,6 +256,7 @@ function drawMetricCards(doc: PDFKit.PDFDocument, cards: MetricCard[], pageWidth
         width: cardW - 20,
       });
 
+    // Value
     doc
       .fontSize(20)
       .fillColor(card.valueColor)
@@ -227,6 +264,7 @@ function drawMetricCards(doc: PDFKit.PDFDocument, cards: MetricCard[], pageWidth
         width: cardW - 20,
       });
 
+    // Trend
     if (card.trend) {
       const arrow = card.trendPositive ? "▲" : "▼";
       const trendColor = card.trendPositive ? C.income : C.expense;
@@ -243,7 +281,7 @@ function drawMetricCards(doc: PDFKit.PDFDocument, cards: MetricCard[], pageWidth
 }
 
 // ---------------------------------------------------------------------------
-// Drawing: Section title
+// Drawing: Section title with colored underline
 // ---------------------------------------------------------------------------
 function drawSectionTitle(doc: PDFKit.PDFDocument, title: string, pageWidth: number) {
   ensureSpace(doc, 40);
@@ -267,19 +305,22 @@ function drawInsightsBox(doc: PDFKit.PDFDocument, insights: string, pageWidth: n
   const padding = 12;
   const innerWidth = pageWidth - padding * 2 - 4;
 
-  // Measure actual text height including word wrap
-  const labelHeight = 16;
-  doc.fontSize(9);
-  const bodyHeight = doc.heightOfString(insights, { width: innerWidth });
-  const boxHeight = Math.max(labelHeight + bodyHeight + padding * 2, 50);
+  // Measure text height
+  const lines = insights.split("\n").map((l) => l.trim()).filter(Boolean);
+  const textHeight = lines.length * 14 + 24; // label + lines
+  const boxHeight = Math.max(textHeight, 50);
 
   ensureSpace(doc, boxHeight + 10);
 
   const boxY = doc.y;
 
+  // Background
   roundedRect(doc, left, boxY, pageWidth, boxHeight, 4, C.netBg);
+
+  // Left border
   roundedRect(doc, left, boxY, 3, boxHeight, 2, C.net);
 
+  // Label
   doc
     .fontSize(9)
     .fillColor(C.net)
@@ -287,18 +328,20 @@ function drawInsightsBox(doc: PDFKit.PDFDocument, insights: string, pageWidth: n
       width: innerWidth,
     });
 
-  doc
-    .fontSize(9)
-    .fillColor(C.dark)
-    .text(insights, left + padding + 4, boxY + padding + labelHeight, {
+  // Body text
+  let textY = boxY + padding + 16;
+  for (const line of lines) {
+    doc.fontSize(9).fillColor(C.dark).text(line, left + padding + 4, textY, {
       width: innerWidth,
     });
+    textY += 13;
+  }
 
   doc.y = boxY + boxHeight + 12;
 }
 
 // ---------------------------------------------------------------------------
-// Drawing: Horizontal bar chart
+// Drawing: Horizontal bar chart (expense categories)
 // ---------------------------------------------------------------------------
 function drawBarChart(
   doc: PDFKit.PDFDocument,
@@ -321,17 +364,21 @@ function drawBarChart(
     const y = doc.y;
     const barColor = BAR_COLORS[i % BAR_COLORS.length];
 
+    // Category name
     doc.fontSize(9).fillColor(C.dark).text(cat.category, left, y + 4, {
       width: labelWidth - 8,
     });
 
+    // Bar background
     roundedRect(doc, barStartX, y + 3, barMaxWidth, 14, 3, C.divider);
 
+    // Bar fill
     const barW = Math.max((cat.percentage / maxPct) * barMaxWidth, 2);
     if (barW > 0) {
       roundedRect(doc, barStartX, y + 3, barW, 14, 3, barColor);
     }
 
+    // Amount + percentage
     doc
       .fontSize(9)
       .fillColor(C.dark)
@@ -342,6 +389,7 @@ function drawBarChart(
     doc.y = y + rowHeight;
   }
 
+  // Total row
   doc
     .moveTo(left, doc.y + 2)
     .lineTo(left + pageWidth, doc.y + 2)
@@ -363,7 +411,7 @@ function drawBarChart(
 }
 
 // ---------------------------------------------------------------------------
-// Drawing: Styled table
+// Drawing: Styled table with colored header
 // ---------------------------------------------------------------------------
 function drawStyledTable(
   doc: PDFKit.PDFDocument,
@@ -371,12 +419,13 @@ function drawStyledTable(
   rows: string[][],
   colWidths: number[],
   pageWidth: number,
-  options?: { boldCols?: number[]; colColors?: Record<number, string> }
+  options?: { boldCol?: number }
 ) {
   const left = doc.page.margins.left;
   const headerHeight = 20;
   const rowHeight = 18;
 
+  // Header row background
   roundedRect(doc, left, doc.y, pageWidth, headerHeight, 3, C.headerBg);
 
   let x = left;
@@ -391,6 +440,7 @@ function drawStyledTable(
   }
   doc.y += headerHeight + 2;
 
+  // Data rows
   for (let r = 0; r < rows.length; r++) {
     if (doc.y > doc.page.height - doc.page.margins.bottom - 30) {
       doc.addPage();
@@ -399,25 +449,24 @@ function drawStyledTable(
     const rowY = doc.y;
     const isAlt = r % 2 === 1;
 
+    // Alternating row background
     if (isAlt) {
       doc.rect(left, rowY, pageWidth, rowHeight).fillColor(C.rowAlt).fill();
     }
 
     x = left;
     for (let i = 0; i < rows[r].length; i++) {
-      const isBold = options?.boldCols?.includes(i);
-      const color = options?.colColors?.[i] ?? C.dark;
-      if (isBold) doc.font("Helvetica-Bold");
+      const isBold = options?.boldCol === i;
       doc
         .fontSize(8)
-        .fillColor(color)
+        .fillColor(C.dark)
         .text(rows[r][i], x + 6, rowY + 4, {
           width: pageWidth * colWidths[i] - 12,
         });
-      if (isBold) doc.font("Helvetica");
       x += pageWidth * colWidths[i];
     }
 
+    // Thin divider
     doc
       .moveTo(left, rowY + rowHeight)
       .lineTo(left + pageWidth, rowY + rowHeight)
@@ -432,7 +481,7 @@ function drawStyledTable(
 }
 
 // ---------------------------------------------------------------------------
-// Drawing: Callout box
+// Drawing: Callout box (generic — for subscriptions total, savings recs)
 // ---------------------------------------------------------------------------
 function drawCalloutBox(
   doc: PDFKit.PDFDocument,
@@ -464,7 +513,7 @@ function drawCalloutBox(
 }
 
 // ---------------------------------------------------------------------------
-// Drawing: Goal progress
+// Drawing: Goal progress with thick bar + status pill
 // ---------------------------------------------------------------------------
 function drawGoalProgress(
   doc: PDFKit.PDFDocument,
@@ -495,6 +544,7 @@ function drawGoalProgress(
     const statusColor = onTrack ? C.income : (goal.goal_type === "budget" ? C.expense : C.amber);
     const statusBg = onTrack ? C.incomeBg : (goal.goal_type === "budget" ? C.expenseBg : C.amberBg);
 
+    // Goal name + type
     doc.fontSize(10).fillColor(C.dark).text(goal.name, left, doc.y, {
       continued: true,
     });
@@ -506,17 +556,21 @@ function drawGoalProgress(
         { continued: false }
       );
 
+    // Progress bar
     const barY = doc.y + 3;
     const barWidth = pageWidth * 0.65;
     const barHeight = 12;
 
+    // Background track
     roundedRect(doc, left, barY, barWidth, barHeight, 4, C.divider);
 
+    // Fill
     const fillWidth = barWidth * (progressPct / 100);
     if (fillWidth > 0) {
       roundedRect(doc, left, barY, Math.max(fillWidth, 8), barHeight, 4, barColor);
     }
 
+    // Percentage to right of bar
     const displayPct =
       goal.goal_type === "budget"
         ? `${((goal.current / (goal.target || 1)) * 100).toFixed(0)}%`
@@ -528,6 +582,7 @@ function drawGoalProgress(
         width: 40,
       });
 
+    // Status pill
     const pillX = left + barWidth + 55;
     const pillW = 65;
     const pillH = 14;
@@ -542,6 +597,7 @@ function drawGoalProgress(
 
     doc.y = barY + barHeight + 4;
 
+    // Detail line
     const currentLabel = goal.goal_type === "budget" ? "Spent" : "Saved";
     let detailText = `${currentLabel}: ${fmt(goal.current)} of ${fmt(goal.target)}`;
     if (goal.target_date) {
@@ -558,7 +614,7 @@ function drawGoalProgress(
 }
 
 // ---------------------------------------------------------------------------
-// Drawing: Savings cards
+// Drawing: Savings recommendation cards
 // ---------------------------------------------------------------------------
 function drawSavingsCards(
   doc: PDFKit.PDFDocument,
@@ -609,7 +665,7 @@ function drawSavingsCards(
 // ---------------------------------------------------------------------------
 export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const pageCounter = { value: 0 };
+    pageNum = 0;
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     const chunks: Uint8Array[] = [];
     const generatedDate = new Date().toLocaleDateString("en-US");
@@ -623,7 +679,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
 
     // Draw footer on every new page
     doc.on("pageAdded", () => {
-      drawPageFooter(doc, generatedDate, pageCounter);
+      drawPageFooter(doc, generatedDate);
     });
 
     // =====================================================================
@@ -631,6 +687,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
     // =====================================================================
     drawHeaderBanner(doc, input.title, input.month);
 
+    // Metric cards
     const net = input.reportData.total_income - input.reportData.total_expenses;
     const mom = input.reportData.month_over_month;
 
@@ -648,7 +705,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
         label: "Total Expenses",
         value: fmt(input.reportData.total_expenses),
         trend: mom ? `${Math.abs(mom.expense_change).toFixed(1)}%` : undefined,
-        trendPositive: mom ? mom.expense_change <= 0 : undefined,
+        trendPositive: mom ? mom.expense_change <= 0 : undefined, // lower expenses = positive
         borderColor: C.expense,
         bgColor: C.expenseBg,
         valueColor: C.expense,
@@ -671,11 +728,13 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
 
     drawMetricCards(doc, cards, pageWidth);
 
+    // AI Insights
     if (input.aiInsights) {
       drawInsightsBox(doc, input.aiInsights, pageWidth);
     }
 
-    drawPageFooter(doc, generatedDate, pageCounter);
+    // First page footer
+    drawPageFooter(doc, generatedDate);
 
     // =====================================================================
     // PAGE 2: Expense Breakdown + Recurring Bills
@@ -710,9 +769,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
               )
             : "—",
         ]);
-        drawStyledTable(doc, headers, rows, [0.35, 0.2, 0.2, 0.25], pageWidth, {
-          boldCols: [1],
-        });
+        drawStyledTable(doc, headers, rows, [0.35, 0.2, 0.2, 0.25], pageWidth);
       }
     }
 
@@ -761,6 +818,7 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
           pageWidth
         );
 
+        // Subscriptions summary callout
         const totalSubs = input.subscriptionsPaid.reduce(
           (sum, s) => sum + s.amount,
           0
@@ -808,12 +866,70 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
           fmt(m.income),
           fmt(m.expenses),
         ]);
-        drawStyledTable(doc, headers, rows, [0.4, 0.3, 0.3], pageWidth, {
-          colColors: { 1: C.income, 2: C.expense },
-        });
+        drawStyledTable(doc, headers, rows, [0.4, 0.3, 0.3], pageWidth);
       }
     }
 
     doc.end();
   });
 }
+```
+
+**Step 2: Verify typecheck**
+
+Run: `bun run typecheck`
+Expected: PASS — all 3 packages
+
+**Step 3: Run tests**
+
+Run: `bun run test`
+Expected: All existing tests pass (no tests directly test PDF rendering, only that the function returns a buffer)
+
+**Step 4: Commit**
+
+```bash
+git add packages/api/src/services/pdf-report.service.ts
+git commit -m "feat: redesign PDF report with colorful cards, bar charts, styled tables, and page footers"
+```
+
+---
+
+## Task 2: Visual verification
+
+**Step 1: Start dev server**
+
+Run: `bun run dev`
+
+**Step 2: Manual test**
+
+1. Navigate to the personal dashboard
+2. Click "Export PDF"
+3. Open the downloaded PDF and verify:
+   - Page 1: Teal header banner, 4 colored metric cards, blue AI insights box
+   - Page 2: Horizontal bar chart for expenses, styled recurring bills table
+   - Page 3: Income sources table, subscriptions table with amber callout, goal progress bars with status pills
+   - Page 4 (if data exists): Savings cards with amber borders, member contributions table
+   - Footer on every page: teal line, generated date, page number
+
+**Step 3: Test household export (if applicable)**
+
+1. Navigate to household dashboard
+2. Click "Export PDF"
+3. Verify member contributions table appears on final page
+
+---
+
+## Task 3: Push and create PR
+
+**Step 1: Push branch**
+
+```bash
+git push origin test
+```
+
+Or if working on a feature branch:
+
+```bash
+git push -u origin feat/pdf-report-redesign
+gh pr create --base test --title "feat: redesign PDF report with colorful layout" --body "..."
+```
