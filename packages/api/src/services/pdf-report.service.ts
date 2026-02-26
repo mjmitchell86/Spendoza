@@ -114,6 +114,12 @@ function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
   }
 }
 
+/** Estimate minimum height to start a section (title + first few rows). */
+function sectionStartHeight(rowCount: number, rowHeight = 18): number {
+  const visibleRows = Math.min(rowCount, 3);
+  return 30 + (visibleRows + 1) * rowHeight + 10;
+}
+
 function roundedRect(
   doc: PDFKit.PDFDocument,
   x: number,
@@ -718,13 +724,16 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
     }
 
     // =====================================================================
-    // PAGE 2: Expense Breakdown + Recurring Bills
+    // SECTION: Expense Breakdown + Recurring Bills
     // =====================================================================
     if (
       input.reportData.by_category.length > 0 ||
       input.recurringBills.length > 0
     ) {
-      newPage(doc);
+      // Estimate space for expense breakdown bar chart
+      const barChartRows = input.reportData.by_category.length;
+      const barChartHeight = barChartRows > 0 ? 30 + barChartRows * 26 + 20 : 0;
+      ensureSpace(doc, barChartHeight > 0 ? barChartHeight : sectionStartHeight(input.recurringBills.length));
 
       if (input.reportData.by_category.length > 0) {
         drawSectionTitle(doc, "Expense Breakdown", pageWidth);
@@ -757,14 +766,15 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
     }
 
     // =====================================================================
-    // PAGE 3: Income Sources + Subscriptions + Goals
+    // SECTION: Income Sources + Subscriptions + Goals
     // =====================================================================
     if (
       input.incomeSources.length > 0 ||
       input.subscriptionsPaid.length > 0 ||
       input.goalProgress.length > 0
     ) {
-      newPage(doc);
+      const nextSectionRows = input.incomeSources.length || input.subscriptionsPaid.length || input.goalProgress.length;
+      ensureSpace(doc, sectionStartHeight(nextSectionRows));
 
       if (input.incomeSources.length > 0) {
         drawSectionTitle(doc, "Income Sources", pageWidth);
@@ -826,14 +836,16 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
     }
 
     // =====================================================================
-    // PAGE 4 (conditional): Savings Opportunities + Member Contributions
+    // SECTION: Savings Opportunities + Member Contributions
     // =====================================================================
     const hasSavings = input.savingsRecommendations.length > 0;
     const hasMembers =
       input.memberContributions && input.memberContributions.length > 0;
 
     if (hasSavings || hasMembers) {
-      newPage(doc);
+      const savingsCardH = hasSavings ? 30 + Math.min(input.savingsRecommendations.length, 2) * 70 : 0;
+      const memberRows = hasMembers && input.memberContributions ? input.memberContributions.length : 0;
+      ensureSpace(doc, savingsCardH > 0 ? savingsCardH : sectionStartHeight(memberRows));
 
       if (hasSavings) {
         drawSectionTitle(doc, "Savings Opportunities", pageWidth);
