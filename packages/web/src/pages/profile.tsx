@@ -1,5 +1,5 @@
 import { useState, useRef, type FormEvent } from "react";
-import { Camera, Check, Loader2, Monitor, Moon, Sun } from "lucide-react";
+import { Camera, Check, Loader2, Mail, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile, useUpdateProfile, useUploadAvatar } from "@/hooks/use-profile";
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { apiClient, IS_TEST_ENV } from "@/lib/api";
 
 const DAY_OPTIONS = [
   { value: "monday", label: "Monday" },
@@ -52,6 +53,24 @@ export function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  async function handleSendTestEmail() {
+    setSendingEmail(true);
+    setEmailError(null);
+    setEmailSent(false);
+    try {
+      await apiClient("/emails/send-test", { method: "POST" });
+      setEmailSent(true);
+      setTimeout(() => setEmailSent(false), 5000);
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setSendingEmail(false);
+    }
+  }
 
   // Use local state if user has edited, otherwise profile data
   const currentName = displayName ?? profile?.display_name ?? "";
@@ -309,6 +328,40 @@ export function ProfilePage() {
                   )?.label ?? "9 AM"}
                   {profile?.timezone ? ` (${profile.timezone})` : ""}
                 </p>
+              </div>
+            )}
+            {IS_TEST_ENV && (
+              <div className="flex flex-col gap-2 rounded-lg border border-dashed border-yellow-500/50 bg-yellow-500/5 p-4">
+                <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+                  Test Environment
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Send yourself a report email now to verify the email pipeline.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  disabled={sendingEmail}
+                  onClick={handleSendTestEmail}
+                >
+                  {sendingEmail ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : emailSent ? (
+                    <>
+                      <Check className="size-4" />
+                      Email Sent
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="size-4" />
+                      Send Test Email
+                    </>
+                  )}
+                </Button>
+                {emailError && (
+                  <p className="text-xs text-destructive">{emailError}</p>
+                )}
               </div>
             )}
           </div>

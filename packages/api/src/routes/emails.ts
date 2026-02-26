@@ -12,6 +12,7 @@ import {
   verifyUnsubscribeToken,
 } from "../lib/unsubscribe-token";
 import { isScheduledTime } from "../lib/email-schedule";
+import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
 
@@ -192,6 +193,56 @@ router.post("/send", async (req: Request, res: Response) => {
   waitUntil(processEmailJob(job_id));
 
   return res.status(200).json({ message: "Job accepted", job_id });
+});
+
+// ---------------------------------------------------------------------------
+// POST /send-test — manually trigger email for authenticated user (test only)
+// ---------------------------------------------------------------------------
+router.post("/send-test", requireAuth, async (req: Request, res: Response) => {
+  const userId = (req as AuthenticatedRequest).user.id;
+
+  try {
+    // Get user profile for timezone
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("timezone, household_id")
+      .eq("id", userId)
+      .single();
+
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    const reportMonth = getCurrentReportMonth(
+      profile.timezone || "America/New_York"
+    );
+
+    // Create email job for personal report (skip all eligibility checks)
+    const { data: job, error } = await supabaseAdmin
+      .from("email_jobs")
+      .insert({
+        user_id: userId,
+        entity_type: "user",
+        entity_id: userId,
+        report_month: reportMonth,
+      })
+      .select("id")
+      .single();
+
+    if (error || !job) {
+      return res.status(500).json({ error: "Failed to create email job" });
+    }
+
+    // Process immediately (don't wait for pg_net trigger)
+    waitUntil(processEmailJob(job.id));
+
+    return res
+      .status(200)
+      .json({ message: "Test email triggered", job_id: job.id });
+  } catch (err) {
+    console.error("[send-test] Error:", err);
+    return res.status(500).json({ error: "Internal error" });
+  }
 });
 
 async function processEmailJob(jobId: string): Promise<void> {

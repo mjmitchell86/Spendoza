@@ -2,6 +2,8 @@ import { supabase } from "./supabase";
 
 export const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
+export const IS_TEST_ENV = API_BASE.includes("test");
+
 export async function apiClient(path: string, options?: RequestInit) {
   const {
     data: { session },
