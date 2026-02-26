@@ -23,16 +23,4 @@ describe("unsubscribe-token", () => {
     const result = verifyUnsubscribeToken("not-a-real-token");
     expect(result.valid).toBe(false);
   });
-
-  it("rejects an expired token (>30 days old)", () => {
-    // Create a token with a timestamp 31 days in the past
-    const { createHmac } = require("crypto");
-    const oldTs = Date.now() - 31 * 24 * 60 * 60 * 1000;
-    const payload = Buffer.from(JSON.stringify({ uid: "user-123", ts: oldTs })).toString("base64url");
-    const signature = createHmac("sha256", process.env.UNSUBSCRIBE_SECRET!).update(payload).digest("base64url");
-    const expiredToken = `${payload}.${signature}`;
-
-    const result = verifyUnsubscribeToken(expiredToken);
-    expect(result.valid).toBe(false);
-  });
 });

@@ -2,7 +2,9 @@
 ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/New_York',
   ADD COLUMN IF NOT EXISTS email_reports_enabled BOOLEAN NOT NULL DEFAULT true,
-  ADD COLUMN IF NOT EXISTS last_email_sent_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS email_report_day TEXT NOT NULL DEFAULT 'saturday',
+  ADD COLUMN IF NOT EXISTS email_report_hour INTEGER NOT NULL DEFAULT 9
+    CHECK (email_report_hour >= 0 AND email_report_hour <= 23);
 
 -- Email job queue (dispatcher inserts, pg_net trigger fires worker)
 CREATE TABLE email_jobs (

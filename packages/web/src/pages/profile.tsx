@@ -9,7 +9,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+const DAY_OPTIONS = [
+  { value: "monday", label: "Monday" },
+  { value: "tuesday", label: "Tuesday" },
+  { value: "wednesday", label: "Wednesday" },
+  { value: "thursday", label: "Thursday" },
+  { value: "friday", label: "Friday" },
+  { value: "saturday", label: "Saturday" },
+  { value: "sunday", label: "Sunday" },
+] as const;
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
+  value: String(i),
+  label: new Date(2026, 0, 1, i).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    hour12: true,
+  }),
+}));
 
 const THEME_OPTIONS = [
   { value: "system", label: "System", icon: Monitor },
@@ -205,7 +230,7 @@ export function ProfilePage() {
                   Weekly Email Reports
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Receive your Spendoza report every Saturday at 9am
+                  Receive your Spendoza financial report via email
                 </p>
               </div>
               <Switch
@@ -216,9 +241,74 @@ export function ProfilePage() {
                 }
               />
             </div>
-            {profile?.timezone && (
-              <div className="text-xs text-muted-foreground">
-                Timezone: {profile.timezone}
+            {profile?.email_reports_enabled && (
+              <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4">
+                <p className="text-sm font-medium">Report Schedule</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Day
+                    </Label>
+                    <Select
+                      value={profile?.email_report_day ?? "saturday"}
+                      onValueChange={(value) =>
+                        updateProfile.mutate({
+                          email_report_day: value as any,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DAY_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Time
+                    </Label>
+                    <Select
+                      value={String(profile?.email_report_hour ?? 9)}
+                      onValueChange={(value) =>
+                        updateProfile.mutate({
+                          email_report_hour: parseInt(value, 10),
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {HOUR_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Receive your report every{" "}
+                  {DAY_OPTIONS.find(
+                    (d) =>
+                      d.value ===
+                      (profile?.email_report_day ?? "saturday")
+                  )?.label ?? "Saturday"}{" "}
+                  at{" "}
+                  {HOUR_OPTIONS.find(
+                    (h) =>
+                      h.value ===
+                      String(profile?.email_report_hour ?? 9)
+                  )?.label ?? "9 AM"}
+                  {profile?.timezone ? ` (${profile.timezone})` : ""}
+                </p>
               </div>
             )}
           </div>

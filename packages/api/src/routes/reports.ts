@@ -198,12 +198,14 @@ router.get(
       }
 
       const filename = `spendoza-report-${month.slice(0, 7)}.pdf`;
+
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="${filename}"`
       );
       res.setHeader("Content-Length", result.pdfBuffer.length);
+
       return res.send(result.pdfBuffer);
     } catch (err) {
       console.error("[export/personal] Error generating PDF:", err);
@@ -249,12 +251,14 @@ router.get(
       }
 
       const filename = `spendoza-household-report-${month.slice(0, 7)}.pdf`;
+
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="${filename}"`
       );
       res.setHeader("Content-Length", result.pdfBuffer.length);
+
       return res.send(result.pdfBuffer);
     } catch (err) {
       console.error("[export/household] Error generating PDF:", err);

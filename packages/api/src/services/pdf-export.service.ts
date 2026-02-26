@@ -2,12 +2,21 @@ import { supabaseAdmin } from "../lib/supabase";
 import {
   generateUserReport,
   generateHouseholdReport,
-} from "./report.service";
-import { buildReportPdf } from "./pdf-report.service";
+} from "../services/report.service";
+import { buildReportPdf } from "../services/pdf-report.service";
 import type { ReportData } from "../ai/report-insights";
 
 // ---------------------------------------------------------------------------
-// Helper: format currency without cents
+// Return type for both generators
+// ---------------------------------------------------------------------------
+interface PdfExportResult {
+  pdfBuffer: Buffer;
+  reportData: ReportData;
+  aiInsights: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: format currency (same as reports.ts)
 // ---------------------------------------------------------------------------
 function formatCurrencySimple(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -21,7 +30,7 @@ function formatCurrencySimple(value: number): string {
 // ---------------------------------------------------------------------------
 // Helper: build savings recommendations from spending data
 // ---------------------------------------------------------------------------
-function buildSavingsRecommendations(
+export function buildSavingsRecommendations(
   reportData: ReportData,
   subscriptions: Array<{
     name: string;
@@ -103,7 +112,7 @@ function buildSavingsRecommendations(
 // ---------------------------------------------------------------------------
 // Helper: build goal progress from goals and report data
 // ---------------------------------------------------------------------------
-function buildGoalProgress(
+export function buildGoalProgress(
   goals: any[],
   reportData: ReportData
 ): Array<{
@@ -141,16 +150,12 @@ function buildGoalProgress(
 }
 
 // ---------------------------------------------------------------------------
-// Generate personal PDF for a user
+// generatePersonalPdfForUser
 // ---------------------------------------------------------------------------
 export async function generatePersonalPdfForUser(
   userId: string,
-  month: string // YYYY-MM-DD format
-): Promise<{
-  pdfBuffer: Buffer;
-  reportData: ReportData;
-  aiInsights: string | null;
-} | null> {
+  month: string
+): Promise<PdfExportResult | null> {
   // Try cached report
   let { data: report } = await supabaseAdmin
     .from("reports")
@@ -240,13 +245,11 @@ export async function generatePersonalPdfForUser(
     { month: "long", year: "numeric", timeZone: "UTC" }
   );
 
-  const aiInsights = report.ai_insights ?? null;
-
   const pdfBuffer = await buildReportPdf({
     title: profile?.display_name ?? "Personal",
     month: monthLabel,
     reportData,
-    aiInsights,
+    aiInsights: report.ai_insights ?? null,
     recurringBills: recurringBills ?? [],
     incomeSources: incomeSources ?? [],
     subscriptionsPaid,
@@ -254,20 +257,20 @@ export async function generatePersonalPdfForUser(
     savingsRecommendations,
   });
 
-  return { pdfBuffer, reportData, aiInsights };
+  return {
+    pdfBuffer,
+    reportData,
+    aiInsights: report.ai_insights ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Generate household PDF for a household
+// generateHouseholdPdfForHousehold
 // ---------------------------------------------------------------------------
 export async function generateHouseholdPdfForHousehold(
   householdId: string,
-  month: string // YYYY-MM-DD format
-): Promise<{
-  pdfBuffer: Buffer;
-  reportData: ReportData;
-  aiInsights: string | null;
-} | null> {
+  month: string
+): Promise<PdfExportResult | null> {
   // Get household name
   const { data: household } = await supabaseAdmin
     .from("households")
@@ -394,13 +397,11 @@ export async function generateHouseholdPdfForHousehold(
     { month: "long", year: "numeric", timeZone: "UTC" }
   );
 
-  const aiInsights = report.ai_insights ?? null;
-
   const pdfBuffer = await buildReportPdf({
     title: household?.name ?? "Household",
     month: monthLabel,
     reportData,
-    aiInsights,
+    aiInsights: report.ai_insights ?? null,
     recurringBills: recurringBills ?? [],
     incomeSources: incomeSources ?? [],
     memberContributions,
@@ -409,5 +410,9 @@ export async function generateHouseholdPdfForHousehold(
     savingsRecommendations,
   });
 
-  return { pdfBuffer, reportData, aiInsights };
+  return {
+    pdfBuffer,
+    reportData,
+    aiInsights: report.ai_insights ?? null,
+  };
 }

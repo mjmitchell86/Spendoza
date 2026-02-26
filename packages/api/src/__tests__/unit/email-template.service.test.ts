@@ -16,15 +16,14 @@ describe("email-template.service", () => {
         "Housing is your largest expense at $1,400.",
       ],
       appReportUrl: "https://spendoza.io/dashboard",
-      unsubscribeUrl:
-        "https://api.spendoza.io/api/emails/unsubscribe?token=abc",
+      unsubscribeUrl: "https://api.spendoza.io/api/emails/unsubscribe?token=abc",
     });
 
     expect(html).toContain("Matt");
     expect(html).toContain("January 2026");
-    expect(html).toContain("7,500");
-    expect(html).toContain("2,200");
-    expect(html).toContain("5,300");
+    expect(html).toContain("$7,500");
+    expect(html).toContain("$2,200");
+    expect(html).toContain("$5,300");
     expect(html).toContain("70.67%");
     expect(html).toContain("Your savings rate is strong");
     expect(html).toContain("Housing is your largest expense");
@@ -43,8 +42,7 @@ describe("email-template.service", () => {
       savingsRate: 0,
       aiInsights: [],
       appReportUrl: "https://spendoza.io/dashboard",
-      unsubscribeUrl:
-        "https://api.spendoza.io/api/emails/unsubscribe?token=xyz",
+      unsubscribeUrl: "https://api.spendoza.io/api/emails/unsubscribe?token=xyz",
     });
 
     expect(html).toContain("Test");
