@@ -15,6 +15,7 @@ import dashboardRouter from "./routes/dashboard";
 import goalsRouter from "./routes/goals";
 import inviteCodesRouter from "./routes/invite-codes";
 import internalRouter from "./routes/internal";
+import emailsRouter from "./routes/emails";
 import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/error-handler";
 
@@ -64,6 +65,7 @@ app.use("/api/reports", reportsRouter);
 app.use("/api/internal", internalRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/goals", requireAuth, goalsRouter);
+app.use("/api/emails", emailsRouter);
 
 // Global error handler (must be LAST middleware)
 app.use(errorHandler);
