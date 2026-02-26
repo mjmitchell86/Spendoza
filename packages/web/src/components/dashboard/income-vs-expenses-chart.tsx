@@ -45,7 +45,7 @@ export function IncomeVsExpensesChart({ summary }: IncomeVsExpensesChartProps) {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
-              margin={{ top: 16, right: 16, left: 16, bottom: 0 }}
+              margin={{ top: 16, right: 8, left: 0, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
@@ -57,7 +57,7 @@ export function IncomeVsExpensesChart({ summary }: IncomeVsExpensesChartProps) {
                 tickFormatter={(v: number) => formatCurrency(v)}
                 tick={{ fontSize: 12 }}
                 className="fill-muted-foreground"
-                width={80}
+                width={60}
               />
               <Tooltip
                 formatter={(value: number) => [formatCurrency(value), ""]}
@@ -65,8 +65,11 @@ export function IncomeVsExpensesChart({ summary }: IncomeVsExpensesChartProps) {
                   borderRadius: "8px",
                   border: "1px solid hsl(var(--border))",
                   backgroundColor: "hsl(var(--card))",
+                  color: "hsl(var(--foreground))",
                   fontSize: "13px",
                 }}
+                itemStyle={{ color: "hsl(var(--foreground))" }}
+                labelStyle={{ color: "hsl(var(--foreground))" }}
               />
               <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={64}>
                 {data.map((entry) => (

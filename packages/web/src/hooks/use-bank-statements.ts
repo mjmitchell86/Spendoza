@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api";
+import { apiClient, API_BASE } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import type {
   BankStatement,
@@ -11,21 +11,40 @@ export function useBankStatements() {
   return useQuery<BankStatement[]>({
     queryKey: ["bank-statements"],
     queryFn: () => apiClient("/bank-statements"),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      const hasProcessing = data.some(
+        (s) => s.status === "uploaded" || s.status === "processing"
+      );
+      return hasProcessing ? 3000 : false;
+    },
   });
 }
 
 export function useBankStatement(id: string | null) {
-  return useQuery<BankStatement>({
+  const query = useQuery<BankStatement>({
     queryKey: ["bank-statements", id],
-    queryFn: () => apiClient(`/bank-statements/${id}`),
+    queryFn: async () => {
+      const res = await apiClient(`/bank-statements/${id}`);
+      return res.statement;
+    },
     enabled: !!id,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "uploaded" || status === "processing" ? 3000 : false;
+    },
   });
+  return query;
 }
 
 export function useTransactions(statementId: string | null) {
   return useQuery<Transaction[]>({
     queryKey: ["transactions", statementId],
-    queryFn: () => apiClient(`/bank-statements/${statementId}/transactions`),
+    queryFn: async () => {
+      const res = await apiClient(`/bank-statements/${statementId}`);
+      return res.transactions;
+    },
     enabled: !!statementId,
   });
 }
@@ -37,7 +56,7 @@ export function useUploadBankStatement() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      const response = await fetch("/api/bank-statements/upload", {
+      const response = await fetch(`${API_BASE}/api/bank-statements/upload`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session?.access_token}`,
@@ -50,6 +69,28 @@ export function useUploadBankStatement() {
       }
       return response.json();
     },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["bank-statements"] });
+    },
+  });
+}
+
+export function useReprocessStatement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (statementId: string) =>
+      apiClient(`/bank-statements/${statementId}/reprocess`, { method: "POST" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["bank-statements"] });
+    },
+  });
+}
+
+export function useDeleteStatement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (statementId: string) =>
+      apiClient(`/bank-statements/${statementId}`, { method: "DELETE" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["bank-statements"] });
     },

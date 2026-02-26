@@ -40,9 +40,13 @@ export async function generateInsights(
   reportData: ReportData,
   entityType: "user" | "household"
 ): Promise<string> {
+  console.log(
+    `[report-insights] Generating ${entityType} insights (income: $${reportData.total_income.toFixed(2)}, expenses: $${reportData.total_expenses.toFixed(2)}, ${reportData.by_category.length} categories)`
+  );
+
   const model = new ChatOpenAI({
-    modelName: "gpt-4o-mini",
-    temperature: 0.3,
+    modelName: "gpt-5-mini",
+    timeout: 60_000,
   });
 
   const categoryBreakdown = reportData.by_category
@@ -75,15 +79,29 @@ Top Categories: ${reportData.top_categories.join(", ") || "None"}
 
 ${momSection}`;
 
-  const response = await model.invoke([
-    new SystemMessage(SYSTEM_PROMPT),
-    new HumanMessage(userPrompt),
-  ]);
+  let content: string;
+  try {
+    const startTime = Date.now();
+    const response = await model.invoke([
+      new SystemMessage(SYSTEM_PROMPT),
+      new HumanMessage(userPrompt),
+    ]);
+    const elapsed = Date.now() - startTime;
 
-  const content =
-    typeof response.content === "string"
-      ? response.content
-      : JSON.stringify(response.content);
+    content =
+      typeof response.content === "string"
+        ? response.content
+        : JSON.stringify(response.content);
+
+    console.log(
+      `[report-insights] AI insights generated in ${elapsed}ms (${content.length} chars)`
+    );
+  } catch (error) {
+    console.error("[report-insights] OpenAI API call failed:", error);
+    throw new Error(
+      `AI insight generation failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 
   return content;
 }

@@ -51,7 +51,7 @@ function getPrevStep(step: Step): Step {
 
 export function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState<Step>("welcome");
-  const [statementId, setStatementId] = useState<string | null>(null);
+  const [statementIds, setStatementIds] = useState<string[]>([]);
 
   const handleProcessingComplete = useCallback(() => {
     setCurrentStep("review");
@@ -69,8 +69,8 @@ export function OnboardingPage() {
       case "upload":
         return (
           <UploadStep
-            onNext={(id) => {
-              setStatementId(id);
+            onNext={(ids) => {
+              setStatementIds(ids);
               setCurrentStep("processing");
             }}
             onSkip={() => setCurrentStep("household")}
@@ -78,18 +78,18 @@ export function OnboardingPage() {
         );
 
       case "processing":
-        return statementId ? (
+        return statementIds.length > 0 ? (
           <ProcessingStep
-            statementId={statementId}
+            statementIds={statementIds}
             onComplete={handleProcessingComplete}
             onError={handleProcessingError}
           />
         ) : null;
 
       case "review":
-        return statementId ? (
+        return statementIds.length > 0 ? (
           <ReviewStep
-            statementId={statementId}
+            statementIds={statementIds}
             onNext={() => setCurrentStep("household")}
           />
         ) : null;

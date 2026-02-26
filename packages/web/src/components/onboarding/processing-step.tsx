@@ -1,96 +1,128 @@
 import { useEffect } from "react";
 import { RefreshCw, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useBankStatement } from "@/hooks/use-bank-statements";
+import { useBankStatements } from "@/hooks/use-bank-statements";
 
 interface ProcessingStepProps {
-  statementId: string;
+  statementIds: string[];
   onComplete: () => void;
   onError: () => void;
 }
 
-const STATUS_MESSAGES = [
-  "Reading your bank statement...",
-  "Extracting transactions...",
-  "Categorizing expenses...",
-  "Preparing your data...",
-];
+const STEP_MESSAGES: Record<string, string> = {
+  extract_text: "Reading your bank statement...",
+  extract_transactions: "Extracting transactions...",
+  classify_transactions: "Categorizing expenses...",
+  match_and_insert: "Preparing your data...",
+};
 
 export function ProcessingStep({
-  statementId,
+  statementIds,
   onComplete,
   onError,
 }: ProcessingStepProps) {
-  const { data: statement } = useBankStatement(statementId);
+  // Poll all statements via the list endpoint (already has auto-refetch)
+  const { data: allStatements } = useBankStatements();
 
-  // Poll for status updates
+  const tracked = (allStatements ?? []).filter((s) =>
+    statementIds.includes(s.id)
+  );
+
+  const parsedCount = tracked.filter((s) => s.status === "parsed").length;
+  const failedCount = tracked.filter((s) => s.status === "failed").length;
+  const totalCount = statementIds.length;
+  const allDone = tracked.length === totalCount && parsedCount + failedCount === totalCount;
+  const allParsed = parsedCount === totalCount;
+  const allFailed = failedCount === totalCount;
+
+  // Find the current pipeline step for any still-processing statement
+  const processing = tracked.find(
+    (s) => s.status === "processing" || s.status === "uploaded"
+  );
+  const pipelineStep = (processing?.parsed_data as any)?.pipeline_step as
+    | string
+    | undefined;
+  const statusMessage =
+    (pipelineStep && STEP_MESSAGES[pipelineStep]) ??
+    "Processing your statements...";
+
   useEffect(() => {
-    if (!statement) return;
+    if (!allDone) return;
 
-    if (statement.status === "parsed") {
-      // Small delay so the user sees the success state
-      const timer = setTimeout(onComplete, 1200);
-      return () => clearTimeout(timer);
-    }
+    if (allFailed) return; // Don't auto-advance if everything failed
 
-    if (statement.status === "failed") {
-      return;
-    }
+    const timer = setTimeout(onComplete, 1200);
+    return () => clearTimeout(timer);
+  }, [allDone, allFailed, onComplete]);
 
-    // Keep polling if still processing
-    const interval = setInterval(() => {
-      // TanStack Query will refetch automatically with staleTime
-    }, 3000);
+  if (allDone && allParsed) {
+    return (
+      <div className="flex flex-col items-center gap-6 py-8 text-center">
+        <CheckCircle2 className="size-16 text-green-500" />
+        <div>
+          <h2 className="text-xl font-semibold">All Done!</h2>
+          <p className="text-sm text-muted-foreground">
+            {totalCount === 1
+              ? "Your transactions have been extracted successfully."
+              : `All ${totalCount} statements processed successfully.`}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-    return () => clearInterval(interval);
-  }, [statement, onComplete]);
+  if (allDone && allFailed) {
+    return (
+      <div className="flex flex-col items-center gap-6 py-8 text-center">
+        <XCircle className="size-16 text-red-500" />
+        <div>
+          <h2 className="text-xl font-semibold">Processing Failed</h2>
+          <p className="text-sm text-muted-foreground">
+            We couldn't process your bank{" "}
+            {totalCount === 1 ? "statement" : "statements"}. You can try again
+            later.
+          </p>
+        </div>
+        <Button variant="outline" onClick={onError}>
+          Continue Anyway
+        </Button>
+      </div>
+    );
+  }
 
-  const isParsed = statement?.status === "parsed";
-  const isFailed = statement?.status === "failed";
-
-  // Cycle through messages while processing
-  const messageIndex =
-    Math.floor(Date.now() / 3000) % STATUS_MESSAGES.length;
+  if (allDone) {
+    // Partial success
+    return (
+      <div className="flex flex-col items-center gap-6 py-8 text-center">
+        <CheckCircle2 className="size-16 text-green-500" />
+        <div>
+          <h2 className="text-xl font-semibold">Processing Complete</h2>
+          <p className="text-sm text-muted-foreground">
+            {parsedCount} of {totalCount} statements processed successfully.
+            {failedCount > 0 && ` ${failedCount} failed — you can retry later.`}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center gap-6 py-8 text-center">
-      {isParsed ? (
-        <>
-          <CheckCircle2 className="size-16 text-green-500" />
-          <div>
-            <h2 className="text-xl font-semibold">All Done!</h2>
-            <p className="text-sm text-muted-foreground">
-              Your transactions have been extracted successfully.
-            </p>
-          </div>
-        </>
-      ) : isFailed ? (
-        <>
-          <XCircle className="size-16 text-red-500" />
-          <div>
-            <h2 className="text-xl font-semibold">Processing Failed</h2>
-            <p className="text-sm text-muted-foreground">
-              We couldn't process your bank statement. You can try again later.
-            </p>
-          </div>
-          <Button variant="outline" onClick={onError}>
-            Continue Anyway
-          </Button>
-        </>
-      ) : (
-        <>
-          <RefreshCw className="size-16 animate-spin text-primary" />
-          <div>
-            <h2 className="text-xl font-semibold">Processing Your Statement</h2>
-            <p className="text-sm text-muted-foreground">
-              {STATUS_MESSAGES[messageIndex]}
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            This usually takes a minute or two.
+      <RefreshCw className="size-16 animate-spin text-primary" />
+      <div>
+        <h2 className="text-xl font-semibold">
+          Processing Your {totalCount === 1 ? "Statement" : "Statements"}
+        </h2>
+        <p className="text-sm text-muted-foreground">{statusMessage}</p>
+        {totalCount > 1 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {parsedCount + failedCount} of {totalCount} complete
           </p>
-        </>
-      )}
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        This usually takes a minute or two{totalCount > 1 ? " per statement" : ""}.
+      </p>
     </div>
   );
 }

@@ -8,14 +8,20 @@ export function AuthGuard() {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
 
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(
     null
   );
 
   useEffect(() => {
     if (!user) {
-      setProfileLoading(false);
+      setInitialLoading(false);
+      return;
+    }
+
+    // Skip re-fetch if we already know onboarding is completed
+    if (onboardingCompleted === true) {
+      setInitialLoading(false);
       return;
     }
 
@@ -34,7 +40,7 @@ export function AuthGuard() {
         }
       } finally {
         if (!cancelled) {
-          setProfileLoading(false);
+          setInitialLoading(false);
         }
       }
     }
@@ -44,10 +50,10 @@ export function AuthGuard() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, location.pathname]);
 
   // Show spinner while auth or profile is loading
-  if (authLoading || (user && profileLoading)) {
+  if (authLoading || (user && initialLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -60,9 +66,18 @@ export function AuthGuard() {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // If navigating from onboarding with completed state, update our local state
+  if (location.state?.onboardingCompleted && onboardingCompleted === false) {
+    setOnboardingCompleted(true);
+  }
+
   // If onboarding not completed, redirect to onboarding
   // (unless already on the onboarding page)
-  if (onboardingCompleted === false && location.pathname !== "/onboarding") {
+  if (
+    onboardingCompleted === false &&
+    location.pathname !== "/onboarding" &&
+    !location.state?.onboardingCompleted
+  ) {
     return <Navigate to="/onboarding" replace />;
   }
 

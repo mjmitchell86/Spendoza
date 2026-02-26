@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -6,7 +6,8 @@ import {
   Tags,
   FileText,
   Users,
-  BarChart3,
+  ArrowLeftRight,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,8 +17,9 @@ const navItems = [
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/categories", label: "Categories", icon: Tags },
   { to: "/bank-statements", label: "Bank Statements", icon: FileText },
+  { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
+  { to: "/goals", label: "Goals", icon: Target },
   { to: "/household", label: "Household", icon: Users },
-  { to: "/household-dashboard", label: "Household Dashboard", icon: BarChart3 },
 ];
 
 interface SidebarProps {
@@ -26,6 +28,9 @@ interface SidebarProps {
 
 export function Sidebar({ onNavigate }: SidebarProps) {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const periodParam = searchParams.get("period");
+  const search = periodParam ? `?period=${periodParam}` : "";
 
   return (
     <nav className="flex flex-col gap-1 px-3 py-4">
@@ -36,7 +41,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         return (
           <Link
             key={item.to}
-            to={item.to}
+            to={item.to + search}
             onClick={onNavigate}
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",

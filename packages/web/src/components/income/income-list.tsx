@@ -58,9 +58,11 @@ export function IncomeList({
   const deleteIncome = useDeleteIncome();
   const [deleteTarget, setDeleteTarget] = useState<IncomeEntry | null>(null);
 
-  function getMemberName(userId: string | null) {
-    if (!userId || !householdMembers) return null;
-    return householdMembers.find((m) => m.id === userId)?.display_name ?? null;
+  function getAttributionLabel(entry: IncomeEntry) {
+    if (entry.attributed_to_user_id && householdMembers) {
+      return householdMembers.find((m) => m.id === entry.attributed_to_user_id)?.display_name ?? null;
+    }
+    return entry.attributed_to_name ?? null;
   }
 
   async function handleDelete() {
@@ -86,6 +88,7 @@ export function IncomeList({
 
   return (
     <>
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -100,13 +103,25 @@ export function IncomeList({
         </TableHeader>
         <TableBody>
           {entries.map((entry) => {
-            const memberName = getMemberName(entry.attributed_to_user_id);
+            const memberName = getAttributionLabel(entry);
             return (
               <TableRow key={entry.id}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
-                    <span className="font-medium">{entry.source_name}</span>
+                    <span className="font-medium">
+                      {entry.friendly_name || entry.source_name}
+                    </span>
+                    {entry.friendly_name && (
+                      <span className="text-xs text-muted-foreground">
+                        {entry.source_name}
+                      </span>
+                    )}
                     <div className="flex flex-wrap gap-1">
+                      {entry.auto_detected && (
+                        <Badge variant="outline" className="text-xs">
+                          Auto-detected
+                        </Badge>
+                      )}
                       {entry.is_ai_suggested && (
                         <Badge variant="secondary" className="text-xs">
                           AI Suggested
@@ -154,6 +169,7 @@ export function IncomeList({
           })}
         </TableBody>
       </Table>
+      </div>
 
       <Dialog
         open={!!deleteTarget}

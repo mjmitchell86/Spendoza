@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Menu, Settings, User } from "lucide-react";
+import { LogOut, Menu, Settings, Ticket, User } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { InviteCodesDialog } from "@/components/invite-codes/invite-codes-dialog";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useProfile } from "@/hooks/use-profile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,9 +22,11 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, signOut } = useAuth();
+  const { data: profile } = useProfile();
   const navigate = useNavigate();
+  const [inviteCodesOpen, setInviteCodesOpen] = useState(false);
 
-  const displayName = user?.user_metadata?.display_name ?? user?.email ?? "User";
+  const displayName = profile?.display_name || user?.user_metadata?.display_name || user?.email || "User";
   const initials = displayName
     .split(" ")
     .map((n: string) => n[0])
@@ -59,6 +64,9 @@ export function Header({ onMenuClick }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative size-8 rounded-full">
               <Avatar className="size-8">
+                {profile?.avatar_url && (
+                  <AvatarImage src={profile.avatar_url} alt={displayName} />
+                )}
                 <AvatarFallback className="text-xs">{initials}</AvatarFallback>
               </Avatar>
             </Button>
@@ -77,6 +85,10 @@ export function Header({ onMenuClick }: HeaderProps) {
               <User className="mr-2 size-4" />
               Profile
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setInviteCodesOpen(true)}>
+              <Ticket className="mr-2 size-4" />
+              Invite Codes
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/settings")}>
               <Settings className="mr-2 size-4" />
               Settings
@@ -90,6 +102,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         </DropdownMenu>
       </div>
       <Separator />
+      <InviteCodesDialog open={inviteCodesOpen} onOpenChange={setInviteCodesOpen} />
     </header>
   );
 }

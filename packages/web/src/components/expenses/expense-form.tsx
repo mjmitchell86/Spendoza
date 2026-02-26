@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import type {
   Expense,
   ExpenseFrequency,
@@ -50,6 +50,7 @@ export function ExpenseForm({
   const updateExpense = useUpdateExpense();
 
   const [description, setDescription] = useState(expense?.description ?? "");
+  const [friendlyName, setFriendlyName] = useState(expense?.friendly_name ?? "");
   const [amount, setAmount] = useState(expense?.amount?.toString() ?? "");
   const [categoryId, setCategoryId] = useState(expense?.category_id ?? "");
   const [frequency, setFrequency] = useState<ExpenseFrequency>(
@@ -63,10 +64,26 @@ export function ExpenseForm({
   const [endDate, setEndDate] = useState(expense?.end_date ?? "");
   const [error, setError] = useState<string | null>(null);
 
+  // Sync form state when expense prop changes (e.g. clicking Edit on a different expense)
+  useEffect(() => {
+    if (expense) {
+      setDescription(expense.description);
+      setFriendlyName(expense.friendly_name ?? "");
+      setAmount(expense.amount.toString());
+      setCategoryId(expense.category_id);
+      setFrequency(expense.frequency);
+      setRecurrenceInterval(expense.recurrence_interval ?? "monthly");
+      setNextDueDate(expense.next_due_date);
+      setEndDate(expense.end_date ?? "");
+      setError(null);
+    }
+  }, [expense]);
+
   const isPending = createExpense.isPending || updateExpense.isPending;
 
   function resetForm() {
     setDescription("");
+    setFriendlyName("");
     setAmount("");
     setCategoryId("");
     setFrequency("one_time");
@@ -82,6 +99,7 @@ export function ExpenseForm({
 
     const data = {
       description: description.trim(),
+      friendly_name: friendlyName.trim() || null,
       amount: parseFloat(amount),
       category_id: categoryId,
       frequency,
@@ -136,7 +154,20 @@ export function ExpenseForm({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="friendly_name">Friendly Name (optional)</Label>
+            <Input
+              id="friendly_name"
+              value={friendlyName}
+              onChange={(e) => setFriendlyName(e.target.value)}
+              placeholder="e.g. Netflix, Gym Membership"
+            />
+            <p className="text-xs text-muted-foreground">
+              A short display name shown instead of the raw description
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="expense_amount">Amount</Label>
               <Input
@@ -168,7 +199,7 @@ export function ExpenseForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>Type</Label>
               <Select
@@ -209,7 +240,7 @@ export function ExpenseForm({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="next_due_date">Next Due Date</Label>
               <Input

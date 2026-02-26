@@ -10,13 +10,6 @@ function startOfMonth(date: Date): Date {
   return new Date(Date.UTC(date.getFullYear(), date.getMonth(), 1));
 }
 
-/** Returns the last day of the given month (Date at 23:59:59.999 UTC). */
-function endOfMonth(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999)
-  );
-}
-
 /** Format date as YYYY-MM-DD for Supabase queries. */
 function toDateStr(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -34,10 +27,11 @@ function pct(part: number, whole: number): number {
 
 export async function generateUserReport(
   userId: string,
-  month: Date
+  month: Date,
+  force = false
 ): Promise<any> {
   const monthStart = startOfMonth(month);
-  const monthEnd = endOfMonth(month);
+
   const monthStr = toDateStr(monthStart);
 
   // 1. Check for cached report with no new data
@@ -49,44 +43,42 @@ export async function generateUserReport(
     .eq("report_month", monthStr)
     .maybeSingle();
 
-  if (existingReport && !existingReport.has_new_data) {
+  if (!force && existingReport && !existingReport.has_new_data) {
     return existingReport;
   }
 
-  // 2. Query income entries for this month
-  //    Income is active if effective_date <= month end AND (end_date IS NULL OR end_date >= month start)
-  const { data: incomeEntries } = await supabaseAdmin
-    .from("income_entries")
-    .select("*")
+  // 2. Query bank transactions for this month (matches what the dashboard displays)
+  const nextMonthDate = new Date(
+    Date.UTC(monthStart.getFullYear(), monthStart.getMonth() + 1, 1)
+  );
+  const { data: transactions } = await supabaseAdmin
+    .from("transactions")
+    .select("amount, type, ai_category")
     .eq("user_id", userId)
-    .lte("effective_date", toDateStr(monthEnd))
-    .or(`end_date.is.null,end_date.gte.${toDateStr(monthStart)}`);
+    .gte("date", toDateStr(monthStart))
+    .lt("date", toDateStr(nextMonthDate));
 
-  const totalIncome = (incomeEntries ?? []).reduce(
-    (sum: number, e: any) => sum + (e.amount ?? 0),
-    0
-  );
+  const txns = transactions ?? [];
 
-  // 3. Query expenses for this month (with category join)
-  const { data: expenses } = await supabaseAdmin
-    .from("expenses")
-    .select("*, categories(name)")
-    .eq("user_id", userId);
+  let totalIncome: number;
+  let totalExpenses: number;
+  let byCategory: Array<{ category: string; amount: number; percentage: number }>;
 
-  const totalExpenses = (expenses ?? []).reduce(
-    (sum: number, e: any) => sum + (e.amount ?? 0),
-    0
-  );
+  // Use bank transactions only — same data source the dashboard displays
+  totalIncome = txns
+    .filter((t) => t.type === "credit")
+    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+  totalExpenses = txns
+    .filter((t) => t.type === "debit")
+    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
 
-  // 4. Compute by_category breakdown
   const categoryMap = new Map<string, number>();
-  for (const exp of expenses ?? []) {
-    const catName =
-      exp.categories?.name ?? "Uncategorized";
-    categoryMap.set(catName, (categoryMap.get(catName) ?? 0) + exp.amount);
+  for (const t of txns.filter((t) => t.type === "debit")) {
+    const cat = t.ai_category ?? "Uncategorized";
+    categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
   }
 
-  const byCategory = Array.from(categoryMap.entries())
+  byCategory = Array.from(categoryMap.entries())
     .map(([category, amount]) => ({
       category,
       amount,
@@ -148,8 +140,13 @@ export async function generateUserReport(
     month_over_month: monthOverMonth,
   };
 
-  // 8. Generate AI insights
-  const aiInsights = await generateInsights(reportData, "user");
+  // 8. Generate AI insights (non-fatal — save report even if AI fails)
+  let aiInsights: string | null = null;
+  try {
+    aiInsights = await generateInsights(reportData, "user");
+  } catch (err) {
+    console.error("[report] AI insight generation failed, saving report without insights:", err);
+  }
 
   // 9. Upsert report
   const { data: upsertedReport } = await supabaseAdmin
@@ -186,10 +183,11 @@ export async function generateUserReport(
 
 export async function generateHouseholdReport(
   householdId: string,
-  month: Date
+  month: Date,
+  force = false
 ): Promise<any> {
   const monthStart = startOfMonth(month);
-  const monthEnd = endOfMonth(month);
+
   const monthStr = toDateStr(monthStart);
 
   // 1. Check for cached report
@@ -201,7 +199,7 @@ export async function generateHouseholdReport(
     .eq("report_month", monthStr)
     .maybeSingle();
 
-  if (existingReport && !existingReport.has_new_data) {
+  if (!force && existingReport && !existingReport.has_new_data) {
     return existingReport;
   }
 
@@ -213,38 +211,35 @@ export async function generateHouseholdReport(
 
   const memberIds = (members ?? []).map((m: any) => m.id);
 
-  // 3. Aggregate income across sharing members
+  // 3. Query bank transactions for all sharing members this month
+  const nextMonthDate = new Date(
+    Date.UTC(monthStart.getFullYear(), monthStart.getMonth() + 1, 1)
+  );
+
   let totalIncome = 0;
   let totalExpenses = 0;
   const categoryMap = new Map<string, number>();
-
   for (const member of members ?? []) {
-    // Income: only include if sharing mode is "all"
-    if (member.income_sharing_mode === "all") {
-      const { data: incomeEntries } = await supabaseAdmin
-        .from("income_entries")
-        .select("amount")
-        .eq("user_id", member.id)
-        .lte("effective_date", toDateStr(monthEnd))
-        .or(`end_date.is.null,end_date.gte.${toDateStr(monthStart)}`);
+    const includeIncome = member.income_sharing_mode === "all";
+    const includeExpenses = member.expense_sharing_mode === "all";
+    if (!includeIncome && !includeExpenses) continue;
 
-      totalIncome += (incomeEntries ?? []).reduce(
-        (sum: number, e: any) => sum + (e.amount ?? 0),
-        0
-      );
-    }
+    const { data: transactions } = await supabaseAdmin
+      .from("transactions")
+      .select("amount, type, ai_category")
+      .eq("user_id", member.id)
+      .gte("date", toDateStr(monthStart))
+      .lt("date", toDateStr(nextMonthDate));
 
-    // Expenses: only include if sharing mode is "all"
-    if (member.expense_sharing_mode === "all") {
-      const { data: expenses } = await supabaseAdmin
-        .from("expenses")
-        .select("*, categories(name)")
-        .eq("user_id", member.id);
-
-      for (const exp of expenses ?? []) {
-        totalExpenses += exp.amount ?? 0;
-        const catName = exp.categories?.name ?? "Uncategorized";
-        categoryMap.set(catName, (categoryMap.get(catName) ?? 0) + exp.amount);
+    const txns = transactions ?? [];
+    for (const t of txns) {
+      if (t.type === "credit" && includeIncome) {
+        totalIncome += t.amount ?? 0;
+      }
+      if (t.type === "debit" && includeExpenses) {
+        totalExpenses += t.amount ?? 0;
+        const cat = t.ai_category ?? "Uncategorized";
+        categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
       }
     }
   }
@@ -313,8 +308,13 @@ export async function generateHouseholdReport(
     month_over_month: monthOverMonth,
   };
 
-  // 8. Generate AI insights
-  const aiInsights = await generateInsights(reportData, "household");
+  // 8. Generate AI insights (non-fatal — save report even if AI fails)
+  let aiInsights: string | null = null;
+  try {
+    aiInsights = await generateInsights(reportData, "household");
+  } catch (err) {
+    console.error("[report] AI insight generation failed, saving report without insights:", err);
+  }
 
   // 9. Upsert report
   const { data: upsertedReport } = await supabaseAdmin

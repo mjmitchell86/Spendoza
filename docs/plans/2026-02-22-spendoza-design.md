@@ -541,12 +541,57 @@ GET    /api/dashboard/household
 
 ## 12. Future Considerations (Out of Scope for v1)
 
-- Mobile app (React Native) consuming the same REST API
-- Budget goals and tracking
-- Savings goals
-- Bill reminders / notifications
-- Bank API integration (Plaid) for automatic transaction import
-- Multi-currency support
-- Expense splitting between household members
-- Head of household transfer
+X - Budget goals, Savings Goals, and tracking for each.  example: I want to make sure to only spend $400 in groceries each month.  Should be able to track that and see progress or if it's slipping month to month
+X- Savings goals
+X - Household report generation
+X - When analyzing bank statement, pull which bank if no bank name was provided.  Always use provided bank name as the bank if availalbe.
+X - When uploading bank statements, change the date picker to only by month and year
+X - When filtering, allow an option to specify which month/year specifically along with the current options.
+X - Update UI to be mobile responsive
+X - Once bank statement is processed, delete the raw file uploaded to supabase storage
+X - Invite Code necessary for new user creation.  Default invite code Chloe14 as a way to join by admin invite.  A user can create up to 3 invite codes for other users.  Create invite code from the profile dropdown.
+X - Evaluate all screens/components to make sure they are responsive for mobile screens
+X - Update README with new workflow and functionalities
+X - When uploading a bank statement, the bank statement date should be an optional override.  The llm should figure out the date based on the date of the individual transactions.  
+X - Profile page should allow for updating name, profile image, dark mode/light mode preference.
+X - run all necessary sql migrations in supabase prod
+X - limit manual refresh report generation to 2X per 24 hours in production (do not limit in test)
+X - Fix upcoming bills
+X - Dark mode, chart on hover all the text is black and you can't see the values
+X - Update onboarding wizard bank statement upload to match the new bank statement upload
+X - Show Month and Year on the dashboard of the data we are seeing
+X - allow for uploading batch in UI.  Make sure that each pdf is a seperate api call to the Spendoza back end to prevent limits from being hit.
+X - if expenses are from the same store but different values, don't assume re-occuring
+X - After onboarding or if a bank statemenet is uploaded for this month or last month, trigger report generation
+X - For income and expenses page, use the same rules for default filter that apply for the dashboard.  Show the month of the lastest data that is available.  Make sure to display the month and year.
+X - Ability to add a friendly name to the auto_detected expenses
+X - when editing auto-detected expenses, auto populate the fields in the form
+X - Ability to specify if income is by different members of the household (or from someone who isn't the user)
+X - Leave a household
+X - Head of household transfer to a household member
+X - if only recurring expenses for current month, default to previous month that has uploaded data
+X - Use llm to also auto detect recurring income along with recurring expenses.  Also provide friendly name that is editable in the asme way expenses does
+X - For auto detecting expenses, make sure to include mortgages.  The monthly price of mortgages may be more variable than others, so it should still be counted even if one month is a decent bit higher or lower than the previous
+X - apply the same filter logic that the dashboard has to the household dashboard
+X - During onboarding, if a user creates a household, wait until their reports are all generated before generating a houeshold report.
+X - Filters should globally apply to site.  So the dashboard, income, expenses and househould dashboard should all respect the set filter and adjust accordingly.  Navigating from page to page should persist the specified filter and not resort to the default.
+
+- FIX SUPABASE AUTH ISSUE FOR RLS.  NO ANON KEY FOR SITE FOR SCREENS BEHIND AUTH CONTEXT.  Once user created or signed in, every screen needs to use auth context and be logged in to ensure you only see what you have access to.
+- Full UI Redesign - color pallete that compliments light mode and dark mode.  Responsive charts with filtering and grouping.  
+- fix profile photo
 - Export to CSV/PDF
+- Bill reminders / notifications
+- Expense splitting between household members
+- Multi-currency support with ability to convert currency 
+- Mobile app (React Native) consuming the same REST API
+- Monetize with Stripe (Plan)
+- Bank API integration (Plaid) for automatic transaction import
+- Claude Code Security Scan
+- Remotion Product Video from Claude Code skill https://www.remotion.dev/docs/ai/skills
+- Home Bank mode, setup a home bank and add transactions manually. This will be analyzed in the same way a Plaid update would instead of running llm on a month's worth transactions, it would run on smaller batches.  Mark if a transacction has been properly evaluated through llm to ensure auto detecting expenses, income and friendly name.  If they haven't, a daily cron job will go through and take care of it.
+- During onboarding, if a user creates a household, wait until their reports are all generated before generating a houeshold report.
+- Create an implementation plan for the following: If new transactions exist and a new ai report was generated since the last PDF report was generated, create a pdf report and email it to the user (by profile email address).  This should use resend with an email domain associated to the domains we have in vercel.  Both test and prod can use the same "from" email address. "no-reply@spendoza.io". There should be a PDF report for personal and for household.  Both should email weekly (saturday morning at 9am current timezone of the user).  A user should be able to disable or enable emailing of Spendoza Reports during onboarding and from their profile page.  The goal here is to have a proactive report delivered to each user weekly based on new information that is available.
+- Implement the email reporting feature
+- Cost analysis for running this with all dependenct services and plans (including claude sub).
+
+resend: re_27n8tzsH_2UL6iH4iDXSN4D9DJvg1YJps

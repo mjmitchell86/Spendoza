@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target node",
+    "build": "mkdir -p .vercel/output/functions/api.func && bun build src/index.ts --outfile .vercel/output/functions/api.func/index.mjs --target node && node scripts/post-build.cjs && cp $(node -e \"console.log(require.resolve('pdfjs-dist/build/pdf.worker.mjs'))\") .vercel/output/functions/api.func/pdf.worker.mjs && cp -r $(node -e \"const p=require.resolve('pdfkit/js/pdfkit.js');console.log(require('path').join(require('path').dirname(p),'data'))\") .vercel/output/functions/api.func/data && printf '{\"runtime\":\"nodejs20.x\",\"handler\":\"index.mjs\",\"launcherType\":\"Nodejs\",\"maxDuration\":180}' > .vercel/output/functions/api.func/.vc-config.json && printf '{\"version\":3,\"routes\":[{\"src\":\"/(.*)\",\"dest\":\"/api\"}]}' > .vercel/output/config.json",
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'no lint configured yet'",
-    "test": "bash run-tests.sh"
+    "test": "bash run-tests.sh",
+    "seed": "bun --env-file=.env src/scripts/seed-test-user.ts"
   },
   "dependencies": {
     "@langchain/community": "^0.3",
@@ -16,13 +17,16 @@
     "@langchain/openai": "^0.3",
     "@spendoza/shared": "workspace:*",
     "@supabase/supabase-js": "^2",
+    "@vercel/functions": "^3.4.2",
     "cors": "^2",
     "express": "^4",
     "express-rate-limit": "^7",
     "helmet": "^8",
     "langchain": "^0.3",
     "multer": "^2.0.2",
-    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.624",
+    "pdfkit": "^0.17.2",
+    "resend": "^6.9.2",
     "zod": "^3"
   },
   "devDependencies": {
@@ -30,7 +34,7 @@
     "@types/cors": "^2",
     "@types/express": "^4",
     "@types/multer": "^2.0.0",
-    "@types/pdf-parse": "^1.1.5",
+    "@types/pdfkit": "^0.17.5",
     "typescript": "^5"
   }
 }

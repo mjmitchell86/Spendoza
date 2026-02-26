@@ -55,7 +55,10 @@ function buildChain(results: Record<string, any>, calls: typeof adminCalls) {
       eq: (...args: any[]) => makeEqChain(depth + 1),
       gte: (...args: any[]) => makeEqChain(depth + 1),
       lte: (...args: any[]) => makeEqChain(depth + 1),
+      lt: (...args: any[]) => makeEqChain(depth + 1),
       or: (...args: any[]) => makeEqChain(depth + 1),
+      not: (...args: any[]) => makeEqChain(depth + 1),
+      in: (...args: any[]) => makeEqChain(depth + 1),
       is: (...args: any[]) => makeEqChain(depth + 1),
       order: (...args: any[]) => makeEqChain(depth + 1),
       limit: (...args: any[]) => makeEqChain(depth + 1),
@@ -307,8 +310,8 @@ beforeEach(() => {
       selectMaybeSingle: { data: sampleReport, error: null },
     },
     report_requests: {
-      selectMaybeSingle: { data: { request_count: 0 }, error: null },
-      upsertResult: { data: null, error: null },
+      selectList: { data: [], count: 0, error: null },
+      insertResult: { data: null, error: null },
     },
     profiles: {
       selectSingle: {
@@ -430,11 +433,6 @@ describe("POST /api/reports/generate", () => {
   const url = () => `${baseUrl}/api/reports/generate`;
 
   it("returns 200 with generated report", async () => {
-    adminResults.report_requests.selectMaybeSingle = {
-      data: { request_count: 0 },
-      error: null,
-    };
-
     const res = await fetch(url(), {
       method: "POST",
       headers: {
@@ -449,23 +447,57 @@ describe("POST /api/reports/generate", () => {
     expect(mockGenerateUserReport).toHaveBeenCalledTimes(1);
   });
 
-  it("returns 429 when at monthly limit", async () => {
-    adminResults.report_requests.selectMaybeSingle = {
-      data: { request_count: 2 },
+  it("returns 429 when at 24h limit in production", async () => {
+    const originalEnv = process.env.VERCEL_ENV;
+    process.env.VERCEL_ENV = "production";
+
+    adminResults.report_requests.selectList = {
+      data: null,
+      count: 2,
       error: null,
     };
 
-    const res = await fetch(url(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${TEST_TOKEN}`,
-      },
-    });
+    try {
+      const res = await fetch(url(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TEST_TOKEN}`,
+        },
+      });
 
-    expect(res.status).toBe(429);
-    const body = await res.json();
-    expect(body.error).toContain("Monthly report refresh limit reached");
+      expect(res.status).toBe(429);
+      const body = await res.json();
+      expect(body.error).toContain("2 per 24 hours");
+    } finally {
+      process.env.VERCEL_ENV = originalEnv;
+    }
+  });
+
+  it("skips rate limit in non-production", async () => {
+    const originalEnv = process.env.VERCEL_ENV;
+    delete process.env.VERCEL_ENV;
+
+    adminResults.report_requests.selectList = {
+      data: null,
+      count: 5,
+      error: null,
+    };
+
+    try {
+      const res = await fetch(url(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TEST_TOKEN}`,
+        },
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockGenerateUserReport).toHaveBeenCalledTimes(1);
+    } finally {
+      process.env.VERCEL_ENV = originalEnv;
+    }
   });
 
   it("returns 401 without auth token", async () => {
@@ -554,15 +586,24 @@ describe("GET /api/dashboard/personal", () => {
     expect(body.insights).toBeDefined();
   });
 
-  it("returns 404 when no report exists for dashboard", async () => {
+  it("returns 200 with computed data when no report exists", async () => {
     adminResults.reports.selectSingle = { data: null, error: null };
     adminResults.reports.selectMaybeSingle = { data: null, error: null };
+    adminResults.transactions = {
+      selectList: { data: [], error: null },
+    };
 
     const res = await fetch(url(), {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
     });
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summary).toBeDefined();
+    expect(body.summary.total_income).toBe(0);
+    expect(body.summary.total_expenses).toBe(0);
+    expect(body.summary.net).toBe(0);
+    expect(body.by_category).toEqual([]);
   });
 
   it("returns 401 without auth token", async () => {

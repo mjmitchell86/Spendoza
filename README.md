@@ -1,10 +1,10 @@
 # Spendoza
 
-Personal and household finance tracker with AI-powered bank statement processing, expense categorization, and financial insights.
+Personal and household finance tracker with AI-powered bank statement processing, automatic bill detection, goal tracking, and financial insights.
 
 ## Overview
 
-Spendoza helps individuals and households track income, expenses, and savings. Upload a bank statement PDF and the AI pipeline extracts transactions, classifies them into categories, and matches them against existing records. Monthly reports with AI-generated insights keep you informed about your financial health.
+Spendoza helps individuals and households take control of their finances. Upload a bank statement PDF and the AI pipeline extracts transactions, classifies them into your categories, detects recurring bills, and matches them against existing records. Set budget and savings goals, track progress over time, and get AI-generated insights in monthly reports.
 
 ```mermaid
 flowchart TB
@@ -18,7 +18,7 @@ flowchart TB
         MW[Middleware Layer<br/>Auth · Validation · Rate Limit]
         Routes[Route Handlers]
         Services[Services]
-        AI[AI Pipeline<br/>PDF Parse · Classify · Match · Insights]
+        AI[AI Pipeline<br/>PDF Parse · Classify · Match · Bill Detect]
     end
 
     subgraph External["External Services"]
@@ -89,7 +89,7 @@ spendoza/
     ├── api/                  # Express backend
     │   └── src/
     │       ├── routes/       # 10 route modules
-    │       ├── services/     # Business logic
+    │       ├── services/     # Business logic (reports, bill detection)
     │       ├── ai/           # AI pipeline modules
     │       ├── middleware/    # Auth, validation, error handling
     │       └── lib/          # Supabase client
@@ -108,25 +108,108 @@ spendoza/
 
 ```mermaid
 flowchart LR
-    PDF[PDF Upload] --> Extract[Text Extraction<br/><i>pdf-parse</i>]
+    PDF[PDF Upload<br/><i>Batch support</i>] --> Extract[Text Extraction<br/><i>pdf-parse</i>]
     Extract --> Parse[Transaction Parsing<br/><i>GPT-4o-mini</i>]
     Parse --> Classify[Categorization<br/><i>GPT-4o-mini</i>]
     Classify --> Match[Record Matching<br/><i>Jaccard Similarity</i>]
     Match --> DB[(Database)]
+    Match --> Bills[Bill Detection<br/><i>Pattern Analysis</i>]
+    Match --> Income[Income Detection<br/><i>Pattern Analysis</i>]
+    Bills --> DB
+    Income --> DB
+    DB --> Reports[Auto-Generate<br/>Reports]
 
     style PDF fill:#e3f2fd
     style Extract fill:#fff3e0
     style Parse fill:#fff3e0
     style Classify fill:#fff3e0
     style Match fill:#f3e5f5
+    style Bills fill:#fce4ec
+    style Income fill:#fce4ec
     style DB fill:#e8f5e9
+    style Reports fill:#e8f5e9
 ```
 
-Upload a bank statement PDF and the pipeline:
+Upload one or more bank statement PDFs (batch upload with drag-and-drop support) and the pipeline:
 1. Extracts raw text from the PDF
-2. Uses GPT-4o-mini to identify individual transactions
+2. Uses GPT-4o-mini to identify individual transactions (with auto-detected bank name and statement month)
 3. Classifies each transaction into user-defined categories
 4. Matches transactions to existing expenses/income records using string similarity and amount proximity
+5. Detects recurring bill patterns and creates auto-tracked expenses
+6. Detects recurring income sources and creates auto-tracked income entries
+7. Auto-generates monthly reports for all months with transaction data
+8. Retries failed steps with exponential backoff for resilient processing
+
+Your bank statement is deleted after processing -- only extracted transaction data is stored, never the original file.
+
+### Automatic Bill Detection
+
+```mermaid
+flowchart TB
+    Txns[12 Months of Transactions] --> Norm[Normalize Descriptions<br/><i>Strip refs, punctuation</i>]
+    Norm --> Group[Group by Similarity<br/><i>Jaccard threshold 0.6</i>]
+    Group --> Filter{2+ occurrences?<br/>Amounts within 20%?}
+    Filter -->|Yes| Detect[Detect Interval<br/><i>Weekly · Biweekly · Monthly<br/>Quarterly · Annually</i>]
+    Filter -->|No| Skip[Skip]
+    Detect --> Upsert[Upsert Expense<br/><i>Map category · Set next due date</i>]
+    Upsert --> Expire{Stale bills?<br/><i>Last seen > 2x interval</i>}
+    Expire -->|Yes| End[Set end_date]
+    Expire -->|No| Active[Keep active]
+
+    style Txns fill:#e3f2fd
+    style Detect fill:#fff3e0
+    style Upsert fill:#e8f5e9
+    style End fill:#fce4ec
+```
+
+After each bank statement upload, the system analyzes all user transactions to:
+- Group similar transaction descriptions (e.g., "NETFLIX COM 12345" and "NETFLIX COM 67890")
+- Detect recurring patterns with configurable tolerance for amount variation (20%)
+- Automatically create or update tracked bills with projected next due dates
+- Expire bills that stop appearing (staleness threshold: 2x the billing interval)
+- Re-activate previously expired bills when the pattern reappears
+- Never modify manually-created expenses
+
+Auto-detected bills appear in the Upcoming Bills dashboard widget and Expenses page with an "Auto" badge. AI-generated friendly names (e.g., "Netflix" instead of "NETFLIX COM 12345") are displayed throughout the UI and PDF exports.
+
+### Automatic Income Detection
+
+The same pattern analysis runs for income transactions:
+- Groups similar credit transactions across months
+- Detects recurring income patterns (payroll, freelance payments, etc.)
+- Creates auto-tracked income entries with friendly names
+- Attributes income to household members when applicable
+
+### Financial Goals
+
+```mermaid
+flowchart LR
+    subgraph Types["Goal Types"]
+        Budget[Budget Goal<br/><i>Spending cap per category</i>]
+        Monthly[Monthly Savings<br/><i>Target amount per month</i>]
+        Total[Total Savings<br/><i>Cumulative target with deadline</i>]
+    end
+
+    subgraph Tracking["Progress Tracking"]
+        Status[Status Indicators<br/><i>On Track · Warning · Over Budget</i>]
+        History[Historical Charts<br/><i>Monthly progress bars</i>]
+        Log[Manual Savings Log]
+    end
+
+    Budget --> Status
+    Monthly --> Status
+    Total --> Status
+    Status --> History
+
+    style Types fill:#e3f2fd
+    style Tracking fill:#e8f5e9
+```
+
+- **Budget goals** -- Set spending caps per category and track actual vs. target
+- **Monthly savings targets** -- Define how much to save each month
+- **Total savings goals** -- Set a cumulative target with an optional deadline
+- Progress bars with color-coded status indicators
+- Historical charts showing month-by-month performance
 
 ### Household Finance Sharing
 
@@ -155,14 +238,19 @@ flowchart TB
 
 - Create or join a household via invite code
 - Each member configures sharing preferences (all, none, partial/category)
+- Household dashboard shows aggregate finances and member contributions
 - Household reports aggregate shared data only
 - Head of household manages invitations and member removal (max 10 members)
+- Ownership transfer -- head of household can transfer control to another member
+- Members can leave a household (ownership auto-transfers if head leaves)
+- Income attribution -- track income from non-household sources with custom names (e.g., roommate contributions)
 
 ### AI-Powered Reports
 
 ```mermaid
 flowchart LR
     subgraph Data
+        Txns[Transactions]
         Inc[Income Entries]
         Exp[Expenses]
         Prev[Previous Report]
@@ -179,6 +267,7 @@ flowchart LR
         Insights[AI Insights<br/><i>GPT-4o-mini</i>]
     end
 
+    Txns --> Totals
     Inc --> Totals
     Exp --> Totals
     Exp --> Categories
@@ -195,7 +284,81 @@ flowchart LR
 - Savings rate, expense-to-income ratio, category breakdowns
 - Month-over-month trend comparison
 - AI-generated bullet-point financial insights
-- Rate limited to 2 manual refreshes per month; automated via cron
+- Auto-generated after bank statement processing and during onboarding
+- Rate limited to 2 manual refreshes per 24 hours in production; automated via cron
+
+### PDF Export
+
+Download comprehensive PDF reports from both personal and household dashboards:
+
+| Section | Contents |
+|---------|----------|
+| **Financial Summary** | Total income, expenses, net, savings rate |
+| **Month-over-Month Trends** | Income and expense percentage changes |
+| **AI Insights** | AI-generated bullet-point financial analysis |
+| **Expense Breakdown** | Category-by-category spending table with percentages |
+| **Recurring Bills** | All tracked bills with amounts, frequency, and next due dates |
+| **Income Sources** | All income entries with frequency and household attribution |
+| **Subscriptions Paid** | Active recurring expenses for the month with total cost and % of expenses |
+| **Goal Progress** | Visual progress bars for each goal with on-track/behind status |
+| **Savings Opportunities** | Data-driven recommendations for high-spend categories, subscription burden, and savings rate gaps |
+| **Member Contributions** | Per-member income and expense totals (household reports only) |
+
+### Dashboard
+
+The personal dashboard provides an at-a-glance financial overview with a global time period filter that persists across navigation:
+
+| Widget | Description |
+|--------|-------------|
+| **Summary Cards** | Total income, expenses, savings rate, net position |
+| **Income vs Expenses** | Bar chart comparing monthly totals |
+| **Spending by Category** | Donut chart with category breakdown |
+| **Top Expenses** | Horizontal bar chart of highest spending categories |
+| **Upcoming Bills** | Recurring bills with due dates and auto-detection badges |
+| **AI Insights** | Personalized financial observations from GPT-4o-mini |
+| **Export PDF** | Download a comprehensive monthly report as PDF |
+
+### Global Time Period Filter
+
+A persistent time period filter is available across dashboards, transactions, income, and expenses pages:
+- Presets: This Month, Last Month, Last 3 Months, This Year, Last Year, All Time
+- Specific month selection via `month:YYYY-MM` format
+- Smart auto-detection defaults to the most recent month with data
+- Filter state persists in the URL across page navigation
+
+### Guided Onboarding
+
+```mermaid
+flowchart LR
+    Welcome[Welcome] --> Upload[Upload Statement<br/><i>or skip</i>]
+    Upload --> Process[Processing<br/><i>AI pipeline runs</i>]
+    Process --> Review[Review<br/>Transactions]
+    Review --> House[Household<br/><i>Create or join</i>]
+    House --> Done[Complete]
+
+    style Welcome fill:#e3f2fd
+    style Process fill:#fff3e0
+    style Done fill:#e8f5e9
+```
+
+New users are guided through a multi-step onboarding flow:
+1. Welcome introduction
+2. Bank statement upload (skippable)
+3. AI processing with real-time progress
+4. Review parsed and categorized transactions
+5. Create or join a household (optional)
+6. Setup complete
+
+### Additional Features
+
+- **Dark mode** -- System, light, and dark themes with full chart support
+- **Profile management** -- Avatar upload, display name editing
+- **Transaction browser** -- Filter by type, time period, and description search with global time period context
+- **Category management** -- Create, edit, delete, and share categories with household
+- **Batch bank statement upload** -- Drag-and-drop multiple PDFs with per-file status tracking and sequential processing
+- **Invite code registration** -- Gated signup via invite codes (max 3 active codes per user)
+- **Privacy-first design** -- Bank statements are deleted after processing; only extracted data is stored
+- **Responsive design** -- Mobile-friendly layout across all pages
 
 ## Getting Started
 
@@ -251,20 +414,28 @@ cd packages/api && bun run dev    # API server only (port 3001)
 cd packages/web && bun run dev    # Vite dev server only (port 5173)
 ```
 
+Seed a test user with 6 months of realistic mock bank data:
+
+```bash
+cd packages/api && bun run seed   # Creates test user with transactions from 3 banks
+```
+
 ## API Endpoints
 
 | Group | Base Path | Auth | Endpoints |
 |-------|-----------|------|-----------|
 | Auth | `/api/auth` | Public | signup, login, logout |
-| Profile | `/api/profile` | Required | get, update, complete onboarding |
+| Profile | `/api/profile` | Required | get, update, complete onboarding, upload avatar |
 | Categories | `/api/categories` | Required | CRUD |
 | Income | `/api/income` | Required | CRUD |
-| Expenses | `/api/expenses` | Required | CRUD |
-| Bank Statements | `/api/bank-statements` | Required | upload, list, get detail |
+| Expenses | `/api/expenses` | Required | CRUD (auto-filters expired bills) |
+| Bank Statements | `/api/bank-statements` | Required | upload, list, get detail, reprocess |
 | Transactions | `/api/transactions` | Required | list, update, attribute, bulk-attribute |
-| Households | `/api/households` | Required | create, get, invite, join, remove, sharing |
-| Reports | `/api/reports` | Mixed | personal, household, generate, generate-all (cron) |
+| Households | `/api/households` | Required | create, get, invite, join, remove, sharing, transfer ownership, leave |
+| Reports | `/api/reports` | Mixed | personal, household, generate, generate-all (cron), export/personal (PDF), export/household (PDF) |
 | Dashboard | `/api/dashboard` | Required | personal summary, household summary |
+| Goals | `/api/goals` | Required | CRUD, progress tracking, log savings |
+| Invite Codes | `/api/invite-codes` | Required | create, list, delete (max 3 active per user) |
 
 ## Database Schema
 
@@ -275,8 +446,10 @@ erDiagram
     profiles ||--o{ expenses : "owns"
     profiles ||--o{ income_entries : "owns"
     profiles ||--o{ bank_statements : "uploads"
+    profiles ||--o{ goals : "owns"
     bank_statements ||--o{ transactions : "contains"
     categories ||--o{ expenses : "categorizes"
+    categories ||--o{ goals : "tracks"
     transactions }o--o| expenses : "matched to"
     transactions }o--o| income_entries : "matched to"
     reports }o--|| profiles : "for user"
@@ -286,10 +459,12 @@ erDiagram
     profiles {
         uuid id PK
         string display_name
+        string avatar_url
         boolean onboarding_completed
         uuid household_id FK
         enum income_sharing_mode
         enum expense_sharing_mode
+        string theme_preference
     }
 
     households {
@@ -312,7 +487,11 @@ erDiagram
         uuid category_id FK
         number amount
         enum frequency
+        enum recurrence_interval
         date next_due_date
+        date end_date
+        boolean auto_detected
+        timestamp last_seen_at
     }
 
     income_entries {
@@ -329,6 +508,7 @@ erDiagram
         string file_hash
         enum status
         date statement_month
+        string bank_name
     }
 
     transactions {
@@ -347,6 +527,15 @@ erDiagram
         date report_month
         json report_data
         string ai_insights
+    }
+
+    goals {
+        uuid id PK
+        uuid user_id FK
+        uuid category_id FK
+        enum type
+        number target_amount
+        date target_date
     }
 ```
 
@@ -381,6 +570,19 @@ Three GitHub Actions workflows:
 - **Prod Deploy** -- On push to `main` branch: checks then deploys to Vercel production
 
 ## Git Workflow
+
+```mermaid
+flowchart LR
+    Feature["feat/branch"] -->|PR| Test[test branch]
+    Test -->|auto-deploy| TestEnv[Test Environment]
+    Test -->|promote| Main[main branch]
+    Main -->|auto-deploy| Prod[Production]
+
+    style Feature fill:#e3f2fd
+    style Test fill:#fff3e0
+    style Main fill:#e8f5e9
+    style Prod fill:#e8f5e9
+```
 
 1. Create a feature branch from `test`
 2. Develop and test locally

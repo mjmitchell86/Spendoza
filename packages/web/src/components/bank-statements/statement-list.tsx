@@ -1,4 +1,5 @@
 import type { BankStatement, StatementStatus } from "@spendoza/shared";
+import { RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -19,7 +20,15 @@ const STATUS_CONFIG: Record<
   failed: { label: "Failed", variant: "destructive" },
 };
 
-function formatDate(dateStr: string) {
+const STEP_LABELS: Record<string, string> = {
+  extract_text: "Reading PDF",
+  extract_transactions: "Extracting transactions",
+  classify_transactions: "Classifying",
+  match_and_insert: "Matching & saving",
+};
+
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return "Pending";
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
@@ -49,6 +58,7 @@ export function StatementList({
   }
 
   return (
+    <div className="overflow-x-auto">
     <Table>
       <TableHeader>
         <TableRow>
@@ -81,12 +91,24 @@ export function StatementList({
                 )}
               </TableCell>
               <TableCell>
-                <Badge variant={status.variant}>{status.label}</Badge>
+                {stmt.status === "processing" ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <RefreshCw className="size-3 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {(stmt.parsed_data as any)?.retry_count > 0
+                        ? `Retrying (${(stmt.parsed_data as any).retry_count}/2) — ${STEP_LABELS[(stmt.parsed_data as any)?.pipeline_step] ?? "Processing"}`
+                        : STEP_LABELS[(stmt.parsed_data as any)?.pipeline_step] ?? "Processing"}
+                    </span>
+                  </span>
+                ) : (
+                  <Badge variant={status.variant}>{status.label}</Badge>
+                )}
               </TableCell>
             </TableRow>
           );
         })}
       </TableBody>
     </Table>
+    </div>
   );
 }

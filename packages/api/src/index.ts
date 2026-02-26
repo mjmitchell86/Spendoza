@@ -12,6 +12,10 @@ import transactionsRouter from "./routes/transactions";
 import householdsRouter from "./routes/households";
 import reportsRouter from "./routes/reports";
 import dashboardRouter from "./routes/dashboard";
+import goalsRouter from "./routes/goals";
+import inviteCodesRouter from "./routes/invite-codes";
+import internalRouter from "./routes/internal";
+import emailsRouter from "./routes/emails";
 import { requireAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/error-handler";
 
@@ -55,14 +59,21 @@ app.use("/api/expenses", requireAuth, expensesRouter);
 app.use("/api/bank-statements", requireAuth, bankStatementsRouter);
 app.use("/api/transactions", requireAuth, transactionsRouter);
 app.use("/api/households", requireAuth, householdsRouter);
+app.use("/api/household", requireAuth, householdsRouter);
+app.use("/api/invite-codes", requireAuth, inviteCodesRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/internal", internalRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
+app.use("/api/goals", requireAuth, goalsRouter);
+app.use("/api/emails", emailsRouter);
 
 // Global error handler (must be LAST middleware)
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Spendoza API running on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Spendoza API running on port ${PORT}`);
+  });
+}
 
 export default app;

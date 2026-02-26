@@ -2,7 +2,9 @@ import { Lightbulb } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface AiInsightsCardProps {
-  insights: string;
+  insights: string | null;
+  /** YYYY-MM-01 string indicating which month the insights are from */
+  insightsMonth?: string;
 }
 
 function parseInsights(raw: string): string[] {
@@ -12,8 +14,13 @@ function parseInsights(raw: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-export function AiInsightsCard({ insights }: AiInsightsCardProps) {
-  const items = parseInsights(insights);
+function formatMonth(monthStr: string): string {
+  const d = new Date(monthStr + "T00:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+export function AiInsightsCard({ insights, insightsMonth }: AiInsightsCardProps) {
+  const items = insights ? parseInsights(insights) : [];
 
   if (items.length === 0) {
     return (
@@ -41,6 +48,11 @@ export function AiInsightsCard({ insights }: AiInsightsCardProps) {
           <Lightbulb className="size-4" />
           AI Insights
         </CardTitle>
+        {insightsMonth && (
+          <p className="text-xs text-muted-foreground">
+            Latest available — {formatMonth(insightsMonth)}
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         <ul className="flex flex-col gap-2">

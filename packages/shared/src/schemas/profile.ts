@@ -12,11 +12,27 @@ export type ExpenseSharingMode = z.infer<typeof expenseSharingModeSchema>;
 // ---------------------------------------------------------------------------
 // Update profile (API input)
 // ---------------------------------------------------------------------------
+export const emailReportDaySchema = z.enum([
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+]);
+export type EmailReportDay = z.infer<typeof emailReportDaySchema>;
+
 export const updateProfileSchema = z.object({
   display_name: z.string().min(1).max(100).optional(),
   income_sharing_mode: incomeSharingModeSchema.optional(),
   shared_income_amount: z.number().positive().nullable().optional(),
   expense_sharing_mode: expenseSharingModeSchema.optional(),
+  avatar_url: z.string().url().nullable().optional(),
+  timezone: z.string().min(1).max(100).optional(),
+  email_reports_enabled: z.boolean().optional(),
+  email_report_day: emailReportDaySchema.optional(),
+  email_report_hour: z.number().int().min(0).max(23).optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
@@ -32,6 +48,11 @@ export interface Profile {
   income_sharing_mode: IncomeSharingMode;
   shared_income_amount: number | null;
   expense_sharing_mode: ExpenseSharingMode;
+  avatar_url: string | null;
+  timezone: string;
+  email_reports_enabled: boolean;
+  email_report_day: EmailReportDay;
+  email_report_hour: number;
   created_at: string;
   updated_at: string;
 }

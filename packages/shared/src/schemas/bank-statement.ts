@@ -17,8 +17,11 @@ export type StatementStatus = z.infer<typeof statementStatusSchema>;
 // ---------------------------------------------------------------------------
 export const uploadBankStatementSchema = z.object({
   bank_name: z.string().nullable().optional(),
-  statement_month: z.string().date(),
-  is_shared_account: z.boolean().default(false),
+  statement_month: z.string().date().nullable().optional(),
+  is_shared_account: z.preprocess(
+    (v) => (typeof v === "string" ? v === "true" : v),
+    z.boolean().default(false)
+  ),
   account_label: z.string().nullable().optional(),
 });
 
@@ -35,7 +38,7 @@ export interface BankStatement {
   file_path: string;
   file_hash: string;
   bank_name: string | null;
-  statement_month: string;
+  statement_month: string | null;
   is_shared_account: boolean;
   account_label: string | null;
   status: StatementStatus;

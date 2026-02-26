@@ -58,6 +58,7 @@ const mockFilterChain: Record<string, any> = {};
 mockFilterChain.eq = mock(() => mockFilterChain);
 mockFilterChain.gte = mock(() => mockFilterChain);
 mockFilterChain.lte = mock(() => mockFilterChain);
+mockFilterChain.or = mock(() => mockFilterChain);
 mockFilterChain.order = mockOrder;
 
 // POST insert terminal: .insert({...}).select().single()
@@ -125,6 +126,7 @@ mock.module("@supabase/supabase-js", () => ({
         signInWithPassword: mock(),
         getUser: mockGetUser,
       },
+      from: mockFrom,
     };
   },
 }));
@@ -165,6 +167,7 @@ beforeEach(() => {
   mockFilterChain.eq.mockClear();
   mockFilterChain.gte.mockClear();
   mockFilterChain.lte.mockClear();
+  mockFilterChain.or.mockClear();
   mockInsertSingle.mockClear();
   mockInsert.mockClear();
   mockUpdateSingle.mockClear();
@@ -195,6 +198,7 @@ beforeEach(() => {
   mockFilterChain.eq.mockImplementation(() => mockFilterChain);
   mockFilterChain.gte.mockImplementation(() => mockFilterChain);
   mockFilterChain.lte.mockImplementation(() => mockFilterChain);
+  mockFilterChain.or.mockImplementation(() => mockFilterChain);
 
   mockInsertSingle.mockImplementation(() =>
     Promise.resolve({ data: expenseEntry, error: null })

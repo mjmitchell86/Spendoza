@@ -8,8 +8,8 @@ const TEST_HOUSEHOLD_ID = "hh-1";
 const REPORT_MONTH = new Date("2026-01-01");
 
 const sampleIncomeEntries = [
-  { id: "inc-1", user_id: TEST_USER_ID, amount: 5000, frequency: "monthly" },
-  { id: "inc-2", user_id: TEST_USER_ID, amount: 1500, frequency: "monthly" },
+  { id: "inc-1", user_id: TEST_USER_ID, amount: 5000, frequency: "monthly", effective_date: "2025-06-01", end_date: null },
+  { id: "inc-2", user_id: TEST_USER_ID, amount: 1500, frequency: "biweekly", effective_date: "2025-09-01", end_date: null },
 ];
 
 const sampleExpenses = [
@@ -17,22 +17,34 @@ const sampleExpenses = [
     id: "exp-1",
     user_id: TEST_USER_ID,
     amount: 1200,
+    frequency: "recurring",
+    recurrence_interval: "monthly",
+    next_due_date: "2026-02-01",
+    end_date: null,
     category_id: "cat-1",
     categories: { name: "Housing" },
   },
   {
     id: "exp-2",
     user_id: TEST_USER_ID,
-    amount: 400,
+    amount: 100,
+    frequency: "recurring",
+    recurrence_interval: "weekly",
+    next_due_date: "2026-01-07",
+    end_date: null,
     category_id: "cat-2",
     categories: { name: "Food" },
   },
   {
     id: "exp-3",
     user_id: TEST_USER_ID,
-    amount: 200,
-    category_id: "cat-2",
-    categories: { name: "Food" },
+    amount: 500,
+    frequency: "one_time",
+    recurrence_interval: null,
+    next_due_date: "2026-01-15",
+    end_date: null,
+    category_id: "cat-3",
+    categories: { name: "Shopping" },
   },
 ];
 
@@ -96,6 +108,7 @@ function buildAdminChain(table: string) {
     eq: (...args: any[]) => makeEqChain(depth + 1),
     gte: (...args: any[]) => makeEqChain(depth + 1),
     lte: (...args: any[]) => makeEqChain(depth + 1),
+    lt: (...args: any[]) => makeEqChain(depth + 1),
     or: (...args: any[]) => makeEqChain(depth + 1),
     is: (...args: any[]) => makeEqChain(depth + 1),
     order: (...args: any[]) => makeEqChain(depth + 1),
@@ -235,12 +248,6 @@ beforeEach(() => {
     Promise.resolve("Your savings rate is excellent at 72%.")
   );
 
-  const upsertedReport = {
-    ...cachedReport,
-    has_new_data: false,
-    generated_at: new Date().toISOString(),
-  };
-
   adminResults = {
     report_requests: {
       selectMaybeSingle: { data: { count: 0 }, error: null },
@@ -249,8 +256,9 @@ beforeEach(() => {
     reports: {
       selectMaybeSingle: { data: null, error: null },
       selectSingle: { data: null, error: null },
-      upsertSingle: { data: upsertedReport, error: null },
-      upsertResult: { data: upsertedReport, error: null },
+      // Return null from upsert so the function falls back to locally-computed data
+      upsertSingle: { data: null, error: null },
+      upsertResult: { data: null, error: null },
     },
     income_entries: {
       selectList: { data: sampleIncomeEntries, error: null },
@@ -275,39 +283,53 @@ beforeEach(() => {
 // generateUserReport
 // ===========================================================================
 describe("generateUserReport", () => {
-  it("computes correct totals and savings rate", async () => {
+  it("computes correct totals and savings rate from transactions", async () => {
     const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
 
     expect(result).toBeDefined();
-    expect(result.report_data.total_income).toBe(6500);
-    expect(result.report_data.total_expenses).toBe(1800);
-    // savings_rate = (6500 - 1800) / 6500 * 100 = 72.31
-    expect(result.report_data.savings_rate).toBeCloseTo(72.31, 1);
-    // expense_to_income_ratio = 1800 / 6500 = 0.28
-    expect(result.report_data.expense_to_income_ratio).toBeCloseTo(0.28, 1);
+    // From sampleTransactions: credit=3000, debits=50+100=150
+    expect(result.report_data.total_income).toBe(3000);
+    expect(result.report_data.total_expenses).toBe(150);
+    // savings_rate = (3000 - 150) / 3000 * 100 = 95%
+    expect(result.report_data.savings_rate).toBeCloseTo(95, 0);
+    // expense_to_income_ratio = 150 / 3000 = 0.05
+    expect(result.report_data.expense_to_income_ratio).toBeCloseTo(0.05, 1);
   });
 
-  it("produces correct by_category breakdown", async () => {
+  it("produces correct by_category breakdown from transactions", async () => {
     const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
 
     const byCategory = result.report_data.by_category;
     expect(Array.isArray(byCategory)).toBe(true);
     expect(byCategory.length).toBe(2);
 
+    // From sampleTransactions debits: Housing=100, Food=50
     const housing = byCategory.find((c: any) => c.category === "Housing");
     expect(housing).toBeDefined();
-    expect(housing.amount).toBe(1200);
+    expect(housing.amount).toBe(100);
 
     const food = byCategory.find((c: any) => c.category === "Food");
     expect(food).toBeDefined();
-    expect(food.amount).toBe(600);
+    expect(food.amount).toBe(50);
   });
 
   it("includes top_categories sorted by amount descending", async () => {
     const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
 
+    // Housing (100) > Food (50)
     expect(result.report_data.top_categories[0]).toBe("Housing");
     expect(result.report_data.top_categories[1]).toBe("Food");
+  });
+
+  it("returns zeros when no transactions exist for the month", async () => {
+    adminResults.transactions.selectList = { data: [], error: null };
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
+
+    // No transactions means zero income and expenses (no manual entry fallback)
+    expect(result.report_data.total_income).toBe(0);
+    expect(result.report_data.total_expenses).toBe(0);
+    expect(result.report_data.by_category).toEqual([]);
   });
 
   it("returns cached report when has_new_data is false", async () => {
@@ -325,6 +347,34 @@ describe("generateUserReport", () => {
     expect(mockGenerateInsights).not.toHaveBeenCalled();
   });
 
+  it("bypasses cache when force=true", async () => {
+    adminResults.reports.selectMaybeSingle = {
+      data: cachedReport,
+      error: null,
+    };
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH, true);
+
+    // Should regenerate even though has_new_data is false
+    expect(mockGenerateInsights).toHaveBeenCalledTimes(1);
+    // Should use transaction data, not cached report data
+    expect(result.report_data.total_income).toBe(3000);
+  });
+
+  it("saves report even when AI insight generation fails", async () => {
+    mockGenerateInsights.mockImplementation(() =>
+      Promise.reject(new Error("OpenAI API failed"))
+    );
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
+
+    // Report should still be saved with financial data
+    expect(result.report_data.total_income).toBe(3000);
+    expect(result.report_data.total_expenses).toBe(150);
+    // Insights should be null
+    expect(result.ai_insights).toBeNull();
+  });
+
   it("regenerates when has_new_data is true", async () => {
     // Report exists but has new data
     adminResults.reports.selectMaybeSingle = {
@@ -338,14 +388,15 @@ describe("generateUserReport", () => {
     expect(mockGenerateInsights).toHaveBeenCalledTimes(1);
   });
 
-  it("calls generateInsights with report data", async () => {
+  it("calls generateInsights with transaction-based report data", async () => {
     await generateUserReport(TEST_USER_ID, REPORT_MONTH);
 
     expect(mockGenerateInsights).toHaveBeenCalledTimes(1);
     const [reportData, entityType] = mockGenerateInsights.mock.calls[0];
     expect(entityType).toBe("user");
-    expect(reportData.total_income).toBe(6500);
-    expect(reportData.total_expenses).toBe(1800);
+    // From sampleTransactions: credit=3000, debits=150
+    expect(reportData.total_income).toBe(3000);
+    expect(reportData.total_expenses).toBe(150);
   });
 
   it("includes month_over_month when previous report exists", async () => {
@@ -365,23 +416,25 @@ describe("generateUserReport", () => {
 
     // month_over_month should reflect change from previous month
     if (result.report_data.month_over_month) {
-      // income_change = (6500 - 6000) / 6000 * 100 = 8.33%
+      // income_change = (3000 - 6000) / 6000 * 100 = -50%
       expect(result.report_data.month_over_month.income_change).toBeCloseTo(
-        8.33,
+        -50,
         0
       );
-      // expense_change = (1800 - 2000) / 2000 * 100 = -10%
+      // expense_change = (150 - 2000) / 2000 * 100 = -92.5%
       expect(result.report_data.month_over_month.expense_change).toBeCloseTo(
-        -10,
+        -92.5,
         0
       );
     }
   });
 
   it("handles zero income gracefully", async () => {
-    adminResults.income_entries.selectList = { data: [], error: null };
-    adminResults.expenses.selectList = {
-      data: [sampleExpenses[0]],
+    // Only debit transactions, no credits
+    adminResults.transactions.selectList = {
+      data: [
+        { amount: 100, type: "debit", ai_category: "Housing", date: "2026-01-10" },
+      ],
       error: null,
     };
     // Clear upsert so service falls back to computed values
@@ -390,7 +443,7 @@ describe("generateUserReport", () => {
     const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
 
     expect(result.report_data.total_income).toBe(0);
-    expect(result.report_data.total_expenses).toBe(1200);
+    expect(result.report_data.total_expenses).toBe(100);
     expect(result.report_data.savings_rate).toBe(0);
     expect(result.report_data.expense_to_income_ratio).toBe(0);
   });

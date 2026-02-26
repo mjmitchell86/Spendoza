@@ -315,8 +315,19 @@ mock.module("@supabase/supabase-js", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock pdf-parse and AI modules (transitively imported by bank-statements route)
+// Mock @vercel/functions (waitUntil is used for background processing)
 // ---------------------------------------------------------------------------
+mock.module("@vercel/functions", () => ({
+  waitUntil: (_promise: Promise<any>) => {},
+}));
+
+// ---------------------------------------------------------------------------
+// Mock AI pipeline and its transitive deps
+// ---------------------------------------------------------------------------
+mock.module("../../services/ai-pipeline.service", () => ({
+  processBankStatement: mock(() => Promise.resolve()),
+}));
+
 mock.module("pdf-parse", () => ({
   PDFParse: class MockPDFParse {
     constructor(_opts?: any) {}

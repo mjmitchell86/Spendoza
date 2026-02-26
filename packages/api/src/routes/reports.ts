@@ -6,6 +6,10 @@ import {
   generateHouseholdReport,
   generateAllReports,
 } from "../services/report.service";
+import {
+  generatePersonalPdfForUser,
+  generateHouseholdPdfForHousehold,
+} from "../services/pdf-export.service";
 
 const router = Router();
 
@@ -81,41 +85,67 @@ router.get("/household", requireAuth, async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /generate — manual trigger (max 2/month)
+// POST /generate — manual trigger (max 2 per 24h in production)
 // ---------------------------------------------------------------------------
 router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   const { user } = req as AuthenticatedRequest;
   const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const isProduction = process.env.VERCEL_ENV === "production";
 
-  // Check report_requests count for this month
-  const { data: requestRecord } = await supabaseAdmin
-    .from("report_requests")
-    .select("request_count")
-    .eq("user_id", user.id)
-    .eq("report_month", currentMonth)
-    .maybeSingle();
+  // Rate-limit: 2 requests per 24-hour rolling window (production only)
+  if (isProduction) {
+    const twentyFourHoursAgo = new Date(
+      now.getTime() - 24 * 60 * 60 * 1000
+    ).toISOString();
 
-  const currentCount = requestRecord?.request_count ?? 0;
+    const { count } = await supabaseAdmin
+      .from("report_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", twentyFourHoursAgo);
 
-  if (currentCount >= 2) {
-    return res.status(429).json({
-      error: "Monthly report refresh limit reached (2/2)",
-    });
+    if ((count ?? 0) >= 2) {
+      return res.status(429).json({
+        error: "Report generation limit reached (2 per 24 hours)",
+      });
+    }
   }
 
-  // Increment the request count
-  await supabaseAdmin.from("report_requests").upsert(
-    {
-      user_id: user.id,
-      report_month: currentMonth,
-      request_count: currentCount + 1,
-    },
-    { onConflict: "user_id,report_month" }
-  );
+  // Find the latest month with transactions; skip current month if empty
+  const { data: latestTxn } = await supabaseAdmin
+    .from("transactions")
+    .select("date")
+    .eq("user_id", user.id)
+    .order("date", { ascending: false })
+    .limit(1);
 
-  // Generate the report for the current month
-  const report = await generateUserReport(user.id, now);
+  const reportDate = latestTxn && latestTxn.length > 0
+    ? new Date(latestTxn[0].date + "T00:00:00Z")
+    : now;
+
+  // Generate the personal report for the month with data (force=true to bypass cache)
+  const report = await generateUserReport(user.id, reportDate, true);
+
+  // Also generate household report if user belongs to one
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("household_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.household_id) {
+    try {
+      await generateHouseholdReport(profile.household_id, reportDate, true);
+    } catch (err) {
+      console.error(`Failed to generate household report:`, err);
+    }
+  }
+
+  // Record the request for rate-limiting
+  await supabaseAdmin.from("report_requests").insert({
+    user_id: user.id,
+    report_month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+  });
 
   return res.status(200).json(report);
 });
@@ -147,5 +177,96 @@ router.post("/generate-all", async (req: Request, res: Response) => {
     month: previousMonth.toISOString().slice(0, 10),
   });
 });
+
+// ---------------------------------------------------------------------------
+// GET /export/personal — download personal report as PDF
+// ---------------------------------------------------------------------------
+router.get(
+  "/export/personal",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { user } = req as AuthenticatedRequest;
+      const month = parseMonth(req.query.month as string | undefined);
+
+      const result = await generatePersonalPdfForUser(user.id, month);
+
+      if (!result) {
+        return res
+          .status(404)
+          .json({ error: "No report data available for this month" });
+      }
+
+      const filename = `spendoza-report-${month.slice(0, 7)}.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader("Content-Length", result.pdfBuffer.length);
+
+      return res.send(result.pdfBuffer);
+    } catch (err) {
+      console.error("[export/personal] Error generating PDF:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to generate PDF report" });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /export/household — download household report as PDF
+// ---------------------------------------------------------------------------
+router.get(
+  "/export/household",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { user } = req as AuthenticatedRequest;
+      const month = parseMonth(req.query.month as string | undefined);
+
+      const { data: userProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("household_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!userProfile?.household_id) {
+        return res
+          .status(400)
+          .json({ error: "You are not a member of a household" });
+      }
+
+      const result = await generateHouseholdPdfForHousehold(
+        userProfile.household_id,
+        month
+      );
+
+      if (!result) {
+        return res
+          .status(404)
+          .json({ error: "No report data available for this month" });
+      }
+
+      const filename = `spendoza-household-report-${month.slice(0, 7)}.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader("Content-Length", result.pdfBuffer.length);
+
+      return res.send(result.pdfBuffer);
+    } catch (err) {
+      console.error("[export/household] Error generating PDF:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to generate PDF report" });
+    }
+  }
+);
 
 export default router;

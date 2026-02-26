@@ -5,7 +5,7 @@ import {
   bulkAttributeTransactionsSchema,
 } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
-import { createSupabaseClient } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
@@ -14,10 +14,9 @@ const router = Router();
 // GET / — list transactions (filterable)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  let query = supabase
+  let query = supabaseAdmin
     .from("transactions")
     .select("*")
     .eq("user_id", user.id);
@@ -57,10 +56,9 @@ router.put(
   "/:id",
   validate(updateTransactionSchema),
   async (req, res: Response) => {
-    const { user, accessToken } = req as AuthenticatedRequest;
-    const supabase = createSupabaseClient(accessToken);
+    const { user } = req as AuthenticatedRequest;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("transactions")
       .update(req.body)
       .eq("id", req.params.id)
@@ -80,13 +78,12 @@ router.put(
 // Attribution validation helper
 // ---------------------------------------------------------------------------
 async function validateAttribution(
-  supabase: ReturnType<typeof createSupabaseClient>,
   transactionId: string,
   attributedToUserId: string,
   requesterId: string
 ): Promise<{ error?: string }> {
   // 1. Fetch the transaction
-  const { data: transaction, error: txnError } = await supabase
+  const { data: transaction, error: txnError } = await supabaseAdmin
     .from("transactions")
     .select("*")
     .eq("id", transactionId)
@@ -98,7 +95,7 @@ async function validateAttribution(
   }
 
   // 2. Fetch the bank statement and check is_shared_account
-  const { data: statement, error: stmtError } = await supabase
+  const { data: statement, error: stmtError } = await supabaseAdmin
     .from("bank_statements")
     .select("*")
     .eq("id", transaction.bank_statement_id)
@@ -113,7 +110,7 @@ async function validateAttribution(
   }
 
   // 3. Check the target user is in the same household as the requester
-  const { data: targetProfile, error: targetError } = await supabase
+  const { data: targetProfile, error: targetError } = await supabaseAdmin
     .from("profiles")
     .select("*")
     .eq("id", attributedToUserId)
@@ -123,7 +120,7 @@ async function validateAttribution(
     return { error: "Target user not found" };
   }
 
-  const { data: requesterProfile, error: reqError } = await supabase
+  const { data: requesterProfile, error: reqError } = await supabaseAdmin
     .from("profiles")
     .select("*")
     .eq("id", requesterId)
@@ -146,7 +143,7 @@ async function validateAttribution(
 
   let isHead = false;
   if (!isUploader && requesterProfile.household_id) {
-    const { data: household } = await supabase
+    const { data: household } = await supabaseAdmin
       .from("households")
       .select("head_of_household_id")
       .eq("id", requesterProfile.household_id)
@@ -168,12 +165,10 @@ router.put(
   "/:id/attribute",
   validate(attributeTransactionSchema),
   async (req, res: Response) => {
-    const { user, accessToken } = req as AuthenticatedRequest;
-    const supabase = createSupabaseClient(accessToken);
+    const { user } = req as AuthenticatedRequest;
     const { attributed_to_user_id } = req.body;
 
     const validation = await validateAttribution(
-      supabase,
       req.params.id,
       attributed_to_user_id,
       user.id
@@ -183,7 +178,7 @@ router.put(
       return res.status(403).json({ error: validation.error });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("transactions")
       .update({ attributed_to_user_id })
       .eq("id", req.params.id)
@@ -205,8 +200,7 @@ router.post(
   "/bulk-attribute",
   validate(bulkAttributeTransactionsSchema),
   async (req, res: Response) => {
-    const { user, accessToken } = req as AuthenticatedRequest;
-    const supabase = createSupabaseClient(accessToken);
+    const { user } = req as AuthenticatedRequest;
     const { attributions } = req.body;
 
     const results = [];
@@ -215,7 +209,6 @@ router.post(
       const { transaction_id, attributed_to_user_id } = attribution;
 
       const validation = await validateAttribution(
-        supabase,
         transaction_id,
         attributed_to_user_id,
         user.id
@@ -230,7 +223,7 @@ router.post(
         continue;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from("transactions")
         .update({ attributed_to_user_id })
         .eq("id", transaction_id)

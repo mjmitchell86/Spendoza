@@ -16,6 +16,7 @@ const profileData = {
   income_sharing_mode: "all" as const,
   shared_income_amount: null,
   expense_sharing_mode: "all" as const,
+  avatar_url: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
@@ -40,6 +41,18 @@ const mockUpdate = mock(() => ({ eq: mockUpdateEq }));
 const mockFrom = mock(() => ({
   select: mockSelect,
   update: mockUpdate,
+}));
+
+// Storage mocks for avatar upload
+const mockStorageUpload = mock(() =>
+  Promise.resolve({ data: { path: `${TEST_USER_ID}/avatar.jpg` }, error: null })
+);
+const mockGetPublicUrl = mock(() => ({
+  data: { publicUrl: `https://example.supabase.co/storage/v1/object/public/avatars/${TEST_USER_ID}/avatar.jpg` },
+}));
+const mockStorageFrom = mock(() => ({
+  upload: mockStorageUpload,
+  getPublicUrl: mockGetPublicUrl,
 }));
 
 // ---------------------------------------------------------------------------
@@ -69,20 +82,45 @@ const mockGetUser = mock(() =>
 // ---------------------------------------------------------------------------
 mock.module("@supabase/supabase-js", () => ({
   createClient: (_url: string, _key: string, options?: any) => {
-    // If options include an Authorization header, this is the RLS client
     if (options?.global?.headers?.Authorization) {
-      return { from: mockFrom };
+      return { from: mockFrom, storage: { from: mockStorageFrom } };
     }
-    // Otherwise it's the admin client
+    // Admin client — used by routes (supabaseAdmin) and auth middleware (getUser)
     return {
       auth: {
         admin: { createUser: mock() },
         signInWithPassword: mock(),
         getUser: mockGetUser,
       },
+      from: mockFrom,
+      storage: { from: mockStorageFrom },
     };
   },
 }));
+
+// ---------------------------------------------------------------------------
+// Mock multer for avatar upload testing
+// ---------------------------------------------------------------------------
+const fakeImageBuffer = Buffer.from("fake-image-data");
+
+mock.module("multer", () => {
+  const multerInstance = () => ({
+    single: (_fieldName: string) => {
+      return (req: any, _res: any, next: any) => {
+        req.file = {
+          fieldname: "file",
+          originalname: "avatar.jpg",
+          mimetype: "image/jpeg",
+          buffer: fakeImageBuffer,
+          size: fakeImageBuffer.length,
+        };
+        next();
+      };
+    },
+  });
+  multerInstance.memoryStorage = () => ({});
+  return { default: multerInstance };
+});
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -125,6 +163,9 @@ beforeEach(() => {
   mockUpdateSingle.mockClear();
   mockFrom.mockClear();
   mockGetUser.mockClear();
+  mockStorageUpload.mockClear();
+  mockGetPublicUrl.mockClear();
+  mockStorageFrom.mockClear();
 
   // Reset to successful defaults
   mockGetUser.mockImplementation(() =>
@@ -146,6 +187,14 @@ beforeEach(() => {
   mockUpdateSingle.mockImplementation(() =>
     Promise.resolve({ data: profileData, error: null })
   );
+
+  mockStorageUpload.mockImplementation(() =>
+    Promise.resolve({ data: { path: `${TEST_USER_ID}/avatar.jpg` }, error: null })
+  );
+
+  mockGetPublicUrl.mockImplementation(() => ({
+    data: { publicUrl: `https://example.supabase.co/storage/v1/object/public/avatars/${TEST_USER_ID}/avatar.jpg` },
+  }));
 });
 
 // ===========================================================================
@@ -301,6 +350,47 @@ describe("PUT /api/profile/onboarding", () => {
   it("returns 401 without auth token", async () => {
     const res = await fetch(url(), {
       method: "PUT",
+    });
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Missing authorization header");
+  });
+});
+
+// ===========================================================================
+// POST /api/profile/avatar
+// ===========================================================================
+describe("POST /api/profile/avatar", () => {
+  const url = () => `${baseUrl}/api/profile/avatar`;
+
+  it("returns 200 with updated profile including avatar_url", async () => {
+    const avatarProfile = {
+      ...profileData,
+      avatar_url: "https://example.supabase.co/storage/v1/object/public/avatars/user-123/avatar.jpg?t=123",
+    };
+
+    mockUpdateSingle.mockImplementation(() =>
+      Promise.resolve({ data: avatarProfile, error: null })
+    );
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.avatar_url).toContain("avatar");
+    expect(mockStorageFrom).toHaveBeenCalledWith("avatars");
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await fetch(url(), {
+      method: "POST",
     });
 
     expect(res.status).toBe(401);

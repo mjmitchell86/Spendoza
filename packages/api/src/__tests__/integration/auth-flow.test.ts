@@ -30,6 +30,7 @@ function buildRlsChain(table: string) {
 
   const makeEqChain = (): any => ({
     eq: () => makeEqChain(),
+    is: () => makeEqChain(),
     single: () =>
       Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
     maybeSingle: () =>
@@ -168,6 +169,11 @@ afterAll(() => {
 // ===========================================================================
 describe("Auth Flow: Signup -> Login -> Profile -> Onboarding", () => {
   it("Step 1: Signs up a new user", async () => {
+    // Set up invite code mock
+    rlsResults["invite_codes"] = {
+      selectSingle: { data: { id: "invite-code-1" }, error: null },
+    };
+
     const res = await fetch(`${baseUrl}/api/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -175,6 +181,7 @@ describe("Auth Flow: Signup -> Login -> Profile -> Onboarding", () => {
         email: TEST_EMAIL,
         password: "securepass123",
         display_name: "Integration User",
+        invite_code: "Chloe14",
       }),
     });
 

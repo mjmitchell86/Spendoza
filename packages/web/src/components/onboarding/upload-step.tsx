@@ -1,5 +1,14 @@
 import { useState, useRef, type FormEvent, type DragEvent } from "react";
-import { Upload, FileText } from "lucide-react";
+import {
+  Upload,
+  FileText,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  ShieldCheck,
+} from "lucide-react";
+import { MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,37 +16,68 @@ import { useUploadBankStatement } from "@/hooks/use-bank-statements";
 import { cn } from "@/lib/utils";
 
 interface UploadStepProps {
-  onNext: (statementId: string | null) => void;
+  onNext: (statementIds: string[]) => void;
   onSkip: () => void;
 }
 
-const MAX_SIZE_MB = 10;
+type FileStatus = "pending" | "uploading" | "done" | "error";
+
+interface QueuedFile {
+  file: File;
+  status: FileStatus;
+  error?: string;
+  statementId?: string;
+}
+
+const MAX_SIZE = MAX_BANK_STATEMENT_SIZE_MB * 1024 * 1024;
 
 export function UploadStep({ onNext, onSkip }: UploadStepProps) {
   const upload = useUploadBankStatement();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<QueuedFile[]>([]);
   const [bankName, setBankName] = useState("");
-  const [statementMonth, setStatementMonth] = useState(
-    new Date().toISOString().slice(0, 7) + "-01"
-  );
+  const [statementMonth, setStatementMonth] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
-  function handleFileChange(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    const f = files[0];
-    if (f.type !== "application/pdf") {
-      setError("Only PDF files are supported");
-      return;
+  function addFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+
+    const newFiles: QueuedFile[] = [];
+    const errors: string[] = [];
+    const existingNames = new Set(files.map((f) => f.file.name));
+
+    for (const f of Array.from(fileList)) {
+      if (f.type !== "application/pdf") {
+        errors.push(`${f.name}: not a PDF`);
+        continue;
+      }
+      if (f.size > MAX_SIZE) {
+        errors.push(`${f.name}: exceeds ${MAX_BANK_STATEMENT_SIZE_MB}MB`);
+        continue;
+      }
+      if (existingNames.has(f.name)) {
+        continue;
+      }
+      existingNames.add(f.name);
+      newFiles.push({ file: f, status: "pending" });
     }
-    if (f.size > MAX_SIZE_MB * 1024 * 1024) {
-      setError(`File must be under ${MAX_SIZE_MB}MB`);
-      return;
+
+    if (errors.length > 0) {
+      setError(errors.join(". "));
+    } else {
+      setError(null);
     }
-    setError(null);
-    setFile(f);
+
+    if (newFiles.length > 0) {
+      setFiles((prev) => [...prev, ...newFiles]);
+    }
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
   function handleDragOver(e: DragEvent) {
@@ -53,41 +93,77 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
   function handleDrop(e: DragEvent) {
     e.preventDefault();
     setIsDragging(false);
-    handleFileChange(e.dataTransfer.files);
+    addFiles(e.dataTransfer.files);
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!file) {
-      setError("Please select a file");
+    const pending = files.filter((f) => f.status === "pending");
+    if (pending.length === 0) {
+      setError("Please select at least one file");
       return;
     }
     setError(null);
+    setIsUploading(true);
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("statement_month", statementMonth);
-    if (bankName.trim()) {
-      formData.append("bank_name", bankName.trim());
+    const completedIds: string[] = [];
+
+    // Upload each file sequentially to avoid hitting API limits
+    for (let i = 0; i < files.length; i++) {
+      if (files[i].status !== "pending") continue;
+
+      setFiles((prev) =>
+        prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" } : f))
+      );
+
+      const formData = new FormData();
+      formData.append("file", files[i].file);
+      if (statementMonth) {
+        formData.append("statement_month", statementMonth + "-01");
+      }
+      if (bankName.trim()) {
+        formData.append("bank_name", bankName.trim());
+      }
+      formData.append("is_shared_account", "false");
+
+      try {
+        const result = await upload.mutateAsync(formData);
+        const id = result.id ?? null;
+        if (id) completedIds.push(id);
+        setFiles((prev) =>
+          prev.map((f, idx) =>
+            idx === i ? { ...f, status: "done", statementId: id } : f
+          )
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Upload failed";
+        setFiles((prev) =>
+          prev.map((f, idx) =>
+            idx === i ? { ...f, status: "error", error: msg } : f
+          )
+        );
+      }
     }
-    formData.append("is_shared_account", "false");
 
-    try {
-      const result = await upload.mutateAsync(formData);
-      onNext(result.id ?? null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+    setIsUploading(false);
+
+    if (completedIds.length > 0) {
+      onNext(completedIds);
     }
   }
+
+  const pendingCount = files.filter((f) => f.status === "pending").length;
+  const doneCount = files.filter((f) => f.status === "done").length;
+  const errorCount = files.filter((f) => f.status === "error").length;
 
   return (
     <div className="flex flex-col gap-6">
       <div className="text-center">
         <h2 className="text-xl font-semibold tracking-tight">
-          Upload a Bank Statement
+          Upload Bank Statements
         </h2>
         <p className="text-sm text-muted-foreground">
-          Upload a PDF bank statement and we'll automatically extract your
+          Upload PDF bank statements and we'll automatically extract your
           transactions.
         </p>
       </div>
@@ -105,69 +181,136 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
             "flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 transition-colors cursor-pointer",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-muted-foreground/50"
+              : "border-muted-foreground/25 hover:border-muted-foreground/50",
+            isUploading && "pointer-events-none opacity-50"
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
-          {file ? (
-            <>
-              <FileText className="size-10 text-primary" />
-              <p className="text-sm font-medium">{file.name}</p>
-              <p className="text-xs text-muted-foreground">
-                Click or drop to replace
-              </p>
-            </>
-          ) : (
-            <>
-              <Upload className="size-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Drop a PDF here or click to browse
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Max {MAX_SIZE_MB}MB
-              </p>
-            </>
-          )}
+          <Upload className="size-10 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            Drop PDFs here or click to browse
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Max {MAX_BANK_STATEMENT_SIZE_MB}MB per file
+          </p>
           <input
             ref={fileInputRef}
             type="file"
             accept=".pdf,application/pdf"
-            onChange={(e) => handleFileChange(e.target.files)}
+            multiple
+            onChange={(e) => {
+              addFiles(e.target.files);
+              if (fileInputRef.current) fileInputRef.current.value = "";
+            }}
             className="hidden"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <p className="flex items-start gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+          Your bank statement is deleted after processing. We only store the
+          extracted transaction data, never the original file.
+        </p>
+
+        {/* File list */}
+        {files.length > 0 && (
+          <div className="flex flex-col gap-1.5 rounded-md border p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              {files.length} file{files.length !== 1 ? "s" : ""} selected
+              {(doneCount > 0 || errorCount > 0) &&
+                ` — ${doneCount} uploaded${errorCount > 0 ? `, ${errorCount} failed` : ""}`}
+            </p>
+            <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+              {files.map((qf, i) => (
+                <div
+                  key={qf.file.name}
+                  className="flex items-center gap-2 rounded px-2 py-1 text-sm"
+                >
+                  {qf.status === "pending" && (
+                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                  )}
+                  {qf.status === "uploading" && (
+                    <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+                  )}
+                  {qf.status === "done" && (
+                    <CheckCircle2 className="size-3.5 shrink-0 text-green-600" />
+                  )}
+                  {qf.status === "error" && (
+                    <AlertCircle className="size-3.5 shrink-0 text-destructive" />
+                  )}
+                  <span
+                    className={cn(
+                      "flex-1 truncate",
+                      qf.status === "error" && "text-destructive"
+                    )}
+                    title={qf.error ?? qf.file.name}
+                  >
+                    {qf.file.name}
+                    {qf.error && (
+                      <span className="ml-1 text-xs">({qf.error})</span>
+                    )}
+                  </span>
+                  {qf.status === "pending" && !isUploading && (
+                    <button
+                      type="button"
+                      onClick={() => removeFile(i)}
+                      className="shrink-0 rounded p-0.5 hover:bg-muted"
+                    >
+                      <X className="size-3.5 text-muted-foreground" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="ob_bank_name">Bank Name (optional)</Label>
             <Input
               id="ob_bank_name"
               value={bankName}
               onChange={(e) => setBankName(e.target.value)}
-              placeholder="e.g. Chase"
+              placeholder="e.g. Chase, Wells Fargo"
+              disabled={isUploading}
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="ob_statement_month">Statement Month</Label>
+            <Label htmlFor="ob_statement_month">
+              Statement Month (optional)
+            </Label>
             <Input
               id="ob_statement_month"
-              type="date"
+              type="month"
               value={statementMonth}
               onChange={(e) => setStatementMonth(e.target.value)}
-              required
+              disabled={isUploading}
             />
+            <p className="text-xs text-muted-foreground">
+              Auto-detected from transactions if not provided
+            </p>
           </div>
         </div>
 
         <div className="flex items-center justify-between pt-2">
-          <Button type="button" variant="ghost" onClick={onSkip}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onSkip}
+            disabled={isUploading}
+          >
             Skip for now
           </Button>
-          <Button type="submit" disabled={upload.isPending || !file}>
-            {upload.isPending ? "Uploading..." : "Upload & Continue"}
+          <Button type="submit" disabled={isUploading || pendingCount === 0}>
+            {isUploading
+              ? `Uploading ${doneCount + 1} of ${files.length}...`
+              : pendingCount === 1
+                ? "Upload & Continue"
+                : `Upload ${pendingCount} Files & Continue`}
           </Button>
         </div>
       </form>

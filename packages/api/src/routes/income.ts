@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { createIncomeSchema, updateIncomeSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
-import { createSupabaseClient } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
@@ -10,10 +10,9 @@ const router = Router();
 // GET / — list income entries (owned by user OR attributed to user)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("income_entries")
     .select("*")
     .or(`user_id.eq.${user.id},attributed_to_user_id.eq.${user.id}`)
@@ -30,18 +29,17 @@ router.get("/", async (req, res: Response) => {
 // POST / — create income entry
 // ---------------------------------------------------------------------------
 router.post("/", validate(createIncomeSchema), async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
   // If attributed_to_user_id is provided, validate household membership
   if (req.body.attributed_to_user_id) {
-    const { data: currentProfile } = await supabase
+    const { data: currentProfile } = await supabaseAdmin
       .from("profiles")
       .select("household_id")
       .eq("id", user.id)
       .single();
 
-    const { data: attributedProfile } = await supabase
+    const { data: attributedProfile } = await supabaseAdmin
       .from("profiles")
       .select("household_id")
       .eq("id", req.body.attributed_to_user_id)
@@ -56,7 +54,7 @@ router.post("/", validate(createIncomeSchema), async (req, res: Response) => {
     }
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("income_entries")
     .insert({ ...req.body, user_id: user.id })
     .select()
@@ -73,10 +71,9 @@ router.post("/", validate(createIncomeSchema), async (req, res: Response) => {
 // PUT /:id — update income entry (RLS allows owner and attributed user)
 // ---------------------------------------------------------------------------
 router.put("/:id", validate(updateIncomeSchema), async (req, res: Response) => {
-  const { accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("income_entries")
     .update(req.body)
     .eq("id", req.params.id)
@@ -94,10 +91,9 @@ router.put("/:id", validate(updateIncomeSchema), async (req, res: Response) => {
 // DELETE /:id — delete income entry (only owner, not attributed user)
 // ---------------------------------------------------------------------------
 router.delete("/:id", async (req, res: Response) => {
-  const { user, accessToken } = req as AuthenticatedRequest;
-  const supabase = createSupabaseClient(accessToken);
+  const { user } = req as AuthenticatedRequest;
 
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("income_entries")
     .delete()
     .eq("id", req.params.id)

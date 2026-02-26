@@ -50,17 +50,28 @@ const EXPECTED_TRANSACTIONS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Mock pdf-parse before importing the module under test
+// Mock pdfjs-dist before importing the module under test
 // ---------------------------------------------------------------------------
-const mockGetText = mock(() =>
-  Promise.resolve({ text: SAMPLE_BANK_TEXT, pages: [] })
+const mockGetTextContent = mock(() =>
+  Promise.resolve({
+    items: SAMPLE_BANK_TEXT.split(" ").map((str) => ({ str })),
+  })
 );
 
-mock.module("pdf-parse", () => ({
-  PDFParse: class MockPDFParse {
-    constructor(_opts?: any) {}
-    getText = mockGetText;
-  },
+const mockGetPage = mock(() =>
+  Promise.resolve({ getTextContent: mockGetTextContent })
+);
+
+const mockGetDocument = mock(() => ({
+  promise: Promise.resolve({
+    numPages: 1,
+    getPage: mockGetPage,
+  }),
+}));
+
+mock.module("pdfjs-dist/legacy/build/pdf.mjs", () => ({
+  getDocument: mockGetDocument,
+  GlobalWorkerOptions: { workerSrc: "" },
 }));
 
 // ---------------------------------------------------------------------------
@@ -90,12 +101,27 @@ const { extractTextFromPDF, extractTransactions } = await import(
 // Tests
 // ---------------------------------------------------------------------------
 beforeEach(() => {
-  mockGetText.mockClear();
+  mockGetDocument.mockClear();
+  mockGetPage.mockClear();
+  mockGetTextContent.mockClear();
   mockInvoke.mockClear();
 
-  mockGetText.mockImplementation(() =>
-    Promise.resolve({ text: SAMPLE_BANK_TEXT, pages: [] })
+  mockGetTextContent.mockImplementation(() =>
+    Promise.resolve({
+      items: SAMPLE_BANK_TEXT.split(" ").map((str) => ({ str })),
+    })
   );
+
+  mockGetPage.mockImplementation(() =>
+    Promise.resolve({ getTextContent: mockGetTextContent })
+  );
+
+  mockGetDocument.mockImplementation(() => ({
+    promise: Promise.resolve({
+      numPages: 1,
+      getPage: mockGetPage,
+    }),
+  }));
 
   mockInvoke.mockImplementation(() =>
     Promise.resolve({
@@ -105,18 +131,20 @@ beforeEach(() => {
 });
 
 describe("extractTextFromPDF", () => {
-  it("extracts text from a PDF buffer using PDFParse", async () => {
+  it("extracts text from a PDF buffer using pdfjs-dist", async () => {
     const buffer = Buffer.from("fake-pdf-content");
     const text = await extractTextFromPDF(buffer);
 
-    expect(mockGetText).toHaveBeenCalledTimes(1);
-    expect(text).toBe(SAMPLE_BANK_TEXT);
+    expect(mockGetDocument).toHaveBeenCalledTimes(1);
+    expect(mockGetPage).toHaveBeenCalledTimes(1);
+    expect(mockGetTextContent).toHaveBeenCalledTimes(1);
+    expect(text).toContain("CHASE");
   });
 
-  it("propagates errors from PDFParse", async () => {
-    mockGetText.mockImplementation(() =>
-      Promise.reject(new Error("Invalid PDF"))
-    );
+  it("propagates errors from pdfjs-dist", async () => {
+    mockGetDocument.mockImplementation(() => ({
+      promise: Promise.reject(new Error("Invalid PDF")),
+    }));
 
     const buffer = Buffer.from("not-a-pdf");
     await expect(extractTextFromPDF(buffer)).rejects.toThrow("Invalid PDF");
@@ -125,17 +153,24 @@ describe("extractTextFromPDF", () => {
 
 describe("extractTransactions", () => {
   it("sends text to ChatOpenAI and returns parsed transactions", async () => {
+    mockInvoke.mockImplementation(() =>
+      Promise.resolve({
+        content: JSON.stringify({ bank_name: "Chase", transactions: EXPECTED_TRANSACTIONS }),
+      })
+    );
+
     const result = await extractTransactions(SAMPLE_BANK_TEXT);
 
     expect(mockInvoke).toHaveBeenCalledTimes(1);
-    expect(result).toHaveLength(5);
-    expect(result[0]).toEqual({
+    expect(result.transactions).toHaveLength(5);
+    expect(result.detectedBankName).toBe("Chase");
+    expect(result.transactions[0]).toEqual({
       date: "2026-01-05",
       description: "WALMART SUPERCENTER #1234",
       amount: 52.43,
       type: "debit",
     });
-    expect(result[2]).toEqual({
+    expect(result.transactions[2]).toEqual({
       date: "2026-01-15",
       description: "PAYROLL DEPOSIT",
       amount: 2500.0,
@@ -160,12 +195,13 @@ describe("extractTransactions", () => {
   it("handles empty transactions response", async () => {
     mockInvoke.mockImplementation(() =>
       Promise.resolve({
-        content: JSON.stringify({ transactions: [] }),
+        content: JSON.stringify({ bank_name: null, transactions: [] }),
       })
     );
 
     const result = await extractTransactions("Empty statement text");
-    expect(result).toEqual([]);
+    expect(result.transactions).toEqual([]);
+    expect(result.detectedBankName).toBeNull();
   });
 
   it("handles AI returning transactions as top-level array", async () => {
@@ -176,14 +212,16 @@ describe("extractTransactions", () => {
     );
 
     const result = await extractTransactions(SAMPLE_BANK_TEXT);
-    expect(result).toHaveLength(1);
-    expect(result[0].description).toBe("WALMART SUPERCENTER #1234");
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].description).toBe("WALMART SUPERCENTER #1234");
+    expect(result.detectedBankName).toBeNull();
   });
 
   it("ensures all amounts are positive numbers", async () => {
     mockInvoke.mockImplementation(() =>
       Promise.resolve({
         content: JSON.stringify({
+          bank_name: "Chase",
           transactions: [
             {
               date: "2026-01-05",
@@ -197,7 +235,7 @@ describe("extractTransactions", () => {
     );
 
     const result = await extractTransactions(SAMPLE_BANK_TEXT);
-    expect(result[0].amount).toBe(52.43);
-    expect(result[0].amount).toBeGreaterThan(0);
+    expect(result.transactions[0].amount).toBe(52.43);
+    expect(result.transactions[0].amount).toBeGreaterThan(0);
   });
 });
