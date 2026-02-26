@@ -39,7 +39,7 @@ export function buildReportEmailHtml(data: ReportEmailData): string {
     <!-- Header -->
     <div style="background:linear-gradient(135deg,#10b981,#059669);border-radius:12px 12px 0 0;padding:32px 24px;text-align:center;">
       <h1 style="margin:0;font-size:24px;color:#ffffff;font-weight:700;">Spendoza</h1>
-      <p style="margin:8px 0 0;color:#d1fae5;font-size:14px;">Your Weekly Financial Report</p>
+      <p style="margin:8px 0 0;color:#d1fae5;font-size:14px;">Your Weekly ${data.reportTitle}</p>
     </div>
 
     <!-- Body -->

@@ -246,7 +246,7 @@ export async function generatePersonalPdfForUser(
   );
 
   const pdfBuffer = await buildReportPdf({
-    title: profile?.display_name ?? "Personal",
+    title: `${profile?.display_name ?? "Personal"} — Personal Finance Report`,
     month: monthLabel,
     reportData,
     aiInsights: report.ai_insights ?? null,
@@ -398,7 +398,7 @@ export async function generateHouseholdPdfForHousehold(
   );
 
   const pdfBuffer = await buildReportPdf({
-    title: household?.name ?? "Household",
+    title: `${household?.name ?? "Household"} — Household Finance Report`,
     month: monthLabel,
     reportData,
     aiInsights: report.ai_insights ?? null,

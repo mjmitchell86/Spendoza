@@ -210,7 +210,7 @@ function drawHeaderBanner(
   doc
     .fontSize(11)
     .fillColor("#99f6e4")
-    .text(`${title} — Monthly Report`, 0, 38, {
+    .text(title, 0, 38, {
       align: "center",
       width: pageFullWidth,
     });
