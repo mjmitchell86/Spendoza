@@ -7,13 +7,6 @@ import type {
   UpdateGoalInput,
 } from "@spendoza/shared";
 
-export function useGoals() {
-  return useQuery<Goal[]>({
-    queryKey: ["goals"],
-    queryFn: () => apiClient("/goals"),
-  });
-}
-
 export interface GoalProgress {
   goal: Goal;
   current: number;
@@ -21,10 +14,23 @@ export interface GoalProgress {
   history: Array<{ month: string; actual: number }>;
 }
 
-export function useGoalProgress(months = 6) {
+export function useGoals(entityType: "user" | "household" = "user") {
+  return useQuery<Goal[]>({
+    queryKey: ["goals", entityType],
+    queryFn: () => apiClient(`/goals?entity_type=${entityType}`),
+  });
+}
+
+export function useGoalProgress(
+  months = 6,
+  entityType: "user" | "household" = "user"
+) {
   return useQuery<{ goals: GoalProgress[] }>({
-    queryKey: ["goals", "progress", months],
-    queryFn: () => apiClient(`/goals/progress?months=${months}`),
+    queryKey: ["goals", "progress", entityType, months],
+    queryFn: () =>
+      apiClient(
+        `/goals/progress?months=${months}&entity_type=${entityType}`
+      ),
   });
 }
 
