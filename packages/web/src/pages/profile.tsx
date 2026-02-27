@@ -170,6 +170,13 @@ export function ProfilePage() {
                 <p className="text-xs text-muted-foreground">
                   Click avatar to upload a new photo
                 </p>
+                {uploadAvatar.isError && (
+                  <p className="text-xs text-destructive">
+                    {uploadAvatar.error instanceof Error
+                      ? uploadAvatar.error.message
+                      : "Upload failed"}
+                  </p>
+                )}
               </div>
             </div>
 
