@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import multer, { MulterError } from "multer";
+import multer from "multer";
+
 import { updateProfileSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
@@ -113,7 +114,7 @@ router.post(
   "/avatar",
   (req: Request, res: Response, next: NextFunction) => {
     avatarUpload.single("file")(req, res, (err: any) => {
-      if (err instanceof MulterError) {
+      if (err && err.name === "MulterError") {
         return res.status(400).json({
           error: err.code === "LIMIT_FILE_SIZE"
             ? "File too large (max 5 MB)"
