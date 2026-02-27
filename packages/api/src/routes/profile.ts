@@ -1,5 +1,5 @@
-import { Router, type Response } from "express";
-import multer from "multer";
+import { Router, type Request, type Response, type NextFunction } from "express";
+import multer, { MulterError } from "multer";
 import { updateProfileSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
@@ -8,7 +8,7 @@ import { generateUserReport, generateHouseholdReport } from "../services/report.
 
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB (client compresses before upload)
 });
 
 const router = Router();
@@ -111,7 +111,21 @@ const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 router.post(
   "/avatar",
-  avatarUpload.single("file"),
+  (req: Request, res: Response, next: NextFunction) => {
+    avatarUpload.single("file")(req, res, (err: any) => {
+      if (err instanceof MulterError) {
+        return res.status(400).json({
+          error: err.code === "LIMIT_FILE_SIZE"
+            ? "File too large (max 5 MB)"
+            : `Upload error: ${err.message}`,
+        });
+      }
+      if (err) {
+        return res.status(500).json({ error: "Upload failed" });
+      }
+      next();
+    });
+  },
   async (req, res: Response) => {
     const { user } = req as AuthenticatedRequest;
     const file = (req as any).file as Express.Multer.File | undefined;
