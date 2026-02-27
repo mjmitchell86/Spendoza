@@ -15,6 +15,8 @@ import { TransactionsPage } from "@/pages/transactions";
 import { HouseholdPage } from "@/pages/household-dashboard";
 import { GoalsPage } from "@/pages/goals";
 import { ProfilePage } from "@/pages/profile";
+import { PricingPage } from "@/pages/pricing";
+import { BillingPage } from "@/pages/billing";
 import { OnboardingPage } from "@/pages/onboarding";
 
 const queryClient = new QueryClient();
@@ -48,6 +50,8 @@ function App() {
                   element={<Navigate to="/household" replace />}
                 />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/billing" element={<BillingPage />} />
               </Route>
               <Route path="/onboarding" element={<OnboardingPage />} />
             </Route>
