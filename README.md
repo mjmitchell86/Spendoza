@@ -590,6 +590,34 @@ flowchart LR
 4. After review, merge to `test` (auto-deploys to test environment)
 5. Promote `test` to `main` for production deployment
 
+## Monthly Cost Breakdown
+
+_Last updated: February 2026_
+
+### Fixed Costs
+
+| Service | Plan | Monthly Cost | Notes |
+|---------|------|-------------|-------|
+| **Vercel** | Pro | $20 | Hosting for 4 projects (web + API, test + prod) |
+| **Supabase** | Pro (x2) | $50 | Test and prod databases ($25/project) |
+| **Resend** | Free | $0 | Email delivery (3,000 emails/mo free tier) |
+| **Claude** | Max 5x | $100 | AI-assisted development |
+| **Domain** | spendoza.io | ~$4 | ~$50/year for .io domain |
+| | | **$174** | |
+
+### Variable / Usage-Based Costs
+
+| Service | Usage | Est. Monthly Cost |
+|---------|-------|-------------------|
+| **OpenAI (gpt-5-mini)** | Bank statement parsing, classification, insights, goal suggestions, friendly name generation | $1--5 |
+| **Vercel** | Serverless function execution beyond included credits | $0--5 |
+| **Supabase** | Storage and bandwidth overages | $0--5 |
+| | | **$1--15** |
+
+### Estimated Total: ~$175--185/mo
+
+> **Cost optimization note:** Pausing the test Supabase project when not actively developing saves $25/mo. OpenAI usage is negligible at low user counts -- gpt-5-mini costs $0.25/1M input tokens and $2.00/1M output tokens.
+
 ## Package Documentation
 
 - [`packages/shared/README.md`](packages/shared/README.md) -- Schemas, types, constants, and entity relationships
