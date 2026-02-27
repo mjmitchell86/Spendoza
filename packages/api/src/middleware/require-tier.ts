@@ -9,8 +9,13 @@ const TIER_RANK: Record<SubscriptionTier, number> = {
   pro: 2,
 };
 
+const isProduction = process.env.VERCEL_ENV === "production";
+
 export function requireTier(minimumTier: SubscriptionTier) {
   return async (req: Request, res: Response, next: NextFunction) => {
+    // In non-production environments, all users are treated as pro
+    if (!isProduction) return next();
+
     const { user } = req as AuthenticatedRequest;
 
     const { data: profile } = await supabaseAdmin
