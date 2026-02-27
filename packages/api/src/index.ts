@@ -27,6 +27,7 @@ app.use(
   cors({
     origin: [
       "https://spendoza.io",
+      "https://www.spendoza.io",
       "https://test.spendoza.io",
       process.env.NODE_ENV === "development" && "http://localhost:5173",
     ].filter(Boolean) as string[],
