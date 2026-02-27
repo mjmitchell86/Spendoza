@@ -3,12 +3,12 @@ import Stripe from "stripe";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 
-const isProduction = process.env.VERCEL_ENV === "production";
-const stripe = isProduction ? new Stripe(process.env.STRIPE_SECRET_KEY!) : null;
+const stripeEnabled = !!process.env.STRIPE_SECRET_KEY;
+const stripe = stripeEnabled ? new Stripe(process.env.STRIPE_SECRET_KEY!) : null;
 const router = Router();
 
 // In non-production, all users are treated as pro — no Stripe calls
-if (!isProduction) {
+if (!stripeEnabled) {
   router.post("/checkout", (_req, res: Response) => {
     return res.status(200).json({ message: "Stripe disabled in test — all users have pro access" });
   });

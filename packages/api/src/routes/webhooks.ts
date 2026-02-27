@@ -2,8 +2,8 @@ import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
 import { supabaseAdmin } from "../lib/supabase";
 
-const isProduction = process.env.VERCEL_ENV === "production";
-const stripe = isProduction ? new Stripe(process.env.STRIPE_SECRET_KEY!) : null;
+const stripeEnabled = !!process.env.STRIPE_SECRET_KEY;
+const stripe = stripeEnabled ? new Stripe(process.env.STRIPE_SECRET_KEY!) : null;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
 const router = Router();
@@ -15,7 +15,7 @@ function priceToTier(priceId: string): "free" | "starter" | "pro" {
 }
 
 router.post("/stripe", async (req: Request, res: Response) => {
-  if (!isProduction || !stripe) {
+  if (!stripeEnabled || !stripe) {
     return res.status(200).json({ received: true, message: "Webhooks disabled in test" });
   }
 
