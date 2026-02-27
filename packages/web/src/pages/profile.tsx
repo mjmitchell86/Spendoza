@@ -1,5 +1,6 @@
 import { useState, useRef, type FormEvent } from "react";
-import { Camera, Check, Loader2, Mail, Monitor, Moon, Sun } from "lucide-react";
+import { Camera, Check, CreditCard, Loader2, Mail, Monitor, Moon, Sun } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile, useUpdateProfile, useUploadAvatar } from "@/hooks/use-profile";
@@ -239,6 +240,35 @@ export function ProfilePage() {
                 </button>
               ))}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Subscription */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="size-4" />
+            Subscription
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium capitalize">
+                {profile?.subscription_tier ?? "free"} Plan
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {profile?.subscription_tier === "free"
+                  ? "Upgrade to unlock more features"
+                  : "Manage your subscription and billing"}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={profile?.subscription_tier === "free" ? "/pricing" : "/billing"}>
+                {profile?.subscription_tier === "free" ? "Upgrade" : "Manage"}
+              </Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

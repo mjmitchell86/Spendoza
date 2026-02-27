@@ -58,6 +58,8 @@ import { GoalCard, getGoalStatus } from "@/components/goals/goal-card";
 import { GoalForm } from "@/components/goals/goal-form";
 import { LogSavingsDialog } from "@/components/goals/log-savings-dialog";
 import { SuggestedGoals } from "@/components/goals/suggested-goals";
+import { UpgradePrompt } from "@/components/upgrade-prompt";
+import { useProfile } from "@/hooks/use-profile";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -323,6 +325,7 @@ function HouseholdGoalsTab({ householdId }: { householdId: string }) {
 }
 
 export function HouseholdPage() {
+  const { data: profile } = useProfile();
   const { user } = useAuth();
   const { data: householdData, isLoading: householdLoading, error: householdError, refetch: refetchHousehold } = useHousehold();
   const hasHousehold = !!householdData?.household;
@@ -373,6 +376,21 @@ export function HouseholdPage() {
     return (
       <div className="flex items-center justify-center py-12">
         <RefreshCw className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Tier gate — Pro required
+  if (profile && profile.subscription_tier !== "pro") {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Household</h1>
+          <p className="text-sm text-muted-foreground">
+            Create or join a household to share finances with your family
+          </p>
+        </div>
+        <UpgradePrompt feature="Household Features" requiredTier="Pro" />
       </div>
     );
   }

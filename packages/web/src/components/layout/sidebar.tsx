@@ -8,6 +8,7 @@ import {
   Users,
   ArrowLeftRight,
   Target,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navItems = [
   { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { to: "/goals", label: "Goals", icon: Target },
   { to: "/household", label: "Household", icon: Users },
+  { to: "/billing", label: "Billing", icon: CreditCard },
 ];
 
 interface SidebarProps {

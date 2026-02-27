@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SubscriptionTier } from "./subscription";
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -53,6 +54,7 @@ export interface Profile {
   email_reports_enabled: boolean;
   email_report_day: EmailReportDay;
   email_report_hour: number;
+  subscription_tier: SubscriptionTier;
   created_at: string;
   updated_at: string;
 }

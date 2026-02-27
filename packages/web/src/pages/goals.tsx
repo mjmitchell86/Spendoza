@@ -18,10 +18,27 @@ import { GoalCard, getGoalStatus } from "@/components/goals/goal-card";
 import { GoalForm } from "@/components/goals/goal-form";
 import { LogSavingsDialog } from "@/components/goals/log-savings-dialog";
 import { SuggestedGoals } from "@/components/goals/suggested-goals";
+import { UpgradePrompt } from "@/components/upgrade-prompt";
+import { useProfile } from "@/hooks/use-profile";
 
 export function GoalsPage() {
+  const { data: profile } = useProfile();
   const { data: progressData, isLoading, error, refetch } = useGoalProgress(6, "user");
   const { data: categories } = useCategories();
+
+  if (profile && profile.subscription_tier === "free") {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Goals</h1>
+          <p className="text-sm text-muted-foreground">
+            Set budgets and savings targets
+          </p>
+        </div>
+        <UpgradePrompt feature="Goals" requiredTier="Starter" />
+      </div>
+    );
+  }
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
