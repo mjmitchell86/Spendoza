@@ -31,6 +31,8 @@ function buildRlsChain(table: string) {
   const makeEqChain = (): any => ({
     eq: () => makeEqChain(),
     is: () => makeEqChain(),
+    gte: () => makeEqChain(),
+    lt: () => makeEqChain(),
     single: () =>
       Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
     maybeSingle: () =>
