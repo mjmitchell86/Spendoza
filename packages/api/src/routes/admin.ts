@@ -1,0 +1,191 @@
+import { Router, type Response } from "express";
+import type { AuthenticatedRequest } from "../middleware/auth";
+import { supabaseAdmin } from "../lib/supabase";
+
+const router = Router();
+
+// GET /api/admin/stats — aggregate dashboard metrics
+router.get("/stats", async (req, res: Response) => {
+  const { data: userStats, error: userErr } = await supabaseAdmin
+    .from("admin_user_stats")
+    .select("*")
+    .single();
+
+  if (userErr) {
+    return res.status(500).json({ error: userErr.message });
+  }
+
+  const { data: activityStats, error: activityErr } = await supabaseAdmin
+    .from("admin_activity_stats")
+    .select("*")
+    .single();
+
+  if (activityErr) {
+    return res.status(500).json({ error: activityErr.message });
+  }
+
+  return res.json({
+    users: userStats,
+    activity: activityStats,
+  });
+});
+
+// GET /api/admin/stats/trends — monthly time-series
+router.get("/stats/trends", async (req, res: Response) => {
+  const months = Math.min(Math.max(Number(req.query.months) || 12, 1), 36);
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  const [userTrends, activityTrends, llmStats] = await Promise.all([
+    supabaseAdmin
+      .from("admin_user_trends")
+      .select("*")
+      .gte("month", cutoffStr)
+      .order("month"),
+    supabaseAdmin
+      .from("admin_activity_trends")
+      .select("*")
+      .gte("month", cutoffStr)
+      .order("month"),
+    supabaseAdmin
+      .from("admin_llm_stats")
+      .select("*")
+      .gte("month", cutoffStr)
+      .order("month"),
+  ]);
+
+  if (userTrends.error || activityTrends.error || llmStats.error) {
+    const err = userTrends.error || activityTrends.error || llmStats.error;
+    return res.status(500).json({ error: err!.message });
+  }
+
+  return res.json({
+    user_trends: userTrends.data,
+    activity_trends: activityTrends.data,
+    llm_stats: llmStats.data,
+  });
+});
+
+// GET /api/admin/users — paginated user list
+router.get("/users", async (req, res: Response) => {
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
+  const search = req.query.search as string | undefined;
+  const tierFilter = req.query.tier as string | undefined;
+  const adminFilter = req.query.is_admin as string | undefined;
+  const disabledFilter = req.query.disabled as string | undefined;
+
+  const offset = (page - 1) * limit;
+
+  // Build query
+  let query = supabaseAdmin
+    .from("profiles")
+    .select("id, display_name, subscription_tier, is_admin, disabled, created_at")
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  let countQuery = supabaseAdmin
+    .from("profiles")
+    .select("*", { count: "exact", head: true });
+
+  // Apply filters
+  if (tierFilter) {
+    query = query.eq("subscription_tier", tierFilter);
+    countQuery = countQuery.eq("subscription_tier", tierFilter);
+  }
+  if (adminFilter !== undefined) {
+    const isAdmin = adminFilter === "true";
+    query = query.eq("is_admin", isAdmin);
+    countQuery = countQuery.eq("is_admin", isAdmin);
+  }
+  if (disabledFilter !== undefined) {
+    const isDisabled = disabledFilter === "true";
+    query = query.eq("disabled", isDisabled);
+    countQuery = countQuery.eq("disabled", isDisabled);
+  }
+  if (search) {
+    query = query.ilike("display_name", `%${search}%`);
+    countQuery = countQuery.ilike("display_name", `%${search}%`);
+  }
+
+  const [{ data: users, error }, { count }] = await Promise.all([query, countQuery]);
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  // Fetch emails from auth.users for the returned user IDs
+  const userIds = (users ?? []).map((u: any) => u.id);
+  const emailMap = new Map<string, string>();
+
+  for (const uid of userIds) {
+    const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(uid);
+    if (authUser?.email) {
+      emailMap.set(uid, authUser.email);
+    }
+  }
+
+  const usersWithEmail = (users ?? []).map((u: any) => ({
+    ...u,
+    email: emailMap.get(u.id) ?? "",
+    disabled: u.disabled ?? false,
+  }));
+
+  return res.json({
+    users: usersWithEmail,
+    total: count ?? 0,
+    page,
+    limit,
+  });
+});
+
+// PATCH /api/admin/users/:id — update user (toggle admin, change tier, disable)
+router.patch("/users/:id", async (req, res: Response) => {
+  const { id } = req.params;
+  const { is_admin, subscription_tier, disabled } = req.body;
+
+  const updates: Record<string, any> = {};
+  if (is_admin !== undefined) updates.is_admin = is_admin;
+  if (subscription_tier !== undefined) updates.subscription_tier = subscription_tier;
+  if (disabled !== undefined) updates.disabled = disabled;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "No valid fields to update" });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  return res.json(data);
+});
+
+// DELETE /api/admin/users/:id — permanently delete user
+router.delete("/users/:id", async (req, res: Response) => {
+  const { id } = req.params;
+  const { user } = req as AuthenticatedRequest;
+
+  // Prevent self-deletion
+  if (id === user.id) {
+    return res.status(400).json({ error: "Cannot delete your own account" });
+  }
+
+  // Delete from auth (cascades to profiles via FK)
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  return res.json({ deleted: true });
+});
+
+export default router;

@@ -22,8 +22,22 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
 
-  deploy-api:
+  migrate:
     needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Push migrations to production database
+        working-directory: packages/api
+        run: supabase db push --db-url "$PROD_SUPABASE_DB_URL"
+        env:
+          PROD_SUPABASE_DB_URL: ${{ secrets.PROD_SUPABASE_DB_URL }}
+
+  deploy-api:
+    needs: migrate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +50,7 @@ jobs:
           vercel-args: '--prod'
 
   deploy-web:
-    needs: check
+    needs: migrate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

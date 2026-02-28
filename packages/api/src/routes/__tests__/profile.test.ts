@@ -27,8 +27,23 @@ const profileData = {
 const mockSingle = mock(() =>
   Promise.resolve({ data: profileData, error: null })
 );
-const mockEq = mock(() => ({ single: mockSingle }));
-const mockSelect = mock(() => ({ eq: mockEq }));
+
+// Recursive chain that supports arbitrary depth of .eq(), .gte(), .lt(), etc.
+const makeQueryChain = (): any => ({
+  eq: () => makeQueryChain(),
+  gte: () => makeQueryChain(),
+  lt: () => makeQueryChain(),
+  is: () => makeQueryChain(),
+  ilike: () => makeQueryChain(),
+  order: () => makeQueryChain(),
+  single: mockSingle,
+  maybeSingle: () => Promise.resolve({ data: null, error: null }),
+  then: (resolve: any, reject?: any) =>
+    Promise.resolve({ data: [], error: null }).then(resolve, reject),
+});
+
+const mockEq = mock(() => makeQueryChain());
+const mockSelect = mock((..._args: any[]) => makeQueryChain());
 
 // For update chains: .update(data).eq("id", id).select().single()
 const mockUpdateSingle = mock(() =>
@@ -41,6 +56,12 @@ const mockUpdate = mock(() => ({ eq: mockUpdateEq }));
 const mockFrom = mock(() => ({
   select: mockSelect,
   update: mockUpdate,
+  upsert: (_data: any, _opts?: any) => ({
+    select: () => ({
+      single: () => Promise.resolve({ data: null, error: null }),
+    }),
+    then: (resolve: any) => resolve({ data: null, error: null }),
+  }),
 }));
 
 // Storage mocks for avatar upload
@@ -69,6 +90,25 @@ const mockGetUser = mock(() =>
     error: null,
   })
 );
+
+// ---------------------------------------------------------------------------
+// Mock heavy transitive deps so module loading doesn't time out in CI
+// profile.ts -> report.service -> report-insights -> @langchain/*
+// ---------------------------------------------------------------------------
+mock.module("@langchain/openai", () => ({
+  ChatOpenAI: class {
+    invoke = mock(() => Promise.resolve({ content: "" }));
+  },
+}));
+
+mock.module("@langchain/core/messages", () => ({
+  SystemMessage: class {
+    constructor(public content: string) {}
+  },
+  HumanMessage: class {
+    constructor(public content: string) {}
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Mock @supabase/supabase-js BEFORE any import that depends on it.

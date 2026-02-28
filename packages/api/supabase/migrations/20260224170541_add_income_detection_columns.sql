@@ -1,0 +1,4 @@
+ALTER TABLE income_entries
+  ADD COLUMN IF NOT EXISTS friendly_name TEXT,
+  ADD COLUMN IF NOT EXISTS auto_detected BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS last_seen_at DATE;

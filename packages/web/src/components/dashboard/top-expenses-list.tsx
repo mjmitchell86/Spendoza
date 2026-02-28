@@ -27,7 +27,8 @@ function formatCurrency(value: number) {
 }
 
 export function TopExpensesList({ categories }: TopExpensesListProps) {
-  const sorted = [...categories].sort((a, b) => b.amount - a.amount);
+  const safe = Array.isArray(categories) ? categories : [];
+  const sorted = [...safe].sort((a, b) => b.amount - a.amount);
   const maxAmount = sorted[0]?.amount ?? 1;
 
   if (sorted.length === 0) {

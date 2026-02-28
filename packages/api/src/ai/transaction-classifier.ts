@@ -1,6 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { ParsedTransaction } from "./pdf-parser";
+import { logLlmUsage } from "./llm-usage-logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,6 +101,18 @@ ${transactionList}`;
       console.log(
         `[classifier] Batch ${batchIndex} response received in ${elapsed}ms`
       );
+
+      const usage = response.usage_metadata;
+      if (usage) {
+        void logLlmUsage({
+          user_id: null,
+          call_type: "categorization",
+          model: "gpt-5-mini",
+          input_tokens: usage.input_tokens ?? 0,
+          output_tokens: usage.output_tokens ?? 0,
+          total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+        });
+      }
     } catch (error) {
       console.error(
         `[classifier] OpenAI API call failed for batch ${batchIndex}:`,

@@ -1,5 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { logLlmUsage } from "./llm-usage-logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,6 +97,19 @@ ${momSection}`;
     console.log(
       `[report-insights] AI insights generated in ${elapsed}ms (${content.length} chars)`
     );
+
+    // Log token usage
+    const usage = response.usage_metadata;
+    if (usage) {
+      void logLlmUsage({
+        user_id: null, // report-insights doesn't have direct user context
+        call_type: "insight_generation",
+        model: "gpt-5-mini",
+        input_tokens: usage.input_tokens ?? 0,
+        output_tokens: usage.output_tokens ?? 0,
+        total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+      });
+    }
   } catch (error) {
     console.error("[report-insights] OpenAI API call failed:", error);
     throw new Error(

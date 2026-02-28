@@ -1,6 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
+import { logLlmUsage } from "./llm-usage-logger";
 import { goalSuggestionSchema, type GoalSuggestion } from "@spendoza/shared";
 import type { ReportData } from "./report-insights";
 
@@ -84,6 +85,18 @@ Suggest 2-4 new goals.`;
     console.log(
       `[goal-suggestions] AI response in ${elapsed}ms (${content.length} chars)`
     );
+
+    const usage = response.usage_metadata;
+    if (usage) {
+      void logLlmUsage({
+        user_id: null,
+        call_type: "goal_suggestions",
+        model: "gpt-5-mini",
+        input_tokens: usage.input_tokens ?? 0,
+        output_tokens: usage.output_tokens ?? 0,
+        total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+      });
+    }
 
     const parsed = JSON.parse(content);
     const suggestions = z.array(goalSuggestionSchema).parse(parsed.suggestions);

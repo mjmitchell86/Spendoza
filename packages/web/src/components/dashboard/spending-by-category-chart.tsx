@@ -38,7 +38,7 @@ function formatCurrency(value: number) {
 export function SpendingByCategoryChart({
   categories,
 }: SpendingByCategoryChartProps) {
-  if (categories.length === 0) {
+  if (!Array.isArray(categories) || categories.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-0">

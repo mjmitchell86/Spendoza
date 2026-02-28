@@ -100,6 +100,23 @@ function currentMonthStr(): string {
 // ---------------------------------------------------------------------------
 // Helper: transform report into dashboard shape
 // ---------------------------------------------------------------------------
+function normalizeByCategoryArray(raw: unknown): Array<{ category: string; amount: number; percentage: number }> {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === "object") {
+    // Handle legacy format: { "Housing": 1200, "Food": 600 }
+    const entries = Object.entries(raw as Record<string, number>);
+    const total = entries.reduce((sum, [, amt]) => sum + amt, 0);
+    return entries
+      .map(([category, amount]) => ({
+        category,
+        amount,
+        percentage: total > 0 ? (amount / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }
+  return [];
+}
+
 function toDashboardResponse(report: any) {
   const rd = report.report_data as any;
 
@@ -110,7 +127,7 @@ function toDashboardResponse(report: any) {
       savings_rate: rd.savings_rate,
       net: rd.total_income - rd.total_expenses,
     },
-    by_category: rd.by_category ?? [],
+    by_category: normalizeByCategoryArray(rd.by_category),
     trends: rd.month_over_month ?? { income_change: 0, expense_change: 0 },
     insights: report.ai_insights ?? null,
   };
