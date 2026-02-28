@@ -282,12 +282,15 @@ async function processEmailJob(jobId: string): Promise<void> {
     let result;
     let reportTitle: string;
     if (job.entity_type === "user") {
-      result = await generatePersonalPdfForUser(job.user_id, job.report_month);
+      result = await generatePersonalPdfForUser(job.user_id, job.report_month, {
+        forceRegenerate: true,
+      });
       reportTitle = "Personal Finance Report";
     } else {
       result = await generateHouseholdPdfForHousehold(
         job.entity_id,
-        job.report_month
+        job.report_month,
+        { forceRegenerate: true }
       );
       reportTitle = "Household Finance Report";
     }
