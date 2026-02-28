@@ -180,3 +180,66 @@ describe("GET /api/admin/stats/trends", () => {
     expect(body.llm_stats).toBeArrayOfSize(1);
   });
 });
+
+describe("PATCH /api/admin/users/:id", () => {
+  it("updates user admin status", async () => {
+    const targetUserId = "target-user-1";
+    adminResults.profiles = {
+      ...adminResults.profiles,
+      updateSingle: {
+        data: { id: targetUserId, is_admin: true, subscription_tier: "free", disabled: false },
+        error: null,
+      },
+    };
+
+    const res = await fetch(`http://localhost:${port}/api/admin/users/${targetUserId}`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ is_admin: true }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.is_admin).toBe(true);
+  });
+
+  it("updates user subscription tier", async () => {
+    const targetUserId = "target-user-2";
+    adminResults.profiles = {
+      ...adminResults.profiles,
+      updateSingle: {
+        data: { id: targetUserId, is_admin: false, subscription_tier: "pro", disabled: false },
+        error: null,
+      },
+    };
+
+    const res = await fetch(`http://localhost:${port}/api/admin/users/${targetUserId}`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription_tier: "pro" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.subscription_tier).toBe("pro");
+  });
+
+  it("returns 400 with no valid fields", async () => {
+    const res = await fetch(`http://localhost:${port}/api/admin/users/some-id`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("DELETE /api/admin/users/:id", () => {
+  it("prevents self-deletion", async () => {
+    const res = await fetch(`http://localhost:${port}/api/admin/users/${TEST_ADMIN_ID}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Cannot delete your own account");
+  });
+});
