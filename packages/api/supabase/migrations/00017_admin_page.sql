@@ -1,8 +1,9 @@
 -- 00017_admin_page.sql
 -- Adds admin support and LLM usage tracking
 
--- 1. Add is_admin column to profiles
+-- 1. Add is_admin and disabled columns to profiles
 ALTER TABLE profiles ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE profiles ADD COLUMN disabled BOOLEAN NOT NULL DEFAULT false;
 
 -- 2. Create LLM usage log table
 CREATE TABLE llm_usage_log (
