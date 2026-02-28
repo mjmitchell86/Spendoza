@@ -66,7 +66,13 @@ Include observations about:
 - Any category that seems unusually high or low
 
 Keep each bullet point to 1-2 sentences. Be specific with numbers when relevant.
-Respond ONLY with the bullet points, no introduction or conclusion.`;
+Respond ONLY with the bullet points, no introduction or conclusion.
+
+If spending allocation data is provided, comment on how the user's needs/wants/savings split compares to the 50/30/20 guideline. Highlight any category that significantly exceeds its benchmark.
+
+If debt information is provided, comment on the debt-to-income ratio and suggest prioritizing high-interest debt payoff if applicable.
+
+If a financial health score is provided, acknowledge the score and highlight the weakest factor as a priority area for improvement. Frame suggestions positively and encouragingly.`;
 
 // ---------------------------------------------------------------------------
 // Generate insights
@@ -104,6 +110,31 @@ export async function generateInsights(
 
   const entityLabel = entityType === "household" ? "household" : "personal";
 
+  const allocationSection = reportData.allocation
+    ? `\nSpending Allocation (50/30/20 benchmark):
+  - Needs: ${reportData.allocation.needs.percentage}% (benchmark: 50%)
+  - Wants: ${reportData.allocation.wants.percentage}% (benchmark: 30%)
+  - Savings: ${reportData.allocation.savings.percentage}% (benchmark: 20%)`
+    : "";
+
+  const debtSection = reportData.debt_summary
+    ? `\nDebt Summary:
+  - Total debt balance: $${reportData.debt_summary.total_balance.toFixed(2)}
+  - Monthly minimum payments: $${reportData.debt_summary.total_minimum_payments.toFixed(2)}
+  - Monthly interest cost: $${reportData.debt_summary.monthly_interest_cost.toFixed(2)}
+  - Debt-to-income ratio: ${(reportData.debt_summary.debt_to_income_ratio * 100).toFixed(1)}%
+  - Estimated payoff: ${reportData.debt_summary.estimated_payoff_months} months`
+    : "";
+
+  const healthSection = reportData.financial_health_score
+    ? `\nFinancial Health Score: ${reportData.financial_health_score.score}/100
+  - Savings Rate: ${reportData.financial_health_score.factors.savings_rate.rating}
+  - Needs Ratio: ${reportData.financial_health_score.factors.needs_ratio.rating}
+  - Wants Ratio: ${reportData.financial_health_score.factors.wants_ratio.rating}
+  - Emergency Fund: ${reportData.financial_health_score.factors.emergency_fund.rating}
+  - Debt-to-Income: ${reportData.financial_health_score.factors.debt_to_income.rating}`
+    : "";
+
   const userPrompt = `Here is the ${entityLabel} financial summary for this month:
 
 Total Income: $${reportData.total_income.toFixed(2)}
@@ -117,7 +148,7 @@ ${categoryBreakdown || "  No category data available."}
 
 Top Categories: ${reportData.top_categories.join(", ") || "None"}
 
-${momSection}`;
+${momSection}${allocationSection}${debtSection}${healthSection}`;
 
   let content: string;
   try {
