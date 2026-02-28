@@ -4,13 +4,17 @@ import type { Category, GoalSuggestion } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useGoalSuggestions, useCreateGoal } from "@/hooks/use-goals";
+import { useDebts } from "@/hooks/use-debts";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatCurrency } from "./goal-card";
 
 const GOAL_TYPE_LABELS: Record<string, string> = {
   budget: "Budget",
-  monthly_savings: "Monthly Savings",
-  total_savings: "Total Savings",
+  savings_amount: "Monthly Savings",
+  savings_rate: "Savings Rate",
+  emergency_fund: "Emergency Fund",
+  debt_payoff: "Debt Payoff",
+  target_savings: "Savings Target",
 };
 
 function formatReportMonth(month: string) {
@@ -29,6 +33,7 @@ export function SuggestedGoals({
 }) {
   const { data, isLoading } = useGoalSuggestions(entityType);
   const createGoal = useCreateGoal();
+  const { data: debts } = useDebts(entityType);
   const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<Set<string>>(new Set());
@@ -50,11 +55,21 @@ export function SuggestedGoals({
       categoryId = match?.id ?? null;
     }
 
+    // Resolve debt_id from debt_name for debt_payoff goals
+    let debtId: string | null = null;
+    if (suggestion.goal_type === "debt_payoff" && suggestion.debt_name && debts) {
+      const match = debts.find(
+        (d) => d.name.toLowerCase() === suggestion.debt_name!.toLowerCase()
+      );
+      debtId = match?.id ?? null;
+    }
+
     try {
       await createGoal.mutateAsync({
         name: suggestion.name,
         goal_type: suggestion.goal_type,
         category_id: categoryId,
+        debt_id: debtId,
         target_amount: suggestion.target_amount,
         ...(entityType && entityId ? { entity_type: entityType, entity_id: entityId } : {}),
       });
@@ -96,7 +111,12 @@ export function SuggestedGoals({
                     </div>
                     <h3 className="mt-1 text-sm font-semibold">{s.name}</h3>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>Target: {formatCurrency(s.target_amount)}</span>
+                      <span>
+                        Target:{" "}
+                        {s.goal_type === "savings_rate"
+                          ? `${s.target_amount}%`
+                          : formatCurrency(s.target_amount)}
+                      </span>
                       {s.goal_type === "budget" && s.category && (
                         <span className="rounded bg-muted px-1.5 py-0.5">{s.category}</span>
                       )}
