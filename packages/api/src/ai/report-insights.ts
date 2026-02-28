@@ -5,6 +5,42 @@ import { logLlmUsage } from "./llm-usage-logger";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+export interface AllocationBreakdown {
+  needs: { amount: number; percentage: number };
+  wants: { amount: number; percentage: number };
+  savings: { amount: number; percentage: number };
+  unclassified: { amount: number; percentage: number };
+  benchmark: { needs: number; wants: number; savings: number };
+}
+
+export interface DebtSummary {
+  total_balance: number;
+  total_minimum_payments: number;
+  monthly_interest_cost: number;
+  highest_rate_debt: { name: string; rate: number; balance: number } | null;
+  debt_to_income_ratio: number;
+  estimated_payoff_months: number;
+}
+
+export interface HealthScoreFactor {
+  value: number;
+  points: number;
+  max: number;
+  rating: "good" | "ok" | "warning" | "critical";
+}
+
+export interface FinancialHealthScore {
+  score: number;
+  previous_score: number | null;
+  factors: {
+    savings_rate: HealthScoreFactor;
+    needs_ratio: HealthScoreFactor;
+    wants_ratio: HealthScoreFactor;
+    emergency_fund: HealthScoreFactor;
+    debt_to_income: HealthScoreFactor;
+  };
+}
+
 export interface ReportData {
   total_income: number;
   total_expenses: number;
@@ -13,6 +49,9 @@ export interface ReportData {
   by_category: Array<{ category: string; amount: number; percentage: number }>;
   top_categories: string[];
   month_over_month: { income_change: number; expense_change: number } | null;
+  allocation?: AllocationBreakdown;
+  debt_summary?: DebtSummary;
+  financial_health_score?: FinancialHealthScore;
 }
 
 // ---------------------------------------------------------------------------
