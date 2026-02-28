@@ -44,7 +44,6 @@ function chainable(): any {
     "or",
     "gte",
     "lte",
-    "single",
   ];
   for (const m of methods) {
     obj[m] = mock(() => obj);
@@ -97,6 +96,7 @@ const {
 // ---------------------------------------------------------------------------
 describe("pdf-export.service", () => {
   beforeEach(() => {
+    maybeSingleResult = { data: null };
     mockGenerateUserReport.mockClear();
     mockGenerateHouseholdReport.mockClear();
     mockBuildPdf.mockClear();
