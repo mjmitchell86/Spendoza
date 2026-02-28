@@ -12,6 +12,10 @@ mock.module("@langchain/openai", () => ({
   },
 }));
 
+mock.module("../../lib/supabase", () => ({
+  supabaseAdmin: { from: () => ({ insert: () => ({ error: null }) }) },
+}));
+
 mock.module("@langchain/core/messages", () => ({
   SystemMessage: class {
     constructor(public content: string) {}
