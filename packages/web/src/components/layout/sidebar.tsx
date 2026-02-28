@@ -9,8 +9,10 @@ import {
   ArrowLeftRight,
   Target,
   CreditCard,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useProfile } from "@/hooks/use-profile";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -31,6 +33,7 @@ interface SidebarProps {
 export function Sidebar({ onNavigate }: SidebarProps) {
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { data: profile } = useProfile();
   const periodParam = searchParams.get("period");
   const search = periodParam ? `?period=${periodParam}` : "";
 
@@ -57,6 +60,24 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           </Link>
         );
       })}
+      {profile?.is_admin && (
+        <>
+          <div className="mx-3 my-2 border-t" />
+          <Link
+            to="/admin"
+            onClick={onNavigate}
+            className={cn(
+              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              location.pathname.startsWith("/admin")
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+            )}
+          >
+            <ShieldAlert className="size-4 shrink-0" />
+            Admin
+          </Link>
+        </>
+      )}
     </nav>
   );
 }

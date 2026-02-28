@@ -18,6 +18,9 @@ import { ProfilePage } from "@/pages/profile";
 import { PricingPage } from "@/pages/pricing";
 import { BillingPage } from "@/pages/billing";
 import { OnboardingPage } from "@/pages/onboarding";
+import { AdminGuard } from "@/components/admin-guard";
+import { AdminDashboardPage } from "@/pages/admin-dashboard";
+import { AdminUsersPage } from "@/pages/admin-users";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +55,10 @@ function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/billing" element={<BillingPage />} />
+                <Route element={<AdminGuard />}>
+                  <Route path="/admin" element={<AdminDashboardPage />} />
+                  <Route path="/admin/users" element={<AdminUsersPage />} />
+                </Route>
               </Route>
               <Route path="/onboarding" element={<OnboardingPage />} />
             </Route>

@@ -28,17 +28,22 @@ let rlsResults: Record<string, any> = {};
 function buildRlsChain(table: string) {
   const cfg = rlsResults[table] || {};
 
-  const makeEqChain = (): any => ({
-    eq: () => makeEqChain(),
-    is: () => makeEqChain(),
+  // Recursive chain that supports all common Supabase query methods
+  const makeChain = (): any => ({
+    eq: () => makeChain(),
+    is: () => makeChain(),
+    gte: () => makeChain(),
+    lt: () => makeChain(),
+    ilike: () => makeChain(),
+    select: () => makeChain(),
+    order: () => makeChain(),
+    range: () => makeChain(),
     single: () =>
       Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
     maybeSingle: () =>
       Promise.resolve(
         cfg.selectMaybeSingle ?? cfg.selectSingle ?? { data: null, error: null }
       ),
-    order: () =>
-      Promise.resolve(cfg.selectList ?? { data: [], error: null }),
     then: (resolve: any, reject?: any) => {
       const result = cfg.selectList ?? { data: [], error: null };
       return Promise.resolve(result).then(resolve, reject);
@@ -46,12 +51,22 @@ function buildRlsChain(table: string) {
   });
 
   return {
-    select: (..._args: any[]) => makeEqChain(),
+    select: (..._args: any[]) => makeChain(),
     insert: (data: any) => ({
       select: () => ({
         single: () =>
           Promise.resolve(cfg.insertSingle ?? { data: null, error: null }),
       }),
+    }),
+    upsert: (_data: any, _opts?: any) => ({
+      select: () => ({
+        single: () =>
+          Promise.resolve(cfg.upsertSingle ?? cfg.insertSingle ?? { data: null, error: null }),
+      }),
+      then: (resolve: any, reject?: any) => {
+        const result = cfg.upsertResult ?? { data: null, error: null };
+        return Promise.resolve(result).then(resolve, reject);
+      },
     }),
     update: (data: any) => {
       const makeUpdateEq = (): any => ({
