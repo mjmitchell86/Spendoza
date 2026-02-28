@@ -21,6 +21,9 @@ import { OnboardingPage } from "@/pages/onboarding";
 import { AdminGuard } from "@/components/admin-guard";
 import { AdminDashboardPage } from "@/pages/admin-dashboard";
 import { AdminUsersPage } from "@/pages/admin-users";
+import { PublicLayout } from "@/components/layout/public-layout";
+import { AboutPage } from "@/pages/about";
+import { GettingStartedPage } from "@/pages/getting-started";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +35,11 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route element={<PublicLayout />}>
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/getting-started" element={<GettingStartedPage />} />
+            </Route>
             <Route element={<AuthGuard />}>
               <Route element={<TimePeriodProvider><AppShell /></TimePeriodProvider>}>
                 <Route path="/dashboard" element={<DashboardPage />} />
@@ -53,7 +61,6 @@ function App() {
                   element={<Navigate to="/household" replace />}
                 />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/billing" element={<BillingPage />} />
                 <Route element={<AdminGuard />}>
                   <Route path="/admin" element={<AdminDashboardPage />} />
