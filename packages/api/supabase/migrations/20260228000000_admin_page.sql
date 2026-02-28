@@ -55,7 +55,7 @@ CREATE VIEW admin_activity_trends AS
 SELECT date_trunc('month', created_at)::date AS month, 'transactions' AS metric, COUNT(*) AS count
 FROM transactions GROUP BY 1
 UNION ALL
-SELECT date_trunc('month', created_at)::date, 'reports', COUNT(*)
+SELECT date_trunc('month', generated_at)::date, 'reports', COUNT(*)
 FROM reports GROUP BY 1
 UNION ALL
 SELECT date_trunc('month', sent_at)::date, 'emails', COUNT(*)
