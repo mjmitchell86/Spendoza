@@ -1,9 +1,16 @@
 import { useState, type FormEvent } from "react";
-import type { Category } from "@spendoza/shared";
+import type { Category, BudgetClass } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +41,9 @@ export function CategoryForm({
   const [isShared, setIsShared] = useState(
     category?.is_shared_with_household ?? false
   );
+  const [budgetClass, setBudgetClass] = useState<BudgetClass>(
+    category?.budget_class ?? "want"
+  );
   const [error, setError] = useState<string | null>(null);
 
   const isPending = createCategory.isPending || updateCategory.isPending;
@@ -41,6 +51,7 @@ export function CategoryForm({
   function resetForm() {
     setName("");
     setIsShared(false);
+    setBudgetClass(category?.budget_class ?? "want");
     setError(null);
   }
 
@@ -51,6 +62,7 @@ export function CategoryForm({
     const data = {
       name: name.trim(),
       is_shared_with_household: isShared,
+      budget_class: budgetClass,
     };
 
     try {
@@ -115,6 +127,24 @@ export function CategoryForm({
               />
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label>Budget Class</Label>
+            <Select value={budgetClass} onValueChange={(v) => setBudgetClass(v as BudgetClass)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="need">Need (50%)</SelectItem>
+                <SelectItem value="want">Want (30%)</SelectItem>
+                <SelectItem value="savings">Savings (20%)</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Used for 50/30/20 budget allocation tracking
+            </p>
+          </div>
 
           <DialogFooter>
             <Button
