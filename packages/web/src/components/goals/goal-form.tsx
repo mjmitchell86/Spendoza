@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateGoal, useUpdateGoal } from "@/hooks/use-goals";
+import { useDebts } from "@/hooks/use-debts";
 
 export function GoalForm({
   open,
@@ -43,7 +44,10 @@ export function GoalForm({
   const [categoryId, setCategoryId] = useState(goal?.category_id ?? "");
   const [targetAmount, setTargetAmount] = useState(goal?.target_amount?.toString() ?? "");
   const [targetDate, setTargetDate] = useState(goal?.target_date ?? "");
+  const [debtId, setDebtId] = useState<string>(goal?.debt_id ?? "");
   const [error, setError] = useState<string | null>(null);
+
+  const { data: debts } = useDebts(entityType);
 
   const isPending = createGoal.isPending || updateGoal.isPending;
 
@@ -53,6 +57,7 @@ export function GoalForm({
     setCategoryId("");
     setTargetAmount("");
     setTargetDate("");
+    setDebtId("");
     setError(null);
   }
 
@@ -65,14 +70,10 @@ export function GoalForm({
       goal_type: goalType,
       category_id: goalType === "budget" ? categoryId || null : null,
       target_amount: parseFloat(targetAmount),
-      target_date: goalType === "total_savings" && targetDate ? targetDate : null,
+      target_date: goalType === "target_savings" ? targetDate || null : null,
+      debt_id: goalType === "debt_payoff" ? debtId || null : null,
+      ...(!isEditing && entityType && entityId ? { entity_type: entityType, entity_id: entityId } : {}),
     };
-
-    // Add entity fields for new goals (not edits — entity can't change)
-    if (!isEditing && entityType && entityId) {
-      data.entity_type = entityType;
-      data.entity_id = entityId;
-    }
 
     try {
       if (isEditing && goal) {
@@ -128,15 +129,20 @@ export function GoalForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="budget">Budget (spending cap)</SelectItem>
-                  <SelectItem value="monthly_savings">Monthly Savings</SelectItem>
-                  <SelectItem value="total_savings">Total Savings</SelectItem>
+                  <SelectItem value="budget">Category Budget</SelectItem>
+                  <SelectItem value="savings_amount">Monthly Savings ($)</SelectItem>
+                  <SelectItem value="savings_rate">Savings Rate (%)</SelectItem>
+                  <SelectItem value="emergency_fund">Emergency Fund</SelectItem>
+                  <SelectItem value="debt_payoff">Debt Payoff</SelectItem>
+                  <SelectItem value="target_savings">Savings Target</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="goal_target">Target Amount</Label>
+              <Label htmlFor="goal_target">
+                {goalType === "savings_rate" ? "Target %" : "Target Amount"}
+              </Label>
               <Input
                 id="goal_target"
                 type="number"
@@ -147,6 +153,16 @@ export function GoalForm({
                 placeholder="0.00"
                 required
               />
+              {goalType === "savings_rate" && (
+                <p className="text-xs text-muted-foreground">
+                  Enter as percentage (e.g., 20 for 20%)
+                </p>
+              )}
+              {goalType === "emergency_fund" && (
+                <p className="text-xs text-muted-foreground">
+                  Recommended: 3-6 months of expenses
+                </p>
+              )}
             </div>
           </div>
 
@@ -168,7 +184,25 @@ export function GoalForm({
             </div>
           )}
 
-          {goalType === "total_savings" && (
+          {goalType === "debt_payoff" && debts && debts.length > 0 && (
+            <div className="space-y-2">
+              <Label>Linked Debt</Label>
+              <Select value={debtId} onValueChange={setDebtId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a debt" />
+                </SelectTrigger>
+                <SelectContent>
+                  {debts.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} (${d.current_balance.toLocaleString()})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {goalType === "target_savings" && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="goal_target_date">Target Date (optional)</Label>
               <Input
