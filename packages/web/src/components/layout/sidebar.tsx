@@ -10,6 +10,7 @@ import {
   Target,
   CreditCard,
   ShieldAlert,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProfile } from "@/hooks/use-profile";
@@ -24,6 +25,7 @@ const navItems = [
   { to: "/goals", label: "Goals", icon: Target },
   { to: "/household", label: "Household", icon: Users },
   { to: "/billing", label: "Billing", icon: CreditCard },
+  { to: "/about", label: "About", icon: Info },
 ];
 
 interface SidebarProps {
