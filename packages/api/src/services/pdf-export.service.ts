@@ -7,6 +7,13 @@ import { buildReportPdf } from "../services/pdf-report.service";
 import type { ReportData } from "../ai/report-insights";
 
 // ---------------------------------------------------------------------------
+// Options for PDF export generators
+// ---------------------------------------------------------------------------
+export interface PdfExportOptions {
+  forceRegenerate?: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Return type for both generators
 // ---------------------------------------------------------------------------
 interface PdfExportResult {
@@ -154,7 +161,8 @@ export function buildGoalProgress(
 // ---------------------------------------------------------------------------
 export async function generatePersonalPdfForUser(
   userId: string,
-  month: string
+  month: string,
+  opts?: PdfExportOptions
 ): Promise<PdfExportResult | null> {
   // Try cached report
   let { data: report } = await supabaseAdmin
@@ -165,8 +173,8 @@ export async function generatePersonalPdfForUser(
     .eq("report_month", month)
     .maybeSingle();
 
-  // Regenerate if missing or stale
-  if (!report || report.has_new_data === true) {
+  // Regenerate if missing, stale, or forced
+  if (!report || report.has_new_data === true || opts?.forceRegenerate) {
     report = await generateUserReport(
       userId,
       new Date(month + "T00:00:00Z"),
@@ -269,7 +277,8 @@ export async function generatePersonalPdfForUser(
 // ---------------------------------------------------------------------------
 export async function generateHouseholdPdfForHousehold(
   householdId: string,
-  month: string
+  month: string,
+  opts?: PdfExportOptions
 ): Promise<PdfExportResult | null> {
   // Get household name
   const { data: household } = await supabaseAdmin
@@ -287,8 +296,8 @@ export async function generateHouseholdPdfForHousehold(
     .eq("report_month", month)
     .maybeSingle();
 
-  // Regenerate if missing or stale
-  if (!report || report.has_new_data === true) {
+  // Regenerate if missing, stale, or forced
+  if (!report || report.has_new_data === true || opts?.forceRegenerate) {
     report = await generateHouseholdReport(
       householdId,
       new Date(month + "T00:00:00Z"),
