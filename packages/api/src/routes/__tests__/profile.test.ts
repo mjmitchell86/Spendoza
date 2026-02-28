@@ -92,6 +92,25 @@ const mockGetUser = mock(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Mock heavy transitive deps so module loading doesn't time out in CI
+// profile.ts -> report.service -> report-insights -> @langchain/*
+// ---------------------------------------------------------------------------
+mock.module("@langchain/openai", () => ({
+  ChatOpenAI: class {
+    invoke = mock(() => Promise.resolve({ content: "" }));
+  },
+}));
+
+mock.module("@langchain/core/messages", () => ({
+  SystemMessage: class {
+    constructor(public content: string) {}
+  },
+  HumanMessage: class {
+    constructor(public content: string) {}
+  },
+}));
+
+// ---------------------------------------------------------------------------
 // Mock @supabase/supabase-js BEFORE any import that depends on it.
 // createClient is called twice:
 //   1. At module level in supabase.ts for supabaseAdmin (service role)
