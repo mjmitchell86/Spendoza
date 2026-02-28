@@ -18,8 +18,10 @@ import internalRouter from "./routes/internal";
 import emailsRouter from "./routes/emails";
 import webhooksRouter from "./routes/webhooks";
 import billingRouter from "./routes/billing";
+import adminRouter from "./routes/admin";
 import { requireAuth } from "./middleware/auth";
 import { requireTier } from "./middleware/require-tier";
+import { requireAdmin } from "./middleware/require-admin";
 import { errorHandler } from "./middleware/error-handler";
 
 const app: Express = express();
@@ -78,6 +80,7 @@ app.use("/api/internal", internalRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/goals", requireAuth, requireTier("starter"), goalsRouter);
 app.use("/api/emails", emailsRouter);
+app.use("/api/admin", requireAuth, requireAdmin, adminRouter);
 
 // Global error handler (must be LAST middleware)
 app.use(errorHandler);
