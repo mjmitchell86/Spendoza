@@ -4,7 +4,7 @@ Personal and household finance tracker with AI-powered bank statement processing
 
 ## Overview
 
-Spendoza helps individuals and households take control of their finances. Upload a bank statement PDF and the AI pipeline extracts transactions, classifies them into your categories, detects recurring bills, and matches them against existing records. Set budget and savings goals, track debts with payoff projections, monitor your financial health score, and get AI-generated insights in monthly reports and weekly email digests.
+Spendoza helps individuals and households take control of their finances. Upload a bank statement (PDF or CSV) and the AI pipeline extracts transactions, classifies them into your categories, detects recurring bills, and matches them against existing records. Set budget and savings goals, track debts with payoff projections, monitor your financial health score, and get AI-generated insights in monthly reports and weekly email digests.
 
 ```mermaid
 flowchart TB
@@ -114,7 +114,7 @@ spendoza/
 
 ```mermaid
 flowchart LR
-    PDF[PDF Upload<br/><i>Batch support</i>] --> Extract[Text Extraction<br/><i>pdf-parse</i>]
+    Upload[PDF / CSV Upload<br/><i>Batch support</i>] --> Extract[Text Extraction<br/><i>pdf-parse or UTF-8</i>]
     Extract --> Parse[Transaction Parsing<br/><i>GPT-4o-mini</i>]
     Parse --> Classify[Categorization<br/><i>GPT-4o-mini</i>]
     Classify --> Match[Record Matching<br/><i>Jaccard Similarity</i>]
@@ -125,7 +125,7 @@ flowchart LR
     Income --> DB
     DB --> Reports[Auto-Generate<br/>Reports]
 
-    style PDF fill:#e3f2fd
+    style Upload fill:#e3f2fd
     style Extract fill:#fff3e0
     style Parse fill:#fff3e0
     style Classify fill:#fff3e0
@@ -136,17 +136,18 @@ flowchart LR
     style Reports fill:#e8f5e9
 ```
 
-Upload one or more bank statement PDFs (batch upload with drag-and-drop support) and the pipeline:
-1. Extracts raw text from the PDF
+Upload one or more bank statements -- PDFs or CSVs (batch upload with drag-and-drop support) -- and the pipeline:
+1. Extracts raw text from the file (pdf-parse for PDFs, direct UTF-8 read for CSVs)
 2. Uses GPT-4o-mini to identify individual transactions (with auto-detected bank name and statement month)
 3. Classifies each transaction into user-defined categories
 4. Matches transactions to existing expenses/income records using string similarity and amount proximity
-5. Detects recurring bill patterns and creates auto-tracked expenses
-6. Detects recurring income sources and creates auto-tracked income entries
-7. Auto-generates monthly reports for all months with transaction data
-8. Retries failed steps with exponential backoff for resilient processing
+5. Deduplicates transactions against existing records (by date, description, amount, and type) to prevent duplicates across uploads
+6. Detects recurring bill patterns and creates auto-tracked expenses
+7. Detects recurring income sources and creates auto-tracked income entries
+8. Auto-generates monthly reports for all months with transaction data
+9. Retries failed steps with exponential backoff for resilient processing
 
-Your bank statement is deleted after processing -- only extracted transaction data is stored, never the original file.
+Your bank statement is deleted after processing -- only extracted transaction data is stored, never the original file. When uploading CSVs, bank name suggestions from previous uploads are shown for convenience.
 
 ### Automatic Bill Detection
 
@@ -469,7 +470,7 @@ flowchart LR
 
 New users are guided through a multi-step onboarding flow:
 1. Welcome introduction
-2. Bank statement upload (skippable)
+2. Bank statement upload -- PDF or CSV (skippable)
 3. AI processing with real-time progress
 4. Review parsed and categorized transactions
 5. Create or join a household (optional)
@@ -481,7 +482,8 @@ New users are guided through a multi-step onboarding flow:
 - **Profile management** -- Avatar upload, display name editing
 - **Transaction browser** -- Filter by type, time period, and description search with global time period context
 - **Category management** -- Create, edit, delete, and share categories with household
-- **Batch bank statement upload** -- Drag-and-drop multiple PDFs with per-file status tracking and sequential processing
+- **Batch bank statement upload** -- Drag-and-drop multiple PDFs or CSVs with per-file status tracking and sequential processing
+- **Transaction deduplication** -- Automatic dedup across uploads prevents duplicate transactions when re-uploading or uploading overlapping statements
 - **Invite code registration** -- Gated signup via invite codes (max 3 active codes per user)
 - **Privacy-first design** -- Bank statements are deleted after processing; only extracted data is stored
 - **Responsive design** -- Mobile-friendly layout across all pages
@@ -653,6 +655,7 @@ erDiagram
         uuid id PK
         uuid user_id FK
         string file_hash
+        string file_type
         enum status
         date statement_month
         string bank_name

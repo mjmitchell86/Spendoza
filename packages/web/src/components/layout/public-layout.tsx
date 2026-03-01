@@ -64,7 +64,11 @@ export function PublicLayout() {
       </main>
 
       <footer className="border-t py-6 text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} Spendoza. All rights reserved.
+        &copy; {new Date().getFullYear()}{" "}
+        <a href="https://www.gravitaz.net" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+          Gravitaz LLC
+        </a>
+        . All rights reserved.
       </footer>
     </div>
   );
