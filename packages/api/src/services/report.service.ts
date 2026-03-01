@@ -45,7 +45,7 @@ async function computeAllocation(
   let totalAmount = 0;
 
   for (const cat of byCategory) {
-    const budgetClass = classMap.get(cat.category.toLowerCase()) ?? "want";
+    const budgetClass = classMap.get(cat.category.toLowerCase()) ?? "other";
     totals[budgetClass as keyof typeof totals] += cat.amount;
     totalAmount += cat.amount;
   }
