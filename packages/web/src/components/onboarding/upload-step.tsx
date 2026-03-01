@@ -35,6 +35,7 @@ interface QueuedFile {
   status: FileStatus;
   error?: string;
   statementId?: string;
+  bankName: string;
 }
 
 const MAX_SIZE = MAX_BANK_STATEMENT_SIZE_MB * 1024 * 1024;
@@ -79,7 +80,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
         continue;
       }
       existingNames.add(f.name);
-      newFiles.push({ file: f, status: "pending" });
+      newFiles.push({ file: f, status: "pending", bankName: "" });
     }
 
     if (errors.length > 0) {
@@ -95,6 +96,12 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
 
   function removeFile(index: number) {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateFileBankName(index: number, value: string) {
+    setFiles((prev) =>
+      prev.map((f, i) => (i === index ? { ...f, bankName: value } : f))
+    );
   }
 
   function handleDragOver(e: DragEvent) {
@@ -138,8 +145,9 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
       if (statementMonth) {
         formData.append("statement_month", statementMonth + "-01");
       }
-      if (bankName.trim()) {
-        formData.append("bank_name", bankName.trim());
+      const fileBankName = files[i].bankName.trim() || bankName.trim();
+      if (fileBankName) {
+        formData.append("bank_name", fileBankName);
       }
       formData.append("is_shared_account", "false");
 
@@ -244,40 +252,52 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
               {files.map((qf, i) => (
                 <div
                   key={qf.file.name}
-                  className="flex items-center gap-2 rounded px-2 py-1 text-sm"
+                  className="flex flex-col gap-1 rounded px-2 py-1"
                 >
-                  {qf.status === "pending" && (
-                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                  )}
-                  {qf.status === "uploading" && (
-                    <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
-                  )}
-                  {qf.status === "done" && (
-                    <CheckCircle2 className="size-3.5 shrink-0 text-green-600" />
-                  )}
-                  {qf.status === "error" && (
-                    <AlertCircle className="size-3.5 shrink-0 text-destructive" />
-                  )}
-                  <span
-                    className={cn(
-                      "flex-1 truncate",
-                      qf.status === "error" && "text-destructive"
+                  <div className="flex items-center gap-2 text-sm">
+                    {qf.status === "pending" && (
+                      <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                     )}
-                    title={qf.error ?? qf.file.name}
-                  >
-                    {qf.file.name}
-                    {qf.error && (
-                      <span className="ml-1 text-xs">({qf.error})</span>
+                    {qf.status === "uploading" && (
+                      <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
                     )}
-                  </span>
-                  {qf.status === "pending" && !isUploading && (
-                    <button
-                      type="button"
-                      onClick={() => removeFile(i)}
-                      className="shrink-0 rounded p-0.5 hover:bg-muted"
+                    {qf.status === "done" && (
+                      <CheckCircle2 className="size-3.5 shrink-0 text-green-600" />
+                    )}
+                    {qf.status === "error" && (
+                      <AlertCircle className="size-3.5 shrink-0 text-destructive" />
+                    )}
+                    <span
+                      className={cn(
+                        "flex-1 truncate",
+                        qf.status === "error" && "text-destructive"
+                      )}
+                      title={qf.error ?? qf.file.name}
                     >
-                      <X className="size-3.5 text-muted-foreground" />
-                    </button>
+                      {qf.file.name}
+                      {qf.error && (
+                        <span className="ml-1 text-xs">({qf.error})</span>
+                      )}
+                    </span>
+                    {qf.status === "pending" && !isUploading && (
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className="shrink-0 rounded p-0.5 hover:bg-muted"
+                      >
+                        <X className="size-3.5 text-muted-foreground" />
+                      </button>
+                    )}
+                  </div>
+                  {qf.status === "pending" && (
+                    <Input
+                      list="ob-bank-name-suggestions"
+                      value={qf.bankName}
+                      onChange={(e) => updateFileBankName(i, e.target.value)}
+                      placeholder="Bank name (optional)"
+                      disabled={isUploading}
+                      className="h-7 text-xs ml-5.5"
+                    />
                   )}
                 </div>
               ))}
@@ -288,7 +308,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="ob_bank_name">
-              Bank Name{hasCSV ? "" : " (optional)"}
+              Default Bank Name{hasCSV ? "" : " (optional)"}
             </Label>
             <Input
               id="ob_bank_name"
