@@ -56,7 +56,7 @@ src/
     ├── categories/
     │   └── category-form.tsx            # Create/edit category dialog
     ├── bank-statements/
-    │   ├── upload-form.tsx              # PDF upload form
+    │   ├── upload-form.tsx              # PDF/CSV upload form
     │   ├── statement-list.tsx           # Statement history table
     │   └── transaction-review.tsx       # Review parsed transactions
     ├── household/
@@ -244,7 +244,7 @@ flowchart LR
 | `useBankStatements` | Query | `["bank-statements"]` | List all statements |
 | `useBankStatement` | Query | `["bank-statements", id]` | Get single statement |
 | `useTransactions` | Query | `["transactions", id]` | Get transactions for statement |
-| `useUploadBankStatement` | Mutation | Invalidates `bank-statements` | Upload PDF (FormData) |
+| `useUploadBankStatement` | Mutation | Invalidates `bank-statements` | Upload PDF or CSV (FormData) |
 | `useUpdateTransaction` | Mutation | Invalidates `transactions` | Update transaction |
 | `useBulkAttributeTransactions` | Mutation | Invalidates `transactions` | Batch attribute |
 

@@ -27,7 +27,7 @@ src/
 ├── services/
 │   ├── bank-statement.service.ts   # SHA-256 file hashing for dedup
 │   ├── household.service.ts        # Invite code generation
-│   ├── ai-pipeline.service.ts      # Full PDF-to-transactions pipeline
+│   ├── ai-pipeline.service.ts      # Full PDF/CSV-to-transactions pipeline
 │   └── report.service.ts           # Report generation (user, household, all)
 └── ai/
     ├── pdf-parser.ts               # PDF text extraction + AI transaction parsing
@@ -91,24 +91,26 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    Upload[PDF Upload] --> Hash[Compute SHA-256 Hash]
-    Hash --> Dedup{Duplicate?}
+    Upload[PDF / CSV Upload] --> Hash[Compute SHA-256 Hash]
+    Hash --> Dedup{Duplicate<br/>file?}
     Dedup -->|Yes| Reject[409 Conflict]
     Dedup -->|No| Store[Store in Supabase Storage]
     Store --> Status1[Status: uploaded]
-    Status1 --> Download[Download PDF]
+    Status1 --> Download[Download File]
     Download --> Status2[Status: processing]
-    Status2 --> Extract[Extract Text<br/><i>pdf-parse</i>]
+    Status2 --> Extract[Extract Text<br/><i>pdf-parse or UTF-8</i>]
     Extract --> Parse[Extract Transactions<br/><i>GPT-4o-mini</i>]
     Parse --> Classify[Classify into Categories<br/><i>GPT-4o-mini</i>]
     Classify --> Match[Match to Existing Records<br/><i>Jaccard Similarity</i>]
-    Match --> Insert[Insert Transactions]
+    Match --> TxnDedup[Dedup Transactions<br/><i>date+desc+amount+type</i>]
+    TxnDedup --> Insert[Insert New Transactions]
     Insert --> Status3[Status: parsed]
 
     Extract -.->|Error| Failed[Status: failed]
     Parse -.->|Error| Failed
 
     style Upload fill:#e3f2fd
+    style TxnDedup fill:#f3e5f5
     style Extract fill:#fff3e0
     style Parse fill:#fff3e0
     style Classify fill:#fff3e0
@@ -121,10 +123,11 @@ flowchart TB
 
 | Step | Module | Method | Description |
 |------|--------|--------|-------------|
-| 1 | `pdf-parser.ts` | `extractTextFromPDF()` | Extracts raw text from PDF via `pdf-parse` |
+| 1 | `ai-pipeline.service.ts` | `stepExtractText()` | PDFs: extracts text via `pdf-parse`. CSVs: reads file as UTF-8 text directly |
 | 2 | `pdf-parser.ts` | `extractTransactions()` | GPT-4o-mini extracts structured transactions from text |
 | 3 | `transaction-classifier.ts` | `classifyTransactions()` | GPT-4o-mini maps each transaction to a user category (batches of 20) |
 | 4 | `expense-matcher.ts` | `matchTransactions()` | Deterministic matching: Jaccard similarity on description + 20% amount tolerance |
+| 4b | `ai-pipeline.service.ts` | `stepMatchAndInsert()` | Transaction-level dedup: skips duplicates matching on (date, normalized description, amount, type) |
 
 ## Report Generation
 
@@ -206,7 +209,7 @@ flowchart LR
 |--------|------|-------------|-------------|
 | GET | `/` | -- | List user's statements |
 | GET | `/:id` | -- | Get statement + transactions |
-| POST | `/upload` | `uploadBankStatementSchema` + file | Upload PDF, triggers AI pipeline |
+| POST | `/upload` | `uploadBankStatementSchema` + file | Upload PDF or CSV, triggers AI pipeline |
 
 ### Transactions (`/api/transactions`) -- Auth required
 
