@@ -7,17 +7,15 @@ import { WelcomeStep } from "@/components/onboarding/welcome-step";
 import { UploadStep } from "@/components/onboarding/upload-step";
 import { ProcessingStep } from "@/components/onboarding/processing-step";
 import { ReviewStep } from "@/components/onboarding/review-step";
-import { HouseholdStep } from "@/components/onboarding/household-step";
 import { CompleteStep } from "@/components/onboarding/complete-step";
 
-type Step = "welcome" | "upload" | "processing" | "review" | "household" | "complete";
+type Step = "welcome" | "upload" | "processing" | "review" | "complete";
 
 const STEP_ORDER: Step[] = [
   "welcome",
   "upload",
   "processing",
   "review",
-  "household",
   "complete",
 ];
 
@@ -26,7 +24,6 @@ const STEP_LABELS: Record<Step, string> = {
   upload: "Upload",
   processing: "Processing",
   review: "Review",
-  household: "Household",
   complete: "Complete",
 };
 
@@ -40,12 +37,11 @@ function getProgressValue(step: Step): number {
 }
 
 function canGoBack(step: Step): boolean {
-  return step === "upload" || step === "household";
+  return step === "upload";
 }
 
 function getPrevStep(step: Step): Step {
   if (step === "upload") return "welcome";
-  if (step === "household") return "upload";
   return step;
 }
 
@@ -58,7 +54,7 @@ export function OnboardingPage() {
   }, []);
 
   const handleProcessingError = useCallback(() => {
-    setCurrentStep("household");
+    setCurrentStep("complete");
   }, []);
 
   function renderStep() {
@@ -73,7 +69,7 @@ export function OnboardingPage() {
               setStatementIds(ids);
               setCurrentStep("processing");
             }}
-            onSkip={() => setCurrentStep("household")}
+            onSkip={() => setCurrentStep("complete")}
           />
         );
 
@@ -90,17 +86,9 @@ export function OnboardingPage() {
         return statementIds.length > 0 ? (
           <ReviewStep
             statementIds={statementIds}
-            onNext={() => setCurrentStep("household")}
+            onNext={() => setCurrentStep("complete")}
           />
         ) : null;
-
-      case "household":
-        return (
-          <HouseholdStep
-            onNext={() => setCurrentStep("complete")}
-            onSkip={() => setCurrentStep("complete")}
-          />
-        );
 
       case "complete":
         return <CompleteStep />;
