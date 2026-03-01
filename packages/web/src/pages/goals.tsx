@@ -9,10 +9,7 @@ import {
 import type { Goal } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  useGoalProgress,
-  useDeleteGoal,
-} from "@/hooks/use-goals";
+import { useGoalProgress, useDeleteGoal } from "@/hooks/use-goals";
 import { useCategories } from "@/hooks/use-categories";
 import { GoalCard, getGoalStatus } from "@/components/goals/goal-card";
 import { GoalForm } from "@/components/goals/goal-form";
@@ -23,8 +20,17 @@ import { useProfile } from "@/hooks/use-profile";
 
 export function GoalsPage() {
   const { data: profile } = useProfile();
-  const { data: progressData, isLoading, error, refetch } = useGoalProgress(6, "user");
+  const {
+    data: progressData,
+    isLoading,
+    error,
+    refetch,
+  } = useGoalProgress(6, "user");
   const { data: categories } = useCategories();
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [logSavingsGoal, setLogSavingsGoal] = useState<Goal | null>(null);
+  const deleteGoal = useDeleteGoal();
 
   if (profile && profile.subscription_tier === "free") {
     return (
@@ -40,16 +46,13 @@ export function GoalsPage() {
     );
   }
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
-  const [logSavingsGoal, setLogSavingsGoal] = useState<Goal | null>(null);
-  const deleteGoal = useDeleteGoal();
-
   const goals = progressData?.goals ?? [];
 
   // Summary counts
   const totalGoals = goals.length;
-  const onTrackCount = goals.filter((gp) => getGoalStatus(gp) === "on_track").length;
+  const onTrackCount = goals.filter(
+    (gp) => getGoalStatus(gp) === "on_track"
+  ).length;
   const needsAttentionCount = goals.filter(
     (gp) => getGoalStatus(gp) === "warning" || getGoalStatus(gp) === "exceeded"
   ).length;
@@ -109,7 +112,9 @@ export function GoalsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-green-600">{onTrackCount}</p>
+              <p className="text-2xl font-bold text-green-600">
+                {onTrackCount}
+              </p>
             </CardContent>
           </Card>
 
@@ -121,7 +126,9 @@ export function GoalsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-yellow-600">{needsAttentionCount}</p>
+              <p className="text-2xl font-bold text-yellow-600">
+                {needsAttentionCount}
+              </p>
             </CardContent>
           </Card>
         </div>

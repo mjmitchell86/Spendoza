@@ -52,14 +52,16 @@ const validSuggestionsResponse = JSON.stringify({
       goal_type: "budget",
       category: "Food",
       target_amount: 650,
-      rationale: "You spent $800 on food. Setting a $650 budget would save $150/month.",
+      rationale:
+        "You spent $800 on food. Setting a $650 budget would save $150/month.",
     },
     {
       name: "Monthly Savings Target",
-      goal_type: "monthly_savings",
+      goal_type: "savings_amount",
       category: null,
       target_amount: 2000,
-      rationale: "With $5,000 income and 30% savings rate, pushing to $2,000/month is achievable.",
+      rationale:
+        "With $5,000 income and 30% savings rate, pushing to $2,000/month is achievable.",
     },
   ],
 });
@@ -84,11 +86,13 @@ describe("generateGoalSuggestions", () => {
     expect(result[0].target_amount).toBe(650);
     expect(result[0].rationale).toContain("$800");
     expect(result[1].name).toBe("Monthly Savings Target");
-    expect(result[1].goal_type).toBe("monthly_savings");
+    expect(result[1].goal_type).toBe("savings_amount");
   });
 
   it("returns empty array when AI returns invalid JSON", async () => {
-    mockInvoke.mockResolvedValueOnce({ content: "This is not valid JSON at all" });
+    mockInvoke.mockResolvedValueOnce({
+      content: "This is not valid JSON at all",
+    });
 
     const result = await generateGoalSuggestions(sampleReportData, "user", []);
 
@@ -107,7 +111,7 @@ describe("generateGoalSuggestions", () => {
     mockInvoke.mockResolvedValueOnce({ content: validSuggestionsResponse });
 
     const result = await generateGoalSuggestions(sampleReportData, "user", [
-      "Food Budget",
+      { name: "Food Budget", goal_type: "budget" },
     ]);
 
     expect(result).toHaveLength(1);
@@ -118,8 +122,8 @@ describe("generateGoalSuggestions", () => {
     mockInvoke.mockResolvedValueOnce({ content: validSuggestionsResponse });
 
     const result = await generateGoalSuggestions(sampleReportData, "user", [
-      "food budget",
-      "monthly savings target",
+      { name: "food budget", goal_type: "budget" },
+      { name: "monthly savings target", goal_type: "savings_amount" },
     ]);
 
     expect(result).toEqual([]);

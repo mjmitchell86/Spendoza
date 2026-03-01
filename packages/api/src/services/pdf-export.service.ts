@@ -140,9 +140,9 @@ export function buildGoalProgress(
         );
         current = match?.amount ?? 0;
       }
-    } else if (goal.goal_type === "monthly_savings") {
+    } else if (goal.goal_type === "savings_amount") {
       current = reportData.total_income - reportData.total_expenses;
-    } else if (goal.goal_type === "total_savings") {
+    } else if (goal.goal_type === "target_savings") {
       current = goal.current_amount ?? 0;
     }
     return {
@@ -231,7 +231,9 @@ export async function generatePersonalPdfForUser(
       .eq("user_id", userId),
     supabaseAdmin
       .from("debts")
-      .select("name, debt_type, current_balance, interest_rate, minimum_payment")
+      .select(
+        "name, debt_type, current_balance, interest_rate, minimum_payment"
+      )
       .eq("entity_type", "user")
       .eq("entity_id", userId)
       .gt("current_balance", 0),
@@ -271,7 +273,8 @@ export async function generatePersonalPdfForUser(
     goalProgress,
     savingsRecommendations,
     allocation: (report.report_data as any).allocation ?? undefined,
-    healthScore: (report.report_data as any).financial_health_score ?? undefined,
+    healthScore:
+      (report.report_data as any).financial_health_score ?? undefined,
     debts: debts ?? [],
   });
 
@@ -360,7 +363,9 @@ export async function generateHouseholdPdfForHousehold(
       .in("user_id", memberIds),
     supabaseAdmin
       .from("debts")
-      .select("name, debt_type, current_balance, interest_rate, minimum_payment")
+      .select(
+        "name, debt_type, current_balance, interest_rate, minimum_payment"
+      )
       .eq("entity_type", "household")
       .eq("entity_id", householdId)
       .gt("current_balance", 0),
@@ -435,7 +440,8 @@ export async function generateHouseholdPdfForHousehold(
     goalProgress,
     savingsRecommendations,
     allocation: (report.report_data as any).allocation ?? undefined,
-    healthScore: (report.report_data as any).financial_health_score ?? undefined,
+    healthScore:
+      (report.report_data as any).financial_health_score ?? undefined,
     debts: debts ?? [],
   });
 

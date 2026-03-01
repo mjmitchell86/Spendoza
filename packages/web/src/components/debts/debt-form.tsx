@@ -1,5 +1,5 @@
-import { useState, useEffect, type FormEvent } from "react";
-import type { Debt, DebtType } from "@spendoza/shared";
+import { useState, type FormEvent } from "react";
+import type { Debt, DebtType, CreateDebtInput } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,29 +48,28 @@ export function DebtForm({
   const createDebt = useCreateDebt();
   const updateDebt = useUpdateDebt();
 
-  const [name, setName] = useState("");
-  const [debtType, setDebtType] = useState<DebtType>("credit_card");
-  const [originalBalance, setOriginalBalance] = useState("");
-  const [currentBalance, setCurrentBalance] = useState("");
-  const [interestRate, setInterestRate] = useState("");
-  const [minimumPayment, setMinimumPayment] = useState("");
-  const [dueDateDay, setDueDateDay] = useState("");
+  const [name, setName] = useState(debt?.name ?? "");
+  const [debtType, setDebtType] = useState<DebtType>(
+    debt?.debt_type ?? "credit_card"
+  );
+  const [originalBalance, setOriginalBalance] = useState(
+    debt?.original_balance?.toString() ?? ""
+  );
+  const [currentBalance, setCurrentBalance] = useState(
+    debt?.current_balance?.toString() ?? ""
+  );
+  const [interestRate, setInterestRate] = useState(
+    debt?.interest_rate?.toString() ?? ""
+  );
+  const [minimumPayment, setMinimumPayment] = useState(
+    debt?.minimum_payment?.toString() ?? ""
+  );
+  const [dueDateDay, setDueDateDay] = useState(
+    debt?.due_date_day?.toString() ?? ""
+  );
   const [error, setError] = useState<string | null>(null);
 
   const isPending = createDebt.isPending || updateDebt.isPending;
-
-  // Sync form state when debt prop changes (for editing)
-  useEffect(() => {
-    if (debt) {
-      setName(debt.name);
-      setDebtType(debt.debt_type);
-      setOriginalBalance(debt.original_balance.toString());
-      setCurrentBalance(debt.current_balance.toString());
-      setInterestRate(debt.interest_rate.toString());
-      setMinimumPayment(debt.minimum_payment.toString());
-      setDueDateDay(debt.due_date_day?.toString() ?? "");
-    }
-  }, [debt]);
 
   function resetForm() {
     setName("");
@@ -87,30 +86,32 @@ export function DebtForm({
     e.preventDefault();
     setError(null);
 
-    const data: Record<string, unknown> = {
-      name: name.trim(),
-      debt_type: debtType,
-      current_balance: parseFloat(currentBalance),
-      interest_rate: parseFloat(interestRate || "0"),
-      minimum_payment: parseFloat(minimumPayment || "0"),
-      due_date_day: dueDateDay ? parseInt(dueDateDay, 10) : null,
-    };
-
-    if (!isEditing) {
-      data.original_balance = parseFloat(originalBalance);
-    }
-
-    // Add entity fields for new debts (not edits -- entity can't change)
-    if (!isEditing && entityType && entityId) {
-      data.entity_type = entityType;
-      data.entity_id = entityId;
-    }
-
     try {
       if (isEditing && debt) {
-        await updateDebt.mutateAsync({ id: debt.id, data });
+        await updateDebt.mutateAsync({
+          id: debt.id,
+          data: {
+            name: name.trim(),
+            debt_type: debtType,
+            current_balance: parseFloat(currentBalance),
+            interest_rate: parseFloat(interestRate || "0"),
+            minimum_payment: parseFloat(minimumPayment || "0"),
+            due_date_day: dueDateDay ? parseInt(dueDateDay, 10) : null,
+          },
+        });
       } else {
-        await createDebt.mutateAsync(data as any);
+        const createData: CreateDebtInput = {
+          name: name.trim(),
+          debt_type: debtType,
+          original_balance: parseFloat(originalBalance),
+          current_balance: parseFloat(currentBalance),
+          interest_rate: parseFloat(interestRate || "0"),
+          minimum_payment: parseFloat(minimumPayment || "0"),
+          due_date_day: dueDateDay ? parseInt(dueDateDay, 10) : null,
+          entity_type: entityType,
+          entity_id: entityId,
+        };
+        await createDebt.mutateAsync(createData);
       }
       resetForm();
       onOpenChange(false);

@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  Plus,
-  RefreshCw,
-  DollarSign,
-  Percent,
-  CreditCard,
-} from "lucide-react";
+import { Plus, RefreshCw, DollarSign, Percent, CreditCard } from "lucide-react";
 import type { Debt } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +14,9 @@ import { formatCurrency } from "@/components/goals/goal-card";
 export function DebtsPage() {
   const { data: profile } = useProfile();
   const { data: debts, isLoading, error, refetch } = useDebts("user");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
+  const deleteDebt = useDeleteDebt();
 
   if (profile && profile.subscription_tier === "free") {
     return (
@@ -35,10 +32,6 @@ export function DebtsPage() {
     );
   }
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
-  const deleteDebt = useDeleteDebt();
-
   const debtList = debts ?? [];
 
   // Summary calculations
@@ -48,9 +41,7 @@ export function DebtsPage() {
     0
   );
   const highestRate =
-    debtList.length > 0
-      ? Math.max(...debtList.map((d) => d.interest_rate))
-      : 0;
+    debtList.length > 0 ? Math.max(...debtList.map((d) => d.interest_rate)) : 0;
 
   function handleEdit(debt: Debt) {
     setEditingDebt(debt);
@@ -95,7 +86,9 @@ export function DebtsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatCurrency(totalBalance)}</p>
+              <p className="text-2xl font-bold">
+                {formatCurrency(totalBalance)}
+              </p>
             </CardContent>
           </Card>
 
@@ -176,6 +169,7 @@ export function DebtsPage() {
 
       {/* Form Dialog */}
       <DebtForm
+        key={editingDebt?.id ?? "new"}
         open={formOpen}
         onOpenChange={handleFormClose}
         debt={editingDebt}
