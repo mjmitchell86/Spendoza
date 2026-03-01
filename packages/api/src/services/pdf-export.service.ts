@@ -211,7 +211,9 @@ export async function generatePersonalPdfForUser(
     supabaseAdmin
       .from("income_entries")
       .select("source_name, amount, frequency, attributed_to_name")
-      .eq("user_id", userId),
+      .eq("user_id", userId)
+      .neq("frequency", "one_time")
+      .or(`end_date.is.null,end_date.gte.${month}`),
     supabaseAdmin
       .from("profiles")
       .select("display_name")
@@ -348,7 +350,9 @@ export async function generateHouseholdPdfForHousehold(
     supabaseAdmin
       .from("income_entries")
       .select("source_name, amount, frequency, attributed_to_name")
-      .in("user_id", memberIds),
+      .in("user_id", memberIds)
+      .neq("frequency", "one_time")
+      .or(`end_date.is.null,end_date.gte.${month}`),
     supabaseAdmin
       .from("expenses")
       .select(
