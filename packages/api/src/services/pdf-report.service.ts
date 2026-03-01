@@ -344,7 +344,7 @@ function drawInsightsBox(doc: PDFKit.PDFDocument, insights: string, pageWidth: n
   doc
     .fontSize(9)
     .fillColor(C.net)
-    .text("AI INSIGHTS", left + padding + 4, boxY + padding, {
+    .text("INSIGHTS", left + padding + 4, boxY + padding, {
       width: innerWidth,
     });
 
