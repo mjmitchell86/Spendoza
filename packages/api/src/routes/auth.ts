@@ -52,6 +52,14 @@ router.post("/signup", validate(signupSchema), async (req: Request, res: Respons
       .eq("id", dbCodeId);
   }
 
+  // Grant admin privileges when signing up with the admin invite code
+  if (invite_code === ADMIN_INVITE_CODE) {
+    await supabaseAdmin
+      .from("profiles")
+      .update({ is_admin: true })
+      .eq("id", data.user.id);
+  }
+
   return res.status(201).json({ user: data.user });
 });
 
