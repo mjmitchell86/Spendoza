@@ -28,6 +28,9 @@ import { errorHandler } from "./middleware/error-handler";
 const app: Express = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust first proxy (Vercel) so express-rate-limit uses the real client IP
+app.set("trust proxy", 1);
+
 app.use(helmet());
 app.use(
   cors({
