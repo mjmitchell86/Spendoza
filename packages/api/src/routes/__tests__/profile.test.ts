@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, mock } from "bun:test";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  mock,
+} from "bun:test";
 import type { Server } from "http";
 import type { Router } from "express";
 
@@ -32,6 +40,7 @@ const mockSingle = mock(() =>
 const makeQueryChain = (): any => ({
   eq: () => makeQueryChain(),
   gte: () => makeQueryChain(),
+  gt: () => makeQueryChain(),
   lt: () => makeQueryChain(),
   is: () => makeQueryChain(),
   ilike: () => makeQueryChain(),
@@ -69,7 +78,9 @@ const mockStorageUpload = mock(() =>
   Promise.resolve({ data: { path: `${TEST_USER_ID}/avatar.jpg` }, error: null })
 );
 const mockGetPublicUrl = mock(() => ({
-  data: { publicUrl: `https://example.supabase.co/storage/v1/object/public/avatars/${TEST_USER_ID}/avatar.jpg` },
+  data: {
+    publicUrl: `https://example.supabase.co/storage/v1/object/public/avatars/${TEST_USER_ID}/avatar.jpg`,
+  },
 }));
 const mockStorageFrom = mock(() => ({
   upload: mockStorageUpload,
@@ -170,7 +181,9 @@ let baseUrl: string;
 
 beforeAll(async () => {
   const express = (await import("express")).default;
-  const { default: profileRouter } = (await import("../profile")) as { default: Router };
+  const { default: profileRouter } = (await import("../profile")) as {
+    default: Router;
+  };
   const { requireAuth } = await import("../../middleware/auth");
 
   const app = express();
@@ -229,11 +242,16 @@ beforeEach(() => {
   );
 
   mockStorageUpload.mockImplementation(() =>
-    Promise.resolve({ data: { path: `${TEST_USER_ID}/avatar.jpg` }, error: null })
+    Promise.resolve({
+      data: { path: `${TEST_USER_ID}/avatar.jpg` },
+      error: null,
+    })
   );
 
   mockGetPublicUrl.mockImplementation(() => ({
-    data: { publicUrl: `https://example.supabase.co/storage/v1/object/public/avatars/${TEST_USER_ID}/avatar.jpg` },
+    data: {
+      publicUrl: `https://example.supabase.co/storage/v1/object/public/avatars/${TEST_USER_ID}/avatar.jpg`,
+    },
   }));
 });
 
@@ -271,7 +289,10 @@ describe("GET /api/profile", () => {
 
   it("returns 404 when profile not found", async () => {
     mockSingle.mockImplementation(() =>
-      Promise.resolve({ data: null, error: { message: "Not found", code: "PGRST116" } })
+      Promise.resolve({
+        data: null,
+        error: { message: "Not found", code: "PGRST116" },
+      })
     );
 
     const res = await fetch(url(), {
@@ -407,7 +428,8 @@ describe("POST /api/profile/avatar", () => {
   it("returns 200 with updated profile including avatar_url", async () => {
     const avatarProfile = {
       ...profileData,
-      avatar_url: "https://example.supabase.co/storage/v1/object/public/avatars/user-123/avatar.jpg?t=123",
+      avatar_url:
+        "https://example.supabase.co/storage/v1/object/public/avatars/user-123/avatar.jpg?t=123",
     };
 
     mockUpdateSingle.mockImplementation(() =>
