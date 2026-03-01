@@ -9,6 +9,11 @@ import { detectRecurringBills } from "./bill-detection.service";
 import { detectRecurringIncome } from "./income-detection.service";
 import { generateUserReport, generateHouseholdReport } from "./report.service";
 
+/** Normalize a transaction description for dedup comparison. */
+function normalizeDescription(desc: string): string {
+  return desc.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
 /** Delete the raw PDF from Supabase Storage after processing completes. */
 async function deleteRawFile(statementId: string, filePath: string): Promise<void> {
   const { error } = await supabaseAdmin.storage
@@ -147,25 +152,32 @@ async function stepExtractText(statementId: string): Promise<void> {
   const statement = await getStatement(statementId);
   const { file_path } = statement;
 
-  // Download PDF from Supabase Storage
+  // Download file from Supabase Storage
   const { data: fileData, error: downloadError } = await supabaseAdmin.storage
     .from("bank-statements")
     .download(file_path);
 
   if (downloadError || !fileData) {
-    throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+    throw new Error(`Failed to download file: ${downloadError?.message}`);
   }
 
   const arrayBuffer = await fileData.arrayBuffer();
-  const pdfBuffer = Buffer.from(arrayBuffer);
-  console.log(`[ai-pipeline] [${statementId}] downloaded PDF, size=${pdfBuffer.length} bytes`);
+  let extractedText: string;
 
-  // Extract text
-  const pdfText = await extractTextFromPDF(pdfBuffer);
-  console.log(`[ai-pipeline] [${statementId}] extracted ${pdfText.length} chars of text`);
+  if (statement.file_type === "csv") {
+    // CSV: read as UTF-8 text directly
+    extractedText = new TextDecoder("utf-8").decode(arrayBuffer);
+    console.log(`[ai-pipeline] [${statementId}] read CSV, ${extractedText.length} chars`);
+  } else {
+    // PDF: use pdf-parse to extract text
+    const pdfBuffer = Buffer.from(arrayBuffer);
+    console.log(`[ai-pipeline] [${statementId}] downloaded PDF, size=${pdfBuffer.length} bytes`);
+    extractedText = await extractTextFromPDF(pdfBuffer);
+    console.log(`[ai-pipeline] [${statementId}] extracted ${extractedText.length} chars of text`);
+  }
 
-  if (!pdfText.trim()) {
-    throw new Error("No text could be extracted from the PDF");
+  if (!extractedText.trim()) {
+    throw new Error(`No text could be extracted from the ${statement.file_type === "csv" ? "CSV" : "PDF"}`);
   }
 
   // Store text and advance to next step
@@ -174,7 +186,7 @@ async function stepExtractText(statementId: string): Promise<void> {
     .update({
       parsed_data: {
         pipeline_step: "extract_transactions",
-        pdf_text: pdfText,
+        pdf_text: extractedText,
       },
     })
     .eq("id", statementId);
@@ -369,35 +381,76 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     income ?? []
   );
 
-  // Insert all transactions into the transactions table
-  const transactionRows = matchedTransactions.map((t) => ({
-    bank_statement_id: statementId,
-    user_id,
-    date: t.date,
-    description: t.description,
-    amount: t.amount,
-    type: t.type,
-    ai_category: t.ai_category,
-    matched_expense_id: t.matched_expense_id,
-    matched_income_id: t.matched_income_id,
-  }));
+  // --- Transaction-level dedup ---
+  const dates = matchedTransactions.map((t) => t.date).filter(Boolean);
+  let newTransactions = matchedTransactions;
+  let skippedCount = 0;
 
-  const { error: insertError } = await supabaseAdmin
-    .from("transactions")
-    .insert(transactionRows);
+  if (dates.length > 0) {
+    const sortedDates = [...dates].sort();
+    const minDate = sortedDates[0];
+    const maxDate = sortedDates[sortedDates.length - 1];
 
-  if (insertError) {
-    throw new Error(`Failed to insert transactions: ${insertError.message}`);
+    const { data: existing } = await supabaseAdmin
+      .from("transactions")
+      .select("date, description, amount, type")
+      .eq("user_id", user_id)
+      .gte("date", minDate)
+      .lte("date", maxDate);
+
+    if (existing && existing.length > 0) {
+      const existingSet = new Set(
+        existing.map(
+          (t: { date: string; description: string; amount: number; type: string }) =>
+            `${t.date}|${normalizeDescription(t.description)}|${t.amount}|${t.type}`
+        )
+      );
+
+      newTransactions = matchedTransactions.filter((t) => {
+        const key = `${t.date}|${normalizeDescription(t.description)}|${t.amount}|${t.type}`;
+        return !existingSet.has(key);
+      });
+
+      skippedCount = matchedTransactions.length - newTransactions.length;
+      if (skippedCount > 0) {
+        console.log(`[ai-pipeline] [${statementId}] skipped ${skippedCount} duplicate transactions`);
+      }
+    }
   }
 
-  console.log(`[ai-pipeline] [${statementId}] inserted ${transactionRows.length} transactions`);
+  // Insert only non-duplicate transactions
+  if (newTransactions.length > 0) {
+    const transactionRows = newTransactions.map((t) => ({
+      bank_statement_id: statementId,
+      user_id,
+      date: t.date,
+      description: t.description,
+      amount: t.amount,
+      type: t.type,
+      ai_category: t.ai_category,
+      matched_expense_id: t.matched_expense_id,
+      matched_income_id: t.matched_income_id,
+    }));
+
+    const { error: insertError } = await supabaseAdmin
+      .from("transactions")
+      .insert(transactionRows);
+
+    if (insertError) {
+      throw new Error(`Failed to insert transactions: ${insertError.message}`);
+    }
+
+    console.log(`[ai-pipeline] [${statementId}] inserted ${transactionRows.length} transactions`);
+  } else {
+    console.log(`[ai-pipeline] [${statementId}] all ${skippedCount} transactions were duplicates, nothing to insert`);
+  }
 
   // Update statement to parsed with summary
-  const totalCredits = matchedTransactions
+  const totalCredits = newTransactions
     .filter((t) => t.type === "credit")
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalDebits = matchedTransactions
+  const totalDebits = newTransactions
     .filter((t) => t.type === "debit")
     .reduce((sum, t) => sum + t.amount, 0);
 
@@ -406,7 +459,8 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     .update({
       status: "parsed",
       parsed_data: {
-        transaction_count: matchedTransactions.length,
+        transaction_count: newTransactions.length,
+        skipped_duplicates: skippedCount,
         total_credits: totalCredits,
         total_debits: totalDebits,
       },
@@ -414,7 +468,7 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     .eq("id", statementId);
 
   console.log(
-    `[ai-pipeline] [${statementId}] complete: ${matchedTransactions.length} txns, credits=$${totalCredits}, debits=$${totalDebits}`
+    `[ai-pipeline] [${statementId}] complete: ${newTransactions.length} new txns (${skippedCount} dupes skipped), credits=$${totalCredits}, debits=$${totalDebits}`
   );
 
   // Clean up raw PDF from storage — no longer needed
@@ -437,7 +491,7 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
   // Auto-generate reports for every month that had transactions inserted (non-fatal)
   try {
     const monthSet = new Set<string>();
-    for (const t of matchedTransactions) {
+    for (const t of newTransactions) {
       if (t.date) {
         monthSet.add(t.date.slice(0, 7)); // "YYYY-MM"
       }

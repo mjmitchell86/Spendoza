@@ -1,4 +1,4 @@
-import { useState, useRef, type FormEvent, type DragEvent } from "react";
+import { useState, useRef, useMemo, type FormEvent, type DragEvent } from "react";
 import {
   Upload,
   FileText,
@@ -12,8 +12,16 @@ import { MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useUploadBankStatement } from "@/hooks/use-bank-statements";
+import { useUploadBankStatement, useBankStatements } from "@/hooks/use-bank-statements";
 import { cn } from "@/lib/utils";
+
+const ACCEPTED_TYPES = new Set(["application/pdf", "text/csv"]);
+
+function isAcceptedFile(file: File): boolean {
+  if (ACCEPTED_TYPES.has(file.type)) return true;
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  return ext === "csv" || ext === "pdf";
+}
 
 interface UploadStepProps {
   onNext: (statementIds: string[]) => void;
@@ -33,6 +41,7 @@ const MAX_SIZE = MAX_BANK_STATEMENT_SIZE_MB * 1024 * 1024;
 
 export function UploadStep({ onNext, onSkip }: UploadStepProps) {
   const upload = useUploadBankStatement();
+  const { data: statements } = useBankStatements();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = useState<QueuedFile[]>([]);
@@ -42,6 +51,14 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const bankNames = useMemo(() => {
+    const names = new Set<string>();
+    statements?.forEach((s) => { if (s.bank_name) names.add(s.bank_name); });
+    return Array.from(names).sort();
+  }, [statements]);
+
+  const hasCSV = files.some((f) => f.file.name.toLowerCase().endsWith(".csv"));
+
   function addFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
 
@@ -50,8 +67,8 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
     const existingNames = new Set(files.map((f) => f.file.name));
 
     for (const f of Array.from(fileList)) {
-      if (f.type !== "application/pdf") {
-        errors.push(`${f.name}: not a PDF`);
+      if (!isAcceptedFile(f)) {
+        errors.push(`${f.name}: not a PDF or CSV`);
         continue;
       }
       if (f.size > MAX_SIZE) {
@@ -163,8 +180,8 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
           Upload Bank Statements
         </h2>
         <p className="text-sm text-muted-foreground">
-          Upload PDF bank statements and we'll automatically extract your
-          transactions.
+          Upload PDF or CSV bank statements and we'll automatically extract
+          your transactions.
         </p>
       </div>
 
@@ -191,7 +208,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
         >
           <Upload className="size-10 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Drop PDFs here or click to browse
+            Drop PDFs or CSVs here or click to browse
           </p>
           <p className="text-xs text-muted-foreground">
             Max {MAX_BANK_STATEMENT_SIZE_MB}MB per file
@@ -199,7 +216,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,application/pdf"
+            accept=".pdf,.csv,application/pdf,text/csv"
             multiple
             onChange={(e) => {
               addFiles(e.target.files);
@@ -270,14 +287,24 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="ob_bank_name">Bank Name (optional)</Label>
+            <Label htmlFor="ob_bank_name">
+              Bank Name{hasCSV ? "" : " (optional)"}
+            </Label>
             <Input
               id="ob_bank_name"
+              list="ob-bank-name-suggestions"
               value={bankName}
               onChange={(e) => setBankName(e.target.value)}
-              placeholder="e.g. Chase, Wells Fargo"
+              placeholder={hasCSV ? "Select or enter bank name" : "e.g. Chase, Wells Fargo"}
               disabled={isUploading}
             />
+            {bankNames.length > 0 && (
+              <datalist id="ob-bank-name-suggestions">
+                {bankNames.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="ob_statement_month">
