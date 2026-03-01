@@ -12,7 +12,7 @@ import type { Frequency } from "@spendoza/shared";
 // Constants
 // ---------------------------------------------------------------------------
 const LOOKBACK_MONTHS = 12;
-const MIN_OCCURRENCES = 3;
+const MIN_OCCURRENCES = 2;
 const AMOUNT_TOLERANCE = 0.1;
 const STALENESS_MULTIPLIER = 2;
 const SIMILARITY_THRESHOLD = 0.6;
@@ -256,9 +256,19 @@ function detectPatterns(
       a.date >= b.date ? a : b
     );
 
+    // Use average of most recent 3 amounts for a current-accurate figure
+    const sortedByDateDesc = [...txns].sort((a, b) =>
+      b.date.localeCompare(a.date)
+    );
+    const recentAmounts = sortedByDateDesc
+      .slice(0, 3)
+      .map((t) => t.amount);
+    const recentAvg =
+      recentAmounts.reduce((a, b) => a + b, 0) / recentAmounts.length;
+
     incomePatterns.push({
       description: mostRecentTx.description,
-      amount: Math.round(avgAmount * 100) / 100,
+      amount: Math.round(recentAvg * 100) / 100,
       frequency: freq,
       firstDate,
       lastDate,
