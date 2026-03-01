@@ -13,8 +13,17 @@ const SEGMENTS = [
   { key: "needs", label: "Needs", color: "#3b82f6" },
   { key: "wants", label: "Wants", color: "#8b5cf6" },
   { key: "savings", label: "Savings", color: "#10b981" },
-  { key: "unclassified", label: "Unclassified", color: "#9ca3af" },
+  { key: "unclassified", label: "Unclassified", color: "#6b7280" },
 ] as const;
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
 export function AllocationBar({ allocation }: AllocationBarProps) {
   const segments = SEGMENTS.map((seg) => ({
@@ -30,13 +39,24 @@ export function AllocationBar({ allocation }: AllocationBarProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Stacked bar */}
+        {/* Stacked bar with benchmark markers */}
         <div className="relative">
-          <div className="flex h-6 w-full overflow-hidden rounded-full">
+          {/* Benchmark labels */}
+          <div className="mb-1 flex text-[10px] text-muted-foreground">
+            <span style={{ width: "50%" }} className="text-right pr-1">
+              50%
+            </span>
+            <span style={{ width: "30%" }} className="text-right pr-1">
+              80%
+            </span>
+          </div>
+
+          <div className="flex h-8 w-full overflow-hidden rounded-lg">
             {segments.map((seg) => (
               <div
                 key={seg.key}
-                className="h-full transition-all"
+                className="h-full cursor-default transition-all hover:opacity-80"
+                title={`${seg.label}: ${formatCurrency(seg.amount)} (${seg.percentage.toFixed(0)}%)`}
                 style={{
                   width: `${seg.percentage}%`,
                   backgroundColor: seg.color,
@@ -45,16 +65,14 @@ export function AllocationBar({ allocation }: AllocationBarProps) {
             ))}
           </div>
 
-          {/* Benchmark markers at 50% and 80% (50/30/20 rule boundaries) */}
+          {/* Benchmark dashed lines */}
           <div
-            className="absolute top-0 h-6 w-px bg-white/80"
+            className="absolute top-5 h-8 w-px border-l border-dashed border-foreground/30"
             style={{ left: "50%" }}
-            title="50% benchmark"
           />
           <div
-            className="absolute top-0 h-6 w-px bg-white/80"
+            className="absolute top-5 h-8 w-px border-l border-dashed border-foreground/30"
             style={{ left: "80%" }}
-            title="80% benchmark"
           />
         </div>
 
@@ -72,9 +90,8 @@ export function AllocationBar({ allocation }: AllocationBarProps) {
           ))}
         </div>
 
-        {/* Benchmark legend */}
         <p className="mt-2 text-[10px] text-muted-foreground">
-          Markers show 50/30/20 rule boundaries
+          Dashed markers show 50/30/20 rule boundaries
         </p>
       </CardContent>
     </Card>

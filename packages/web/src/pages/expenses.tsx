@@ -6,12 +6,11 @@ import {
   Cell,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   BarChart,
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
+  LabelList,
 } from "recharts";
 import type { Expense } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
@@ -38,7 +37,7 @@ import { ExpenseList } from "@/components/expenses/expense-list";
 import { TransactionTable } from "@/components/transactions/transaction-table";
 
 const CATEGORY_COLORS = [
-  "#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#3b82f6", "#10b981", "#f59e0b", "#f43f5e", "#8b5cf6",
   "#ec4899", "#06b6d4", "#f97316", "#14b8a6", "#a855f7",
 ];
 
@@ -196,6 +195,11 @@ export function ExpensesPage() {
     return Array.from(cats).sort();
   }, [debitTransactions]);
 
+  const categoryTotal = useMemo(
+    () => categoryBreakdown.reduce((sum, c) => sum + c.amount, 0),
+    [categoryBreakdown]
+  );
+
   function handleEdit(expense: Expense) {
     setEditingExpense(expense);
     setFormOpen(true);
@@ -227,15 +231,15 @@ export function ExpensesPage() {
       {/* Summary Cards */}
       {hasTransactions && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
+          <Card className="border-l-4 border-l-rose-500 bg-gradient-to-r from-rose-500/5 to-transparent">
             <CardHeader className="pb-0">
               <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
                 Total Expenses
-                <TrendingDown className="size-4" />
+                <TrendingDown className="size-4 text-rose-500" />
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-red-600">
+              <p className="text-3xl font-bold tracking-tight text-rose-500">
                 {formatCurrency(totalExpenses)}
               </p>
               <span className="text-xs text-muted-foreground">
@@ -244,45 +248,45 @@ export function ExpensesPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-l-4 border-l-primary bg-gradient-to-r from-primary/5 to-transparent">
             <CardHeader className="pb-0">
               <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
                 Avg Transaction
-                <Hash className="size-4" />
+                <Hash className="size-4 text-primary" />
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">
+              <p className="text-3xl font-bold tracking-tight">
                 {formatCurrency(avgTransaction)}
               </p>
               <span className="text-xs text-muted-foreground">Per debit</span>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-l-4 border-l-violet-500 bg-gradient-to-r from-violet-500/5 to-transparent">
             <CardHeader className="pb-0">
               <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
                 Categories
-                <Layers className="size-4" />
+                <Layers className="size-4 text-violet-500" />
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">
+              <p className="text-3xl font-bold tracking-tight">
                 {categoryBreakdown.length}
               </p>
               <span className="text-xs text-muted-foreground">Active categories</span>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-500/5 to-transparent">
             <CardHeader className="pb-0">
               <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
                 Top Category
-                <Crown className="size-4" />
+                <Crown className="size-4 text-amber-500" />
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="truncate text-2xl font-bold">{topCategory}</p>
+              <p className="truncate text-3xl font-bold tracking-tight">{topCategory}</p>
               {categoryBreakdown.length > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {categoryBreakdown[0].percentage.toFixed(0)}% of total
@@ -345,55 +349,68 @@ export function ExpensesPage() {
               <CardTitle>By Category</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[240px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={categoryBreakdown}
-                      dataKey="amount"
-                      nameKey="category"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={75}
-                      innerRadius={35}
-                      paddingAngle={2}
-                      label={false}
-                    >
-                      {categoryBreakdown.map((_entry, index) => (
-                        <Cell
-                          key={index}
-                          fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value: number, name: string) => [
-                        formatCurrency(value),
-                        name,
-                      ]}
-                      contentStyle={{
-                        borderRadius: "8px",
-                        border: "1px solid hsl(var(--border))",
-                        backgroundColor: "hsl(var(--card))",
-                        color: "hsl(var(--foreground))",
-                        fontSize: "13px",
-                      }}
-                      itemStyle={{ color: "hsl(var(--foreground))" }}
-                      labelStyle={{ color: "hsl(var(--foreground))" }}
-                    />
-                    <Legend
-                      verticalAlign="bottom"
-                      height={36}
-                      iconType="circle"
-                      iconSize={8}
-                      formatter={(value: string) => (
-                        <span className="text-xs text-muted-foreground">
-                          {value}
-                        </span>
-                      )}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="flex h-[320px] items-center gap-4">
+                <div className="relative h-full w-1/2 min-w-[180px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryBreakdown}
+                        dataKey="amount"
+                        nameKey="category"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        innerRadius={50}
+                        paddingAngle={2}
+                        label={false}
+                      >
+                        {categoryBreakdown.map((_entry, index) => (
+                          <Cell
+                            key={index}
+                            fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number, name: string) => [
+                          formatCurrency(value),
+                          name,
+                        ]}
+                        contentStyle={{
+                          borderRadius: "12px",
+                          border: "1px solid hsl(var(--border))",
+                          backgroundColor: "hsl(var(--card))",
+                          color: "hsl(var(--foreground))",
+                          fontSize: "13px",
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                        }}
+                        itemStyle={{ color: "hsl(var(--foreground))" }}
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-lg font-bold">{formatCurrency(categoryTotal)}</p>
+                      <p className="text-[10px] text-muted-foreground">Total</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto">
+                  {categoryBreakdown.map((cat, index) => (
+                    <div key={cat.category} className="flex items-center gap-2 text-sm">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: CATEGORY_COLORS[index % CATEGORY_COLORS.length] }}
+                      />
+                      <span className="flex-1 truncate text-muted-foreground">{cat.category}</span>
+                      <span className="shrink-0 font-medium">{formatCurrency(cat.amount)}</span>
+                      <span className="w-8 shrink-0 text-right text-xs text-muted-foreground">
+                        {cat.percentage.toFixed(0)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -403,23 +420,20 @@ export function ExpensesPage() {
               <CardTitle>Top Merchants</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[240px] w-full">
+              <div className="h-[320px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={topMerchants}
                     layout="vertical"
-                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                    margin={{ top: 8, right: 60, left: 0, bottom: 0 }}
                   >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      className="stroke-border"
-                      horizontal={false}
-                    />
                     <XAxis
                       type="number"
                       tickFormatter={(v: number) => formatCurrency(v)}
                       tick={{ fontSize: 11 }}
                       className="fill-muted-foreground"
+                      axisLine={{ stroke: "hsl(var(--border))" }}
+                      tickLine={false}
                     />
                     <YAxis
                       type="category"
@@ -427,6 +441,8 @@ export function ExpensesPage() {
                       width={80}
                       tick={{ fontSize: 11 }}
                       className="fill-muted-foreground"
+                      axisLine={false}
+                      tickLine={false}
                       tickFormatter={(v: string) =>
                         v.length > 18 ? v.slice(0, 18) + "..." : v
                       }
@@ -434,21 +450,35 @@ export function ExpensesPage() {
                     <Tooltip
                       formatter={(value: number) => [formatCurrency(value), "Amount"]}
                       contentStyle={{
-                        borderRadius: "8px",
+                        borderRadius: "12px",
                         border: "1px solid hsl(var(--border))",
                         backgroundColor: "hsl(var(--card))",
                         color: "hsl(var(--foreground))",
                         fontSize: "13px",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
                       }}
                       itemStyle={{ color: "hsl(var(--foreground))" }}
                       labelStyle={{ color: "hsl(var(--foreground))" }}
                     />
+                    <defs>
+                      <linearGradient id="expBarGrad" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.6} />
+                        <stop offset="100%" stopColor="#f43f5e" stopOpacity={1} />
+                      </linearGradient>
+                    </defs>
                     <Bar
                       dataKey="amount"
-                      fill="#ef4444"
-                      radius={[0, 4, 4, 0]}
-                      barSize={20}
-                    />
+                      fill="url(#expBarGrad)"
+                      radius={[0, 6, 6, 0]}
+                      barSize={22}
+                    >
+                      <LabelList
+                        dataKey="amount"
+                        position="right"
+                        formatter={(v: number) => formatCurrency(v)}
+                        className="fill-muted-foreground text-[10px]"
+                      />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>

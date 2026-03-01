@@ -2,6 +2,7 @@ import { CalendarClock, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 
 interface RecurringExpense {
@@ -38,6 +39,12 @@ function getDaysUntil(dateString: string): number {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+function getUrgencyStyle(daysUntil: number) {
+  if (daysUntil < 0) return { border: "border-l-rose-500", bg: "bg-rose-500/5" };
+  if (daysUntil <= 3) return { border: "border-l-amber-500", bg: "bg-amber-500/5" };
+  return { border: "", bg: "" };
+}
+
 export function UpcomingBillsList() {
   const today = new Date().toISOString().slice(0, 10);
   const { data: bills, isLoading } = useQuery<RecurringExpense[]>({
@@ -64,10 +71,15 @@ export function UpcomingBillsList() {
           <div className="flex flex-col gap-2">
             {bills.map((bill) => {
               const daysUntil = getDaysUntil(bill.next_due_date);
+              const urgency = getUrgencyStyle(daysUntil);
               return (
                 <div
                   key={bill.id}
-                  className="flex items-center gap-3 rounded-lg border p-3"
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border p-3",
+                    urgency.border && `border-l-4 ${urgency.border}`,
+                    urgency.bg
+                  )}
                 >
                   <CalendarClock className="size-4 shrink-0 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
@@ -86,6 +98,11 @@ export function UpcomingBillsList() {
                       {daysUntil >= 0 && (
                         <span className="ml-1">
                           ({daysUntil === 0 ? "today" : `in ${daysUntil}d`})
+                        </span>
+                      )}
+                      {daysUntil < 0 && (
+                        <span className="ml-1 text-rose-500">
+                          (overdue)
                         </span>
                       )}
                     </p>

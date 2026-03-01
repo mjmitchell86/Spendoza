@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Menu, Settings, Ticket, User } from "lucide-react";
+import { LogOut, Settings, Ticket, User } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { InviteCodesDialog } from "@/components/invite-codes/invite-codes-dialog";
 import { Button } from "@/components/ui/button";
@@ -14,13 +14,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 
-interface HeaderProps {
-  onMenuClick: () => void;
-}
-
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header() {
   const { user, signOut } = useAuth();
   const { data: profile } = useProfile();
   const navigate = useNavigate();
@@ -40,21 +35,10 @@ export function Header({ onMenuClick }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-background">
+    <header className="sticky top-0 z-30 border-b border-border/40 bg-background/80 backdrop-blur-xl">
       <div className="flex h-14 items-center gap-4 px-4 lg:px-6">
-        {/* Mobile menu button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="lg:hidden"
-          onClick={onMenuClick}
-          aria-label="Toggle menu"
-        >
-          <Menu className="size-5" />
-        </Button>
-
-        {/* Title */}
-        <h1 className="text-lg font-semibold">Spendoza</h1>
+        {/* Title — hidden on mobile (bottom nav provides context) */}
+        <h1 className="hidden text-lg font-semibold lg:block">Spendoza</h1>
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -101,7 +85,6 @@ export function Header({ onMenuClick }: HeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <Separator />
       <InviteCodesDialog open={inviteCodesOpen} onOpenChange={setInviteCodesOpen} />
     </header>
   );

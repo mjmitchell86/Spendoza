@@ -15,23 +15,44 @@ interface HealthScoreCardProps {
 }
 
 function getScoreColor(score: number): string {
-  if (score >= 80) return "text-green-600";
-  if (score >= 50) return "text-yellow-600";
-  return "text-red-600";
+  if (score >= 80) return "text-emerald-500";
+  if (score >= 50) return "text-yellow-500";
+  return "text-rose-500";
 }
 
-function getRatingDotColor(rating: string): string {
+function getScoreStroke(score: number): string {
+  if (score >= 80) return "#10b981";
+  if (score >= 50) return "#eab308";
+  return "#f43f5e";
+}
+
+function getRatingColor(rating: string): string {
   switch (rating) {
     case "good":
-      return "bg-green-500";
+      return "bg-emerald-500";
     case "ok":
       return "bg-blue-500";
     case "warning":
       return "bg-yellow-500";
     case "critical":
-      return "bg-red-500";
+      return "bg-rose-500";
     default:
       return "bg-gray-400";
+  }
+}
+
+function getRatingBarWidth(rating: string): string {
+  switch (rating) {
+    case "good":
+      return "w-full";
+    case "ok":
+      return "w-3/4";
+    case "warning":
+      return "w-1/2";
+    case "critical":
+      return "w-1/4";
+    default:
+      return "w-0";
   }
 }
 
@@ -48,22 +69,59 @@ function TrendArrow({ score, previousScore }: { score: number; previousScore: nu
 
   if (score > previousScore) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-sm font-medium text-green-600">
+      <span className="inline-flex items-center gap-0.5 text-sm font-medium text-emerald-500">
         <ArrowUpRight className="size-4" />
       </span>
     );
   }
   if (score < previousScore) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-sm font-medium text-red-600">
+      <span className="inline-flex items-center gap-0.5 text-sm font-medium text-rose-500">
         <ArrowDownRight className="size-4" />
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-0.5 text-sm font-medium text-gray-500">
+    <span className="inline-flex items-center gap-0.5 text-sm font-medium text-muted-foreground">
       <ArrowRight className="size-4" />
     </span>
+  );
+}
+
+function ScoreRing({ score }: { score: number }) {
+  const radius = 40;
+  const circumference = 2 * Math.PI * radius;
+  const progress = (score / 100) * circumference;
+  const strokeColor = getScoreStroke(score);
+
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg width="100" height="100" className="-rotate-90">
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke="hsl(var(--muted))"
+          strokeWidth="8"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference - progress}
+          className="transition-all duration-700"
+        />
+      </svg>
+      <span className={cn("absolute text-2xl font-bold", getScoreColor(score))}>
+        {score}
+      </span>
+    </div>
   );
 }
 
@@ -76,22 +134,26 @@ export function HealthScoreCard({ score, previousScore, factors }: HealthScoreCa
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex items-baseline gap-1">
-          <span className={cn("text-3xl font-bold tracking-tight", getScoreColor(score))}>
-            {score}
-          </span>
-          <span className="text-sm text-muted-foreground">/100</span>
+        <div className="flex items-center gap-3">
+          <ScoreRing score={score} />
           <TrendArrow score={score} previousScore={previousScore} />
         </div>
 
-        <ul className="mt-3 space-y-1">
+        <ul className="mt-3 space-y-1.5">
           {Object.entries(factors).map(([key, { rating }]) => (
             <li key={key} className="flex items-center gap-2 text-xs">
-              <span className={cn("size-2 shrink-0 rounded-full", getRatingDotColor(rating))} />
-              <span className="text-muted-foreground">
+              <span className="w-24 shrink-0 text-muted-foreground">
                 {FACTOR_LABELS[key] ?? key}
               </span>
-              <span className="ml-auto capitalize text-muted-foreground">{rating}</span>
+              <div className="h-1.5 flex-1 rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "h-1.5 rounded-full transition-all",
+                    getRatingColor(rating),
+                    getRatingBarWidth(rating)
+                  )}
+                />
+              </div>
             </li>
           ))}
         </ul>

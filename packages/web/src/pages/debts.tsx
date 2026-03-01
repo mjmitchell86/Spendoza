@@ -78,43 +78,43 @@ export function DebtsPage() {
       {/* Summary Cards */}
       {debtList.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
+          <Card className="border-l-4 border-l-primary bg-gradient-to-r from-primary/5 to-transparent">
             <CardHeader className="pb-0">
               <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
                 Total Debt Balance
-                <DollarSign className="size-4" />
+                <DollarSign className="size-4 text-primary" />
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">
+              <p className="text-3xl font-bold tracking-tight">
                 {formatCurrency(totalBalance)}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-500/5 to-transparent">
             <CardHeader className="pb-0">
               <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
                 Monthly Payments
-                <CreditCard className="size-4" />
+                <CreditCard className="size-4 text-amber-500" />
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">
+              <p className="text-3xl font-bold tracking-tight">
                 {formatCurrency(totalMinPayments)}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-l-4 border-l-rose-500 bg-gradient-to-r from-rose-500/5 to-transparent">
             <CardHeader className="pb-0">
               <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
                 Highest Rate
-                <Percent className="size-4" />
+                <Percent className="size-4 text-rose-500" />
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-red-600">
+              <p className="text-3xl font-bold tracking-tight text-rose-500">
                 {highestRate.toFixed(1)}%
               </p>
             </CardContent>
@@ -137,13 +137,15 @@ export function DebtsPage() {
           </Button>
         </div>
       ) : debtList.length === 0 ? (
-        <Card>
+        <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-12">
-            <CreditCard className="size-10 text-muted-foreground/40" />
+            <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
+              <CreditCard className="size-8 text-primary" />
+            </div>
             <p className="text-sm text-muted-foreground">
               No debts tracked yet. Add your debts to see payoff strategies.
             </p>
-            <Button variant="outline" onClick={() => setFormOpen(true)}>
+            <Button onClick={() => setFormOpen(true)}>
               <Plus className="size-4" />
               Add Your First Debt
             </Button>
