@@ -75,6 +75,7 @@ router.post(
       });
 
     if (storageError) {
+      console.error(`[upload] storage error: ${storageError.message}`);
       return res.status(500).json({ error: "Failed to upload file" });
     }
 
