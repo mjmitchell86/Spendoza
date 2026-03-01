@@ -60,6 +60,13 @@ export function buildSavingsRecommendations(
 
   if (reportData.total_expenses === 0) return recommendations;
 
+  // Fixed-cost categories that aren't easily reducible
+  const fixedCostKeywords = [
+    "housing", "rent", "mortgage", "loan", "debt", "insurance",
+  ];
+  const isFixedCost = (category: string) =>
+    fixedCostKeywords.some((kw) => category.toLowerCase().includes(kw));
+
   // Categorize spending and identify high-spend areas
   const sortedCategories = [...reportData.by_category].sort(
     (a, b) => b.amount - a.amount
@@ -67,6 +74,8 @@ export function buildSavingsRecommendations(
 
   // Flag categories that take up more than 20% of expenses
   for (const cat of sortedCategories) {
+    // Skip fixed costs — not easily in the user's control
+    if (isFixedCost(cat.category)) continue;
     if (cat.percentage >= 20) {
       recommendations.push({
         category: cat.category,

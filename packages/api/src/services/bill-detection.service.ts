@@ -7,7 +7,7 @@ import type { RecurrenceInterval } from "@spendoza/shared";
 // Constants
 // ---------------------------------------------------------------------------
 const LOOKBACK_MONTHS = 12;
-const MIN_OCCURRENCES = 3;
+const MIN_OCCURRENCES = 2;
 const AMOUNT_TOLERANCE = 0.1;
 const MORTGAGE_AMOUNT_TOLERANCE = 0.25;
 const STALENESS_MULTIPLIER = 2;
@@ -83,7 +83,7 @@ const INTERVAL_DEFS: { name: RecurrenceInterval; days: number; tolerance: number
  * Returns the interval name or null if no pattern detected.
  */
 export function detectInterval(dates: string[]): RecurrenceInterval | null {
-  if (dates.length < MIN_OCCURRENCES) return null;
+  if (dates.length < 2) return null;
 
   const sorted = [...dates].sort();
   const gaps: number[] = [];
