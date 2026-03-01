@@ -397,11 +397,27 @@ describe("detectRecurringBills", () => {
     expect(inserts.length).toBe(0);
   });
 
-  it("ignores groups with only 2 transactions (needs 3+)", async () => {
+  it("detects bills with 2 transactions showing a valid interval", async () => {
     adminResults.transactions.selectList = {
       data: [
         makeTx("HULU STREAMING", 7.99, "2025-11-01"),
         makeTx("HULU STREAMING", 7.99, "2025-12-01"),
+      ],
+      error: null,
+    };
+
+    await detectRecurringBills(TEST_USER_ID);
+
+    const inserts = adminCalls.filter(
+      (c) => c.table === "expenses" && c.op === "insert"
+    );
+    expect(inserts.length).toBe(1);
+  });
+
+  it("ignores groups with only 1 transaction", async () => {
+    adminResults.transactions.selectList = {
+      data: [
+        makeTx("HULU STREAMING", 7.99, "2025-11-01"),
       ],
       error: null,
     };
