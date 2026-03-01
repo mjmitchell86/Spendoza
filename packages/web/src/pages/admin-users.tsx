@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Search, Trash2, RefreshCw, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +21,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { useAdminUsers, useUpdateAdminUser, useDeleteAdminUser } from "@/hooks/use-admin";
+import { useAdminUsers, useUpdateAdminUser, useDeleteAdminUser, useAdminGenerateReport, useAdminDetectRecurring } from "@/hooks/use-admin";
+import { toast } from "sonner";
 import type { AdminUserRow } from "@spendoza/shared";
 import { Loader2 } from "lucide-react";
 
@@ -40,6 +41,8 @@ export function AdminUsersPage() {
   });
   const updateUser = useUpdateAdminUser();
   const deleteUser = useDeleteAdminUser();
+  const generateReport = useAdminGenerateReport();
+  const detectRecurring = useAdminDetectRecurring();
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -172,14 +175,52 @@ export function AdminUsersPage() {
                         {new Date(user.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setDeleteTarget(user)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Refresh Report"
+                            disabled={generateReport.isPending}
+                            onClick={() =>
+                              generateReport.mutate(user.id, {
+                                onSuccess: () => toast.success(`Report regenerated for ${user.display_name}`),
+                                onError: () => toast.error(`Failed to regenerate report for ${user.display_name}`),
+                              })
+                            }
+                          >
+                            {generateReport.isPending && generateReport.variables === user.id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="size-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Detect Recurring"
+                            disabled={detectRecurring.isPending}
+                            onClick={() =>
+                              detectRecurring.mutate(user.id, {
+                                onSuccess: () => toast.success(`Recurring detection complete for ${user.display_name}`),
+                                onError: () => toast.error(`Failed to detect recurring for ${user.display_name}`),
+                              })
+                            }
+                          >
+                            {detectRecurring.isPending && detectRecurring.variables === user.id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Repeat className="size-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDeleteTarget(user)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
