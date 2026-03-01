@@ -68,3 +68,25 @@ export function useDeleteAdminUser() {
     },
   });
 }
+
+export function useAdminGenerateReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient(`/admin/users/${id}/generate-report`, { method: "POST" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin"] });
+    },
+  });
+}
+
+export function useAdminDetectRecurring() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient(`/admin/users/${id}/detect-recurring`, { method: "POST" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin"] });
+    },
+  });
+}
