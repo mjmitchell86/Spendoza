@@ -28,7 +28,7 @@ export function AiInsightsCard({ insights, insightsMonth }: AiInsightsCardProps)
         <CardHeader className="pb-0">
           <CardTitle className="flex items-center gap-2">
             <Lightbulb className="size-4" />
-            AI Insights
+            Insights
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -46,7 +46,7 @@ export function AiInsightsCard({ insights, insightsMonth }: AiInsightsCardProps)
       <CardHeader className="pb-0">
         <CardTitle className="flex items-center gap-2">
           <Lightbulb className="size-4" />
-          AI Insights
+          Insights
         </CardTitle>
         {insightsMonth && (
           <p className="text-xs text-muted-foreground">

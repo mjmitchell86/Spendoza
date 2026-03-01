@@ -344,7 +344,7 @@ function drawInsightsBox(doc: PDFKit.PDFDocument, insights: string, pageWidth: n
   doc
     .fontSize(9)
     .fillColor(C.net)
-    .text("AI INSIGHTS", left + padding + 4, boxY + padding, {
+    .text("INSIGHTS", left + padding + 4, boxY + padding, {
       width: innerWidth,
     });
 
@@ -1011,12 +1011,12 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
       },
     ];
 
-    drawMetricCards(doc, cards, pageWidth);
-
-    // Health Score Gauge — after metric cards, before AI insights
+    // Health Score Gauge — immediately after header
     if (input.healthScore) {
       drawHealthScoreGauge(doc, input.healthScore, pageWidth);
     }
+
+    drawMetricCards(doc, cards, pageWidth);
 
     if (input.aiInsights) {
       drawInsightsBox(doc, input.aiInsights, pageWidth);
