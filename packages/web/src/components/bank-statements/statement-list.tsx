@@ -21,11 +21,15 @@ const STATUS_CONFIG: Record<
 };
 
 const STEP_LABELS: Record<string, string> = {
-  extract_text: "Reading PDF",
   extract_transactions: "Extracting transactions",
   classify_transactions: "Classifying",
   match_and_insert: "Matching & saving",
 };
+
+function getStepLabel(step: string | undefined, fileType?: string): string {
+  if (step === "extract_text") return fileType === "csv" ? "Reading CSV" : "Reading PDF";
+  return (step && STEP_LABELS[step]) ?? "Processing";
+}
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "Pending";
@@ -96,8 +100,8 @@ export function StatementList({
                     <RefreshCw className="size-3 animate-spin text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
                       {(stmt.parsed_data as any)?.retry_count > 0
-                        ? `Retrying (${(stmt.parsed_data as any).retry_count}/2) — ${STEP_LABELS[(stmt.parsed_data as any)?.pipeline_step] ?? "Processing"}`
-                        : STEP_LABELS[(stmt.parsed_data as any)?.pipeline_step] ?? "Processing"}
+                        ? `Retrying (${(stmt.parsed_data as any).retry_count}/2) — ${getStepLabel((stmt.parsed_data as any)?.pipeline_step, stmt.file_type)}`
+                        : getStepLabel((stmt.parsed_data as any)?.pipeline_step, stmt.file_type)}
                     </span>
                   </span>
                 ) : (

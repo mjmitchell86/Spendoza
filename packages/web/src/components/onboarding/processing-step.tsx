@@ -10,11 +10,17 @@ interface ProcessingStepProps {
 }
 
 const STEP_MESSAGES: Record<string, string> = {
-  extract_text: "Reading your bank statement...",
   extract_transactions: "Extracting transactions...",
   classify_transactions: "Categorizing expenses...",
   match_and_insert: "Preparing your data...",
 };
+
+function getStepMessage(step: string | undefined, fileType?: string): string {
+  if (step === "extract_text") {
+    return fileType === "csv" ? "Reading your CSV..." : "Reading your bank statement...";
+  }
+  return (step && STEP_MESSAGES[step]) ?? "Processing your statements...";
+}
 
 export function ProcessingStep({
   statementIds,
@@ -42,9 +48,7 @@ export function ProcessingStep({
   const pipelineStep = (processing?.parsed_data as any)?.pipeline_step as
     | string
     | undefined;
-  const statusMessage =
-    (pipelineStep && STEP_MESSAGES[pipelineStep]) ??
-    "Processing your statements...";
+  const statusMessage = getStepMessage(pipelineStep, processing?.file_type);
 
   useEffect(() => {
     if (!allDone) return;
