@@ -7,6 +7,32 @@ const TEST_TOKEN = "valid-token";
 
 let currentUserId = TEST_ADMIN_ID;
 let adminResults: Record<string, any> = {};
+let mockServiceCalls: Record<string, any[]> = {};
+
+mock.module("../../services/report.service", () => ({
+  generateUserReport: (...args: any[]) => {
+    mockServiceCalls.generateUserReport = args;
+    return Promise.resolve({ id: "report-1", report_month: "2026-02-01" });
+  },
+  generateHouseholdReport: (...args: any[]) => {
+    mockServiceCalls.generateHouseholdReport = args;
+    return Promise.resolve({ id: "hh-report-1", report_month: "2026-02-01" });
+  },
+}));
+
+mock.module("../../services/bill-detection.service", () => ({
+  detectRecurringBills: (...args: any[]) => {
+    mockServiceCalls.detectRecurringBills = args;
+    return Promise.resolve();
+  },
+}));
+
+mock.module("../../services/income-detection.service", () => ({
+  detectRecurringIncome: (...args: any[]) => {
+    mockServiceCalls.detectRecurringIncome = args;
+    return Promise.resolve();
+  },
+}));
 
 mock.module("../../lib/supabase", () => ({
   supabaseAdmin: {
@@ -57,6 +83,7 @@ mock.module("../../lib/supabase", () => ({
               }),
               order: () => ({
                 range: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
+                limit: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
                 then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
               }),
               range: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
@@ -116,6 +143,7 @@ beforeEach(() => {
       selectSingle: { data: { is_admin: true }, error: null },
     },
   };
+  mockServiceCalls = {};
 });
 
 const headers = { Authorization: `Bearer ${TEST_TOKEN}` };
@@ -241,5 +269,89 @@ describe("DELETE /api/admin/users/:id", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("Cannot delete your own account");
+  });
+});
+
+describe("POST /api/admin/users/:id/generate-report", () => {
+  it("generates a report for the target user", async () => {
+    const targetUserId = "target-user-1";
+    adminResults.transactions = {
+      selectList: { data: [{ date: "2026-02-15" }], error: null },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/${targetUserId}/generate-report`,
+      { method: "POST", headers }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.id).toBe("report-1");
+    expect(mockServiceCalls.generateUserReport).toBeDefined();
+    expect(mockServiceCalls.generateUserReport[0]).toBe(targetUserId);
+    expect(mockServiceCalls.generateUserReport[2]).toBe(true); // force=true
+  });
+
+  it("generates household report when user belongs to one", async () => {
+    const targetUserId = "target-user-2";
+    adminResults.profiles = {
+      selectSingle: {
+        data: { is_admin: true, id: targetUserId, household_id: "hh-1" },
+        error: null,
+      },
+    };
+    adminResults.transactions = {
+      selectList: { data: [{ date: "2026-01-10" }], error: null },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/${targetUserId}/generate-report`,
+      { method: "POST", headers }
+    );
+    expect(res.status).toBe(200);
+    expect(mockServiceCalls.generateHouseholdReport).toBeDefined();
+    expect(mockServiceCalls.generateHouseholdReport[0]).toBe("hh-1");
+  });
+
+  it("returns 404 when user does not exist", async () => {
+    adminResults.profiles = {
+      selectSingle: { data: null, error: { message: "not found" } },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/nonexistent/generate-report`,
+      { method: "POST", headers }
+    );
+    // Admin middleware also checks profiles, so this may be 403 or 404
+    expect([403, 404]).toContain(res.status);
+  });
+});
+
+describe("POST /api/admin/users/:id/detect-recurring", () => {
+  it("runs recurring detection for the target user", async () => {
+    const targetUserId = "target-user-1";
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/${targetUserId}/detect-recurring`,
+      { method: "POST", headers }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(mockServiceCalls.detectRecurringBills).toBeDefined();
+    expect(mockServiceCalls.detectRecurringBills[0]).toBe(targetUserId);
+    expect(mockServiceCalls.detectRecurringIncome).toBeDefined();
+    expect(mockServiceCalls.detectRecurringIncome[0]).toBe(targetUserId);
+  });
+
+  it("returns 404 when user does not exist", async () => {
+    adminResults.profiles = {
+      selectSingle: { data: null, error: { message: "not found" } },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/nonexistent/detect-recurring`,
+      { method: "POST", headers }
+    );
+    expect([403, 404]).toContain(res.status);
   });
 });

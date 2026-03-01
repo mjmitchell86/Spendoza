@@ -1,6 +1,12 @@
 import { Router, type Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { supabaseAdmin } from "../lib/supabase";
+import {
+  generateUserReport,
+  generateHouseholdReport,
+} from "../services/report.service";
+import { detectRecurringBills } from "../services/bill-detection.service";
+import { detectRecurringIncome } from "../services/income-detection.service";
 
 const router = Router();
 
@@ -186,6 +192,69 @@ router.delete("/users/:id", async (req, res: Response) => {
   }
 
   return res.json({ deleted: true });
+});
+
+// POST /api/admin/users/:id/generate-report — regenerate report for any user
+router.post("/users/:id/generate-report", async (req, res: Response) => {
+  const { id } = req.params;
+
+  // Verify user exists
+  const { data: profile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id, household_id")
+    .eq("id", id)
+    .single();
+
+  if (profileErr || !profile) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  // Find the latest month with transactions
+  const { data: latestTxn } = await supabaseAdmin
+    .from("transactions")
+    .select("date")
+    .eq("user_id", id)
+    .order("date", { ascending: false })
+    .limit(1);
+
+  const reportDate =
+    latestTxn && latestTxn.length > 0
+      ? new Date(latestTxn[0].date + "T00:00:00Z")
+      : new Date();
+
+  const report = await generateUserReport(id, reportDate, true);
+
+  // Also generate household report if user belongs to one
+  if (profile.household_id) {
+    try {
+      await generateHouseholdReport(profile.household_id, reportDate, true);
+    } catch (err) {
+      console.error(`Failed to generate household report:`, err);
+    }
+  }
+
+  return res.json(report);
+});
+
+// POST /api/admin/users/:id/detect-recurring — re-run recurring detection for any user
+router.post("/users/:id/detect-recurring", async (req, res: Response) => {
+  const { id } = req.params;
+
+  // Verify user exists
+  const { data: profile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("id", id)
+    .single();
+
+  if (profileErr || !profile) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  await detectRecurringBills(id);
+  await detectRecurringIncome(id);
+
+  return res.json({ success: true });
 });
 
 export default router;
