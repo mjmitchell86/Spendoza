@@ -73,7 +73,7 @@ function App() {
               <Route path="/onboarding" element={<OnboardingPage />} />
             </Route>
             <Route path="/settings" element={<Navigate to="/profile" replace />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<Navigate to="/about" replace />} />
           </Routes>
         </BrowserRouter>
         <Toaster />
