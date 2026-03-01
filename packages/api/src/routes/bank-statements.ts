@@ -31,6 +31,17 @@ router.post(
       return res.status(400).json({ error: "File is required" });
     }
 
+    // Detect file type from mimetype / extension
+    const ext = file.originalname.split(".").pop()?.toLowerCase();
+    let fileType: "pdf" | "csv";
+    if (file.mimetype === "application/pdf" || ext === "pdf") {
+      fileType = "pdf";
+    } else if (file.mimetype === "text/csv" || (file.mimetype === "text/plain" && ext === "csv")) {
+      fileType = "csv";
+    } else {
+      return res.status(400).json({ error: "Only PDF and CSV files are supported" });
+    }
+
     // Compute SHA-256 hash of the file buffer
     const fileHash = computeFileHash(file.buffer);
 
@@ -74,6 +85,7 @@ router.post(
         user_id: user.id,
         file_path: storagePath,
         file_hash: fileHash,
+        file_type: fileType,
         bank_name: parsed.data.bank_name ?? null,
         statement_month: parsed.data.statement_month ?? null,
         is_shared_account: parsed.data.is_shared_account,
@@ -144,11 +156,22 @@ router.get("/:id", async (req, res: Response) => {
 router.post("/:id/reprocess", async (req, res: Response) => {
   const { user } = req as AuthenticatedRequest;
 
+  // Look up the statement first to determine file type
+  const { data: existing } = await supabaseAdmin
+    .from("bank_statements")
+    .select("file_type")
+    .eq("id", req.params.id)
+    .eq("user_id", user.id)
+    .single();
+
+  // CSVs already have text stored, so start at extract_transactions
+  const startStep = existing?.file_type === "csv" ? "extract_transactions" : "extract_text";
+
   const { data, error } = await supabaseAdmin
     .from("bank_statements")
     .update({
       status: "processing",
-      parsed_data: { pipeline_step: "extract_text" },
+      parsed_data: { pipeline_step: startStep },
     })
     .eq("id", req.params.id)
     .eq("user_id", user.id)

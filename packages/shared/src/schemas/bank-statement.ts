@@ -37,6 +37,7 @@ export interface BankStatement {
   user_id: string;
   file_path: string;
   file_hash: string;
+  file_type: string;
   bank_name: string | null;
   statement_month: string | null;
   is_shared_account: boolean;

@@ -163,20 +163,30 @@ mock.module("@supabase/supabase-js", () => ({
 // ---------------------------------------------------------------------------
 // Mock multer to avoid actual file system operations in tests.
 // We simulate multer by injecting req.file via a tiny middleware.
+// Change `currentMockFile` between tests to simulate different file types.
 // ---------------------------------------------------------------------------
 const fakePdfBuffer = Buffer.from("%PDF-1.4 fake content for testing");
+const fakeCsvBuffer = Buffer.from("Date,Description,Amount\n2026-01-05,Grocery store,52.43");
+
+let currentMockFile: {
+  fieldname: string;
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+} = {
+  fieldname: "file",
+  originalname: "test-statement.pdf",
+  mimetype: "application/pdf",
+  buffer: fakePdfBuffer,
+  size: fakePdfBuffer.length,
+};
 
 mock.module("multer", () => {
   const multerInstance = () => ({
     single: (_fieldName: string) => {
       return (req: any, _res: any, next: any) => {
-        req.file = {
-          fieldname: "file",
-          originalname: "test-statement.pdf",
-          mimetype: "application/pdf",
-          buffer: fakePdfBuffer,
-          size: fakePdfBuffer.length,
-        };
+        req.file = { ...currentMockFile };
         next();
       };
     },
@@ -232,6 +242,15 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  // Reset mock file to PDF default
+  currentMockFile = {
+    fieldname: "file",
+    originalname: "test-statement.pdf",
+    mimetype: "application/pdf",
+    buffer: fakePdfBuffer,
+    size: fakePdfBuffer.length,
+  };
+
   // Clear all mocks
   mockOrder.mockClear();
   mockSingle.mockClear();
@@ -535,5 +554,81 @@ describe("POST /api/bank-statements/:id/reprocess", () => {
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error).toBe("Statement not found");
+  });
+});
+
+// ===========================================================================
+// CSV upload tests
+// ===========================================================================
+describe("POST /api/bank-statements/upload (CSV)", () => {
+  const url = () => `${baseUrl}/api/bank-statements/upload`;
+
+  it("returns 201 for CSV file upload", async () => {
+    currentMockFile = {
+      fieldname: "file",
+      originalname: "test-statement.csv",
+      mimetype: "text/csv",
+      buffer: fakeCsvBuffer,
+      size: fakeCsvBuffer.length,
+    };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({
+        bank_name: "Chase",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.id).toBe("stmt-1");
+  });
+
+  it("accepts text/plain mimetype with .csv extension", async () => {
+    currentMockFile = {
+      fieldname: "file",
+      originalname: "test-statement.csv",
+      mimetype: "text/plain",
+      buffer: fakeCsvBuffer,
+      size: fakeCsvBuffer.length,
+    };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects unsupported file types with 400", async () => {
+    currentMockFile = {
+      fieldname: "file",
+      originalname: "test-statement.xlsx",
+      mimetype: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: Buffer.from("fake xlsx"),
+      size: 9,
+    };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Only PDF and CSV files are supported");
   });
 });
