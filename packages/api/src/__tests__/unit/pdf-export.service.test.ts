@@ -37,7 +37,7 @@ let maybeSingleResult: { data: any } = { data: null };
 
 function chainable(): any {
   const obj: any = {};
-  const methods = ["select", "eq", "in", "or", "gte", "gt", "lte"];
+  const methods = ["select", "eq", "neq", "in", "or", "gte", "gt", "lte"];
   for (const m of methods) {
     obj[m] = mock(() => obj);
   }
