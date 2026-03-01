@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   DollarSign,
   TrendingUp,
@@ -12,6 +13,11 @@ import {
   Plus,
   Target,
   AlertTriangle,
+  PieChart,
+  FileText,
+  Shield,
+  Crown,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,7 +64,7 @@ import { GoalCard, getGoalStatus } from "@/components/goals/goal-card";
 import { GoalForm } from "@/components/goals/goal-form";
 import { LogSavingsDialog } from "@/components/goals/log-savings-dialog";
 import { SuggestedGoals } from "@/components/goals/suggested-goals";
-import { UpgradePrompt } from "@/components/upgrade-prompt";
+
 import { useProfile } from "@/hooks/use-profile";
 
 function formatCurrency(value: number) {
@@ -380,17 +386,72 @@ export function HouseholdPage() {
     );
   }
 
-  // Tier gate — Pro required
-  if (profile && profile.subscription_tier !== "pro") {
+  // Tier gate — Pro required (show benefits page for non-Pro users without a household)
+  if (profile && profile.subscription_tier !== "pro" && !household) {
+    const benefits = [
+      { icon: Users, title: "Shared Dashboard", description: "View combined income, expenses, and savings across all household members in one place." },
+      { icon: PieChart, title: "Combined Reports", description: "Generate and export household-level financial reports with merged spending breakdowns." },
+      { icon: Target, title: "Household Goals", description: "Set shared savings and budget goals that the whole household can track together." },
+      { icon: FileText, title: "PDF Exports", description: "Download professional household financial reports as PDFs for your records." },
+      { icon: Shield, title: "Privacy Controls", description: "Configure exactly what income and expenses are shared with the household." },
+    ];
+
     return (
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Household</h1>
           <p className="text-sm text-muted-foreground">
-            Create or join a household to share finances with your family
+            Manage finances together with your family or partner
           </p>
         </div>
-        <UpgradePrompt feature="Household Features" requiredTier="Pro" />
+
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+            <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
+              <Crown className="size-8 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Unlock Household Features</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Upgrade to the Pro plan to create or join a household and manage finances as a team.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {benefits.map((b) => (
+            <Card key={b.title}>
+              <CardContent className="flex flex-col gap-3 pt-6">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+                  <b.icon className="size-5 text-primary" />
+                </div>
+                <h3 className="font-medium">{b.title}</h3>
+                <p className="text-sm text-muted-foreground">{b.description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card className="border-primary/30">
+          <CardContent className="flex flex-col items-center gap-4 py-8 sm:flex-row sm:justify-between">
+            <div className="text-center sm:text-left">
+              <p className="text-lg font-semibold">Pro Plan</p>
+              <p className="text-sm text-muted-foreground">
+                <span className="text-2xl font-bold text-foreground">$4.99</span>{" "}
+                /month
+              </p>
+              <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground sm:justify-start">
+                <span className="flex items-center gap-1"><Check className="size-3 text-emerald-500" /> Household features</span>
+                <span className="flex items-center gap-1"><Check className="size-3 text-emerald-500" /> Unlimited statements</span>
+                <span className="flex items-center gap-1"><Check className="size-3 text-emerald-500" /> Plaid bank linking</span>
+              </div>
+            </div>
+            <Button asChild size="lg">
+              <Link to="/pricing">View Plans</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
