@@ -60,7 +60,7 @@ export function isBillLikeCategory(aiCategory: string | null): boolean {
   return BILL_CATEGORY_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-const MORTGAGE_KEYWORDS = ["mortgage", "home loan"];
+const MORTGAGE_KEYWORDS = ["mortgage", "home loan", "housing"];
 
 /** Check if an ai_category is mortgage-related (needs higher amount tolerance). */
 function isMortgageCategory(aiCategory: string | null): boolean {
