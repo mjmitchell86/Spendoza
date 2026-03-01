@@ -27,6 +27,34 @@ export interface MemberContribution {
   expenses: number;
 }
 
+export interface HealthScoreFactor {
+  rating: string;
+}
+
+export interface FinancialHealthScore {
+  score: number;
+  previous_score: number | null;
+  factors: {
+    savings_rate: HealthScoreFactor;
+    needs_ratio: HealthScoreFactor;
+    wants_ratio: HealthScoreFactor;
+    emergency_fund: HealthScoreFactor;
+    debt_to_income: HealthScoreFactor;
+  };
+}
+
+export interface AllocationCategory {
+  amount: number;
+  percentage: number;
+}
+
+export interface Allocation {
+  needs: AllocationCategory;
+  wants: AllocationCategory;
+  savings: AllocationCategory;
+  unclassified: AllocationCategory;
+}
+
 export interface DashboardData {
   summary: DashboardSummary;
   by_category: CategoryBreakdown[];
@@ -39,6 +67,10 @@ export interface DashboardData {
   latest_transaction_month?: string | null;
   /** The month being displayed */
   month?: string;
+  /** Financial health score with factor ratings */
+  financial_health_score?: FinancialHealthScore;
+  /** Spending allocation breakdown (needs/wants/savings) */
+  allocation?: Allocation;
 }
 
 export interface HouseholdDashboardData extends DashboardData {

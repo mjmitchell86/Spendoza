@@ -14,6 +14,7 @@ import { BankStatementsPage } from "@/pages/bank-statements";
 import { TransactionsPage } from "@/pages/transactions";
 import { HouseholdPage } from "@/pages/household-dashboard";
 import { GoalsPage } from "@/pages/goals";
+import { DebtsPage } from "@/pages/debts";
 import { ProfilePage } from "@/pages/profile";
 import { PricingPage } from "@/pages/pricing";
 import { BillingPage } from "@/pages/billing";
@@ -55,6 +56,7 @@ function App() {
                   element={<TransactionsPage />}
                 />
                 <Route path="/goals" element={<GoalsPage />} />
+                <Route path="/debts" element={<DebtsPage />} />
                 <Route path="/household" element={<HouseholdPage />} />
                 <Route
                   path="/household-dashboard"

@@ -13,6 +13,7 @@ import householdsRouter from "./routes/households";
 import reportsRouter from "./routes/reports";
 import dashboardRouter from "./routes/dashboard";
 import goalsRouter from "./routes/goals";
+import debtsRouter from "./routes/debts";
 import inviteCodesRouter from "./routes/invite-codes";
 import internalRouter from "./routes/internal";
 import emailsRouter from "./routes/emails";
@@ -79,6 +80,7 @@ app.use("/api/reports", reportsRouter);
 app.use("/api/internal", internalRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/goals", requireAuth, requireTier("starter"), goalsRouter);
+app.use("/api/debts", requireAuth, requireTier("starter"), debtsRouter);
 app.use("/api/emails", emailsRouter);
 app.use("/api/admin", requireAuth, requireAdmin, adminRouter);
 

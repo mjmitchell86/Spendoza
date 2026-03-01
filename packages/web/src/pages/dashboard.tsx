@@ -17,6 +17,8 @@ import { useBankStatements } from "@/hooks/use-bank-statements";
 import { IncomeVsExpensesChart } from "@/components/dashboard/income-vs-expenses-chart";
 import { SpendingByCategoryChart } from "@/components/dashboard/spending-by-category-chart";
 import { SavingsRateCard } from "@/components/dashboard/savings-rate-card";
+import { HealthScoreCard } from "@/components/dashboard/health-score-card";
+import { AllocationBar } from "@/components/dashboard/allocation-bar";
 import { TopExpensesList } from "@/components/dashboard/top-expenses-list";
 import { UpcomingBillsList } from "@/components/dashboard/upcoming-bills-list";
 import { AiInsightsCard } from "@/components/dashboard/ai-insights-card";
@@ -265,6 +267,22 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Health Score */}
+      {data.financial_health_score && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <HealthScoreCard
+            score={data.financial_health_score.score}
+            previousScore={data.financial_health_score.previous_score}
+            factors={data.financial_health_score.factors}
+          />
+          {data.allocation && (
+            <div className="sm:col-span-2 lg:col-span-3">
+              <AllocationBar allocation={data.allocation} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid gap-6 lg:grid-cols-2">

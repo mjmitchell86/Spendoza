@@ -1,5 +1,7 @@
 import { supabaseAdmin } from "../lib/supabase";
 import { generateInsights, type ReportData } from "../ai/report-insights";
+import type { AllocationBreakdown, DebtSummary } from "../ai/report-insights";
+import { calculateHealthScore } from "./health-score.service";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -19,6 +21,110 @@ function toDateStr(date: Date): string {
 function pct(part: number, whole: number): number {
   if (whole === 0) return 0;
   return Math.round((part / whole) * 10000) / 100; // 2-decimal places
+}
+
+// ---------------------------------------------------------------------------
+// Allocation, Debt & Health-Score helpers
+// ---------------------------------------------------------------------------
+
+async function computeAllocation(
+  byCategory: Array<{ category: string; amount: number; percentage: number }>,
+  userId: string
+): Promise<AllocationBreakdown> {
+  const { data: categories } = await supabaseAdmin
+    .from("categories")
+    .select("name, budget_class")
+    .eq("user_id", userId);
+
+  const classMap = new Map<string, string>();
+  for (const cat of categories ?? []) {
+    classMap.set(cat.name.toLowerCase(), cat.budget_class);
+  }
+
+  const totals = { need: 0, want: 0, savings: 0, other: 0 };
+  let totalAmount = 0;
+
+  for (const cat of byCategory) {
+    const budgetClass = classMap.get(cat.category.toLowerCase()) ?? "want";
+    totals[budgetClass as keyof typeof totals] += cat.amount;
+    totalAmount += cat.amount;
+  }
+
+  const pctAlloc = (amt: number) =>
+    totalAmount > 0 ? Math.round((amt / totalAmount) * 1000) / 10 : 0;
+
+  return {
+    needs: { amount: totals.need, percentage: pctAlloc(totals.need) },
+    wants: { amount: totals.want, percentage: pctAlloc(totals.want) },
+    savings: { amount: totals.savings, percentage: pctAlloc(totals.savings) },
+    unclassified: { amount: totals.other, percentage: pctAlloc(totals.other) },
+    benchmark: { needs: 50, wants: 30, savings: 20 },
+  };
+}
+
+async function computeDebtSummary(
+  entityType: "user" | "household",
+  entityId: string,
+  totalIncome: number
+): Promise<DebtSummary | undefined> {
+  const { data: debts } = await supabaseAdmin
+    .from("debts")
+    .select("*")
+    .eq("entity_type", entityType)
+    .eq("entity_id", entityId)
+    .gt("current_balance", 0);
+
+  if (!debts || debts.length === 0) return undefined;
+
+  const totalBalance = debts.reduce((s, d) => s + Number(d.current_balance), 0);
+  const totalMinPayments = debts.reduce((s, d) => s + Number(d.minimum_payment), 0);
+  const monthlyInterest = debts.reduce(
+    (s, d) => s + (Number(d.current_balance) * Number(d.interest_rate)) / 100 / 12,
+    0
+  );
+
+  const highest = debts.reduce((max, d) =>
+    Number(d.interest_rate) > Number(max.interest_rate) ? d : max
+  );
+
+  let estMonths = 0;
+  if (totalMinPayments > monthlyInterest) {
+    estMonths = Math.ceil(totalBalance / (totalMinPayments - monthlyInterest));
+  }
+
+  return {
+    total_balance: totalBalance,
+    total_minimum_payments: totalMinPayments,
+    monthly_interest_cost: Math.round(monthlyInterest * 100) / 100,
+    highest_rate_debt: {
+      name: highest.name,
+      rate: Number(highest.interest_rate),
+      balance: Number(highest.current_balance),
+    },
+    debt_to_income_ratio:
+      totalIncome > 0 ? Math.round((totalMinPayments / totalIncome) * 100) / 100 : 0,
+    estimated_payoff_months: estMonths,
+  };
+}
+
+async function getEmergencyFundMonths(
+  entityType: "user" | "household",
+  entityId: string,
+  avgMonthlyExpenses: number
+): Promise<number> {
+  if (avgMonthlyExpenses <= 0) return 0;
+
+  const { data: efGoals } = await supabaseAdmin
+    .from("goals")
+    .select("current_amount")
+    .eq("entity_type", entityType)
+    .eq("entity_id", entityId)
+    .eq("goal_type", "emergency_fund");
+
+  if (!efGoals || efGoals.length === 0) return 0;
+
+  const totalSaved = efGoals.reduce((s, g) => s + Number(g.current_amount), 0);
+  return Math.round((totalSaved / avgMonthlyExpenses) * 10) / 10;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +245,38 @@ export async function generateUserReport(
     top_categories: topCategories,
     month_over_month: monthOverMonth,
   };
+
+  // Compute allocation breakdown
+  const allocation = await computeAllocation(reportData.by_category, userId);
+  reportData.allocation = allocation;
+
+  // Compute debt summary
+  const debtSummary = await computeDebtSummary("user", userId, reportData.total_income);
+  if (debtSummary) reportData.debt_summary = debtSummary;
+
+  // Get previous health score
+  const prevHealthMonth = new Date(month);
+  prevHealthMonth.setMonth(prevHealthMonth.getMonth() - 1);
+  const { data: prevHealthReport } = await supabaseAdmin
+    .from("reports")
+    .select("report_data")
+    .eq("entity_type", "user")
+    .eq("entity_id", userId)
+    .eq("report_month", prevHealthMonth.toISOString().split("T")[0])
+    .single();
+  const previousScore = (prevHealthReport?.report_data as any)?.financial_health_score?.score ?? null;
+
+  // Emergency fund months
+  const efMonths = await getEmergencyFundMonths("user", userId, reportData.total_expenses);
+
+  // Financial health score
+  reportData.financial_health_score = calculateHealthScore(
+    reportData.savings_rate,
+    allocation,
+    debtSummary,
+    efMonths,
+    previousScore
+  );
 
   // 8. Generate AI insights (non-fatal — save report even if AI fails)
   let aiInsights: string | null = null;
@@ -307,6 +445,43 @@ export async function generateHouseholdReport(
     top_categories: topCategories,
     month_over_month: monthOverMonth,
   };
+
+  // Use head of household's categories for allocation classification
+  const { data: household } = await supabaseAdmin
+    .from("households")
+    .select("head_of_household_id")
+    .eq("id", householdId)
+    .single();
+
+  const allocation = await computeAllocation(
+    reportData.by_category,
+    household!.head_of_household_id
+  );
+  reportData.allocation = allocation;
+
+  const debtSummary = await computeDebtSummary("household", householdId, reportData.total_income);
+  if (debtSummary) reportData.debt_summary = debtSummary;
+
+  const efMonths = await getEmergencyFundMonths("household", householdId, reportData.total_expenses);
+
+  const prevHHMonth = new Date(month);
+  prevHHMonth.setMonth(prevHHMonth.getMonth() - 1);
+  const { data: prevHHReport } = await supabaseAdmin
+    .from("reports")
+    .select("report_data")
+    .eq("entity_type", "household")
+    .eq("entity_id", householdId)
+    .eq("report_month", prevHHMonth.toISOString().split("T")[0])
+    .single();
+  const previousHHScore = (prevHHReport?.report_data as any)?.financial_health_score?.score ?? null;
+
+  reportData.financial_health_score = calculateHealthScore(
+    reportData.savings_rate,
+    allocation,
+    debtSummary,
+    efMonths,
+    previousHHScore
+  );
 
   // 8. Generate AI insights (non-fatal — save report even if AI fails)
   let aiInsights: string | null = null;

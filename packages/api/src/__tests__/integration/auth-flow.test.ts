@@ -33,6 +33,7 @@ function buildRlsChain(table: string) {
     eq: () => makeChain(),
     is: () => makeChain(),
     gte: () => makeChain(),
+    gt: () => makeChain(),
     lt: () => makeChain(),
     ilike: () => makeChain(),
     select: () => makeChain(),
@@ -61,7 +62,9 @@ function buildRlsChain(table: string) {
     upsert: (_data: any, _opts?: any) => ({
       select: () => ({
         single: () =>
-          Promise.resolve(cfg.upsertSingle ?? cfg.insertSingle ?? { data: null, error: null }),
+          Promise.resolve(
+            cfg.upsertSingle ?? cfg.insertSingle ?? { data: null, error: null }
+          ),
       }),
       then: (resolve: any, reject?: any) => {
         const result = cfg.upsertResult ?? { data: null, error: null };

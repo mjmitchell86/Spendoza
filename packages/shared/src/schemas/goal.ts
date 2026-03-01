@@ -3,8 +3,11 @@ import { entityTypeSchema } from "./report";
 
 export const goalTypeSchema = z.enum([
   "budget",
-  "monthly_savings",
-  "total_savings",
+  "savings_amount",
+  "savings_rate",
+  "emergency_fund",
+  "debt_payoff",
+  "target_savings",
 ]);
 export type GoalType = z.infer<typeof goalTypeSchema>;
 
@@ -16,6 +19,7 @@ export const createGoalSchema = z.object({
   target_date: z.string().date().nullable().optional(),
   entity_type: entityTypeSchema.optional(),
   entity_id: z.string().uuid().optional(),
+  debt_id: z.string().uuid().nullable().optional(),
 });
 
 export type CreateGoalInput = z.infer<typeof createGoalSchema>;
@@ -37,6 +41,7 @@ export interface Goal {
   name: string;
   goal_type: GoalType;
   category_id: string | null;
+  debt_id: string | null;
   target_amount: number;
   target_date: string | null;
   current_amount: number;
@@ -49,6 +54,7 @@ export const goalSuggestionSchema = z.object({
   goal_type: goalTypeSchema,
   category: z.string().nullable(),
   target_amount: z.number().positive(),
+  debt_name: z.string().nullable().optional(),
   rationale: z.string(),
 });
 export type GoalSuggestion = z.infer<typeof goalSuggestionSchema>;

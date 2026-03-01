@@ -37,14 +37,7 @@ let maybeSingleResult: { data: any } = { data: null };
 
 function chainable(): any {
   const obj: any = {};
-  const methods = [
-    "select",
-    "eq",
-    "in",
-    "or",
-    "gte",
-    "lte",
-  ];
+  const methods = ["select", "eq", "in", "or", "gte", "gt", "lte"];
   for (const m of methods) {
     obj[m] = mock(() => obj);
   }
@@ -67,7 +60,11 @@ mock.module("../../lib/supabase", () => ({
 // ---------------------------------------------------------------------------
 const mockGenerateUserReport = mock(() => Promise.resolve(FRESH_REPORT));
 const mockGenerateHouseholdReport = mock(() =>
-  Promise.resolve({ ...FRESH_REPORT, entity_type: "household", entity_id: "h1" })
+  Promise.resolve({
+    ...FRESH_REPORT,
+    entity_type: "household",
+    entity_id: "h1",
+  })
 );
 
 mock.module("../../services/report.service", () => ({
@@ -86,10 +83,8 @@ mock.module("../../services/pdf-report.service", () => ({
 // ---------------------------------------------------------------------------
 // Import the module under test (must be after mock.module calls)
 // ---------------------------------------------------------------------------
-const {
-  generatePersonalPdfForUser,
-  generateHouseholdPdfForHousehold,
-} = await import("../../services/pdf-export.service");
+const { generatePersonalPdfForUser, generateHouseholdPdfForHousehold } =
+  await import("../../services/pdf-export.service");
 
 // ---------------------------------------------------------------------------
 // Tests
