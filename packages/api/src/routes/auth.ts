@@ -25,7 +25,7 @@ router.post("/signup", validate(signupSchema), async (req: Request, res: Respons
       .single();
 
     if (codeError || !codeRecord) {
-      console.error("Signup failed: invalid invite code", { invite_code, codeError });
+      console.error(`Signup failed: invalid invite code "${invite_code}"`);
       return res.status(400).json({ error: "Invalid or already-used invite code" });
     }
 
@@ -40,7 +40,7 @@ router.post("/signup", validate(signupSchema), async (req: Request, res: Respons
   });
 
   if (error) {
-    console.error("Signup failed: createUser error", { email, error: error.message });
+    console.error(`Signup createUser failed for ${email}: ${error.message}`);
     return res.status(400).json({ error: error.message });
   }
 
