@@ -81,8 +81,10 @@ function TrendBadge({ value }: { value: number }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-0.5 text-xs font-medium",
-        isPositive ? "text-green-600" : "text-red-600"
+        "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-medium",
+        isPositive
+          ? "bg-emerald-500/10 text-emerald-500"
+          : "bg-rose-500/10 text-rose-500"
       )}
     >
       <Icon className="size-3" />
@@ -213,30 +215,30 @@ export function DashboardPage() {
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-500/5 to-transparent">
           <CardHeader className="pb-0">
             <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
               Total Income
-              <TrendingUp className="size-4" />
+              <TrendingUp className="size-4 text-emerald-500" />
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
+            <p className="text-3xl font-bold tracking-tight">
               {formatCurrency(data.summary.total_income)}
             </p>
             <TrendBadge value={data.trends.income_change} />
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-rose-500 bg-gradient-to-r from-rose-500/5 to-transparent">
           <CardHeader className="pb-0">
             <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
               Total Expenses
-              <TrendingDown className="size-4" />
+              <TrendingDown className="size-4 text-rose-500" />
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
+            <p className="text-3xl font-bold tracking-tight">
               {formatCurrency(data.summary.total_expenses)}
             </p>
             <TrendBadge value={data.trends.expense_change} />
@@ -245,18 +247,18 @@ export function DashboardPage() {
 
         <SavingsRateCard summary={data.summary} />
 
-        <Card>
+        <Card className="border-l-4 border-l-primary bg-gradient-to-r from-primary/5 to-transparent">
           <CardHeader className="pb-0">
             <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
               Net
-              <DollarSign className="size-4" />
+              <DollarSign className="size-4 text-primary" />
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p
               className={cn(
-                "text-2xl font-bold",
-                data.summary.net >= 0 ? "text-green-600" : "text-red-600"
+                "text-3xl font-bold tracking-tight",
+                data.summary.net >= 0 ? "text-emerald-500" : "text-rose-500"
               )}
             >
               {formatCurrency(data.summary.net)}

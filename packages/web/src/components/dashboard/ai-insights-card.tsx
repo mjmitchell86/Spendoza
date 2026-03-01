@@ -10,7 +10,7 @@ interface AiInsightsCardProps {
 function parseInsights(raw: string): string[] {
   return raw
     .split("\n")
-    .map((line) => line.replace(/^[\s]*[•\-\*]\s*/, "").trim())
+    .map((line) => line.replace(/^[\s]*[•\-*]\s*/, "").trim())
     .filter((line) => line.length > 0);
 }
 
@@ -24,10 +24,10 @@ export function AiInsightsCard({ insights, insightsMonth }: AiInsightsCardProps)
 
   if (items.length === 0) {
     return (
-      <Card>
+      <Card className="border-l-4 border-l-primary">
         <CardHeader className="pb-0">
           <CardTitle className="flex items-center gap-2">
-            <Lightbulb className="size-4" />
+            <Lightbulb className="size-4 text-primary" />
             Insights
           </CardTitle>
         </CardHeader>
@@ -42,10 +42,10 @@ export function AiInsightsCard({ insights, insightsMonth }: AiInsightsCardProps)
   }
 
   return (
-    <Card>
+    <Card className="border-l-4 border-l-primary">
       <CardHeader className="pb-0">
         <CardTitle className="flex items-center gap-2">
-          <Lightbulb className="size-4" />
+          <Lightbulb className="size-4 text-primary drop-shadow-[0_0_6px_hsl(var(--primary))]" />
           Insights
         </CardTitle>
         {insightsMonth && (
@@ -57,9 +57,11 @@ export function AiInsightsCard({ insights, insightsMonth }: AiInsightsCardProps)
       <CardContent>
         <ul className="flex flex-col gap-2">
           {items.map((item, index) => (
-            <li key={index} className="flex gap-2 text-sm leading-relaxed">
-              <span className="mt-1 block size-1.5 shrink-0 rounded-full bg-primary" />
-              <span>{item}</span>
+            <li
+              key={index}
+              className="rounded-md border-l-2 border-l-primary/30 bg-primary/5 px-3 py-2 text-sm leading-relaxed"
+            >
+              {item}
             </li>
           ))}
         </ul>

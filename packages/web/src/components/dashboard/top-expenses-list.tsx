@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import type { CategoryBreakdown } from "@/hooks/use-dashboard";
 
 interface TopExpensesListProps {
@@ -7,14 +6,14 @@ interface TopExpensesListProps {
 }
 
 const BAR_COLORS = [
-  "bg-blue-500",
-  "bg-green-500",
-  "bg-amber-500",
-  "bg-red-500",
-  "bg-violet-500",
-  "bg-pink-500",
-  "bg-cyan-500",
-  "bg-orange-500",
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#f43f5e",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#f97316",
 ];
 
 function formatCurrency(value: number) {
@@ -30,6 +29,7 @@ export function TopExpensesList({ categories }: TopExpensesListProps) {
   const safe = Array.isArray(categories) ? categories : [];
   const sorted = [...safe].sort((a, b) => b.amount - a.amount);
   const maxAmount = sorted[0]?.amount ?? 1;
+  const total = sorted.reduce((sum, c) => sum + c.amount, 0);
 
   if (sorted.length === 0) {
     return (
@@ -55,21 +55,24 @@ export function TopExpensesList({ categories }: TopExpensesListProps) {
         <div className="flex flex-col gap-3">
           {sorted.map((cat, index) => {
             const widthPercent = (cat.amount / maxAmount) * 100;
+            const pct = total > 0 ? ((cat.amount / total) * 100).toFixed(0) : "0";
+            const color = BAR_COLORS[index % BAR_COLORS.length];
             return (
               <div key={cat.category} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">{cat.category}</span>
                   <span className="text-muted-foreground">
-                    {formatCurrency(cat.amount)}
+                    {formatCurrency(cat.amount)}{" "}
+                    <span className="text-xs">({pct}%)</span>
                   </span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-muted">
+                <div className="h-2.5 w-full rounded-full bg-muted">
                   <div
-                    className={cn(
-                      "h-2 rounded-full transition-all",
-                      BAR_COLORS[index % BAR_COLORS.length]
-                    )}
-                    style={{ width: `${widthPercent}%` }}
+                    className="h-2.5 rounded-full transition-all"
+                    style={{
+                      width: `${widthPercent}%`,
+                      background: `linear-gradient(90deg, ${color}, ${color}99)`,
+                    }}
                   />
                 </div>
               </div>
