@@ -8,8 +8,22 @@ const TEST_HOUSEHOLD_ID = "hh-1";
 const REPORT_MONTH = new Date("2026-01-01");
 
 const sampleIncomeEntries = [
-  { id: "inc-1", user_id: TEST_USER_ID, amount: 5000, frequency: "monthly", effective_date: "2025-06-01", end_date: null },
-  { id: "inc-2", user_id: TEST_USER_ID, amount: 1500, frequency: "biweekly", effective_date: "2025-09-01", end_date: null },
+  {
+    id: "inc-1",
+    user_id: TEST_USER_ID,
+    amount: 5000,
+    frequency: "monthly",
+    effective_date: "2025-06-01",
+    end_date: null,
+  },
+  {
+    id: "inc-2",
+    user_id: TEST_USER_ID,
+    amount: 1500,
+    frequency: "biweekly",
+    effective_date: "2025-09-01",
+    end_date: null,
+  },
 ];
 
 const sampleExpenses = [
@@ -107,14 +121,19 @@ function buildAdminChain(table: string) {
   const makeEqChain = (depth = 0): any => ({
     eq: (...args: any[]) => makeEqChain(depth + 1),
     gte: (...args: any[]) => makeEqChain(depth + 1),
+    gt: (...args: any[]) => makeEqChain(depth + 1),
     lte: (...args: any[]) => makeEqChain(depth + 1),
     lt: (...args: any[]) => makeEqChain(depth + 1),
     or: (...args: any[]) => makeEqChain(depth + 1),
     is: (...args: any[]) => makeEqChain(depth + 1),
     order: (...args: any[]) => makeEqChain(depth + 1),
     limit: (...args: any[]) => makeEqChain(depth + 1),
-    single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-    maybeSingle: () => Promise.resolve(cfg.selectMaybeSingle ?? cfg.selectSingle ?? { data: null, error: null }),
+    single: () =>
+      Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
+    maybeSingle: () =>
+      Promise.resolve(
+        cfg.selectMaybeSingle ?? cfg.selectSingle ?? { data: null, error: null }
+      ),
     then: (resolve: any, reject?: any) => {
       const result = cfg.selectList ?? { data: [], error: null };
       return Promise.resolve(result).then(resolve, reject);
@@ -130,7 +149,8 @@ function buildAdminChain(table: string) {
       adminCalls.push({ table, op: "insert", args: data });
       return {
         select: () => ({
-          single: () => Promise.resolve(cfg.insertSingle ?? { data: null, error: null }),
+          single: () =>
+            Promise.resolve(cfg.insertSingle ?? { data: null, error: null }),
         }),
         then: (resolve: any, reject?: any) => {
           const result = cfg.insertResult ?? { data: null, error: null };
@@ -143,7 +163,11 @@ function buildAdminChain(table: string) {
       const makeUpdateEq = (): any => ({
         eq: () => makeUpdateEq(),
         select: () => ({
-          single: () => Promise.resolve(cfg.upsertSingle ?? cfg.updateSingle ?? { data: null, error: null }),
+          single: () =>
+            Promise.resolve(
+              cfg.upsertSingle ??
+                cfg.updateSingle ?? { data: null, error: null }
+            ),
         }),
         then: (resolve: any, reject?: any) => {
           const result = cfg.updateResult ?? { data: null, error: null };
@@ -156,11 +180,13 @@ function buildAdminChain(table: string) {
       adminCalls.push({ table, op: "upsert", args: data });
       return {
         select: () => ({
-          single: () => Promise.resolve(cfg.upsertSingle ?? { data: null, error: null }),
+          single: () =>
+            Promise.resolve(cfg.upsertSingle ?? { data: null, error: null }),
         }),
         eq: () => ({
           select: () => ({
-            single: () => Promise.resolve(cfg.upsertSingle ?? { data: null, error: null }),
+            single: () =>
+              Promise.resolve(cfg.upsertSingle ?? { data: null, error: null }),
           }),
         }),
         then: (resolve: any, reject?: any) => {
@@ -173,7 +199,8 @@ function buildAdminChain(table: string) {
       adminCalls.push({ table, op: "delete" });
       return {
         eq: () => ({
-          eq: () => Promise.resolve(cfg.deleteResult ?? { data: null, error: null }),
+          eq: () =>
+            Promise.resolve(cfg.deleteResult ?? { data: null, error: null }),
         }),
       };
     },
@@ -271,10 +298,25 @@ beforeEach(() => {
     },
     profiles: {
       selectList: { data: [{ id: TEST_USER_ID }], error: null },
-      selectSingle: { data: { id: TEST_USER_ID, household_id: TEST_HOUSEHOLD_ID }, error: null },
+      selectSingle: {
+        data: { id: TEST_USER_ID, household_id: TEST_HOUSEHOLD_ID },
+        error: null,
+      },
     },
     households: {
       selectList: { data: [{ id: TEST_HOUSEHOLD_ID }], error: null },
+      selectSingle: {
+        data: {
+          head_of_household_id: TEST_USER_ID,
+        },
+        error: null,
+      },
+    },
+    debts: {
+      selectList: { data: [], error: null },
+    },
+    goals: {
+      selectList: { data: [], error: null },
     },
   };
 });
@@ -433,7 +475,12 @@ describe("generateUserReport", () => {
     // Only debit transactions, no credits
     adminResults.transactions.selectList = {
       data: [
-        { amount: 100, type: "debit", ai_category: "Housing", date: "2026-01-10" },
+        {
+          amount: 100,
+          type: "debit",
+          ai_category: "Housing",
+          date: "2026-01-10",
+        },
       ],
       error: null,
     };
@@ -457,13 +504,24 @@ describe("generateHouseholdReport", () => {
     // Profiles in the household
     adminResults.profiles.selectList = {
       data: [
-        { id: TEST_USER_ID, income_sharing_mode: "all", expense_sharing_mode: "all" },
-        { id: "user-456", income_sharing_mode: "all", expense_sharing_mode: "all" },
+        {
+          id: TEST_USER_ID,
+          income_sharing_mode: "all",
+          expense_sharing_mode: "all",
+        },
+        {
+          id: "user-456",
+          income_sharing_mode: "all",
+          expense_sharing_mode: "all",
+        },
       ],
       error: null,
     };
 
-    const result = await generateHouseholdReport(TEST_HOUSEHOLD_ID, REPORT_MONTH);
+    const result = await generateHouseholdReport(
+      TEST_HOUSEHOLD_ID,
+      REPORT_MONTH
+    );
 
     expect(result).toBeDefined();
     expect(result.report_data).toBeDefined();
@@ -473,7 +531,13 @@ describe("generateHouseholdReport", () => {
 
   it("calls generateInsights with household entity type", async () => {
     adminResults.profiles.selectList = {
-      data: [{ id: TEST_USER_ID, income_sharing_mode: "all", expense_sharing_mode: "all" }],
+      data: [
+        {
+          id: TEST_USER_ID,
+          income_sharing_mode: "all",
+          expense_sharing_mode: "all",
+        },
+      ],
       error: null,
     };
 

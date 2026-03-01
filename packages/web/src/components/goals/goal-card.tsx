@@ -46,14 +46,19 @@ export function getGoalStatus(gp: GoalProgress): "on_track" | "warning" | "excee
     if (pct > 0.8) return "warning";
     return "on_track";
   }
-  // For savings goals, "on track" means meeting or exceeding the target
-  if (gp.goal.goal_type === "monthly_savings") {
+  // For savings-type goals (savings_amount, savings_rate, debt_payoff),
+  // "on track" means meeting or exceeding the target
+  if (
+    gp.goal.goal_type === "savings_amount" ||
+    gp.goal.goal_type === "savings_rate" ||
+    gp.goal.goal_type === "debt_payoff"
+  ) {
     const pct = gp.target > 0 ? gp.current / gp.target : 0;
     if (pct >= 1) return "on_track";
     if (pct >= 0.5) return "warning";
     return "exceeded"; // behind
   }
-  // total_savings
+  // target_savings, emergency_fund — cumulative goals
   const pct = gp.target > 0 ? gp.current / gp.target : 0;
   if (pct >= 1) return "on_track";
   if (pct >= 0.5) return "warning";
@@ -82,6 +87,7 @@ export function GoalHistoryChart({
     actual: Math.round(h.actual),
   }));
 
+  // Budget goals use red; all savings-type goals use green
   const barColor = goalType === "budget" ? "#ef4444" : "#22c55e";
 
   return (
@@ -91,12 +97,17 @@ export function GoalHistoryChart({
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis dataKey="month" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
           <YAxis
-            tickFormatter={(v: number) => formatCurrency(v)}
+            tickFormatter={(v: number) =>
+              goalType === "savings_rate" ? `${Math.round(v)}%` : formatCurrency(v)
+            }
             tick={{ fontSize: 11 }}
             className="fill-muted-foreground"
           />
           <Tooltip
-            formatter={(value: number) => [formatCurrency(value), "Actual"]}
+            formatter={(value: number) => [
+              goalType === "savings_rate" ? `${Math.round(value)}%` : formatCurrency(value),
+              "Actual",
+            ]}
             contentStyle={{
               borderRadius: "8px",
               border: "1px solid hsl(var(--border))",
@@ -176,10 +187,19 @@ export function GoalCard({
               {goal.goal_type === "budget" && (
                 <span>Monthly budget</span>
               )}
-              {goal.goal_type === "monthly_savings" && (
+              {goal.goal_type === "savings_amount" && (
                 <span>Monthly savings target</span>
               )}
-              {goal.goal_type === "total_savings" && (
+              {goal.goal_type === "savings_rate" && (
+                <span>Savings rate target</span>
+              )}
+              {goal.goal_type === "emergency_fund" && (
+                <span>Emergency fund</span>
+              )}
+              {goal.goal_type === "debt_payoff" && (
+                <span>Debt payoff</span>
+              )}
+              {goal.goal_type === "target_savings" && (
                 <>
                   <span>Savings goal</span>
                   {goal.target_date && (
@@ -193,7 +213,7 @@ export function GoalCard({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {goal.goal_type === "total_savings" && (
+            {(goal.goal_type === "target_savings" || goal.goal_type === "emergency_fund") && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -223,9 +243,13 @@ export function GoalCard({
             <span>
               {goal.goal_type === "budget"
                 ? `Spent ${formatCurrency(current)} of ${formatCurrency(target)}`
-                : goal.goal_type === "monthly_savings"
+                : goal.goal_type === "savings_amount"
                   ? `Saved ${formatCurrency(Math.max(0, current))} of ${formatCurrency(target)} this month`
-                  : `Saved ${formatCurrency(current)} of ${formatCurrency(target)}`}
+                  : goal.goal_type === "savings_rate"
+                    ? `${Math.round(current)}% of ${Math.round(target)}%`
+                    : goal.goal_type === "debt_payoff"
+                      ? `Paid ${formatCurrency(current)} of ${formatCurrency(target)}`
+                      : `Saved ${formatCurrency(current)} of ${formatCurrency(target)}`}
             </span>
             <span className="text-muted-foreground">{Math.round(pct)}%</span>
           </div>

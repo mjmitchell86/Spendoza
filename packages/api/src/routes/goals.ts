@@ -93,19 +93,22 @@ router.get("/suggestions", async (req, res: Response) => {
     });
   }
 
-  // Fetch existing goal names for deduplication (by entity, not user)
+  // Fetch existing goals for deduplication (by entity, not user)
   const { data: existingGoals } = await supabaseAdmin
     .from("goals")
-    .select("name")
+    .select("name, goal_type")
     .eq("entity_type", entityType)
     .eq("entity_id", entityId);
 
-  const existingNames = (existingGoals ?? []).map((g: any) => g.name);
+  const existingGoalList = (existingGoals ?? []).map((g: any) => ({
+    name: g.name as string,
+    goal_type: g.goal_type as string,
+  }));
 
   const suggestions = await generateGoalSuggestions(
     reportData,
     entityType,
-    existingNames
+    existingGoalList
   );
 
   // Cache suggestions in report_data
@@ -292,56 +295,100 @@ router.get("/progress", async (req, res: Response) => {
   const currentReport = reportsByMonth.get(currentMonthKey);
 
   // 3. Build progress for each goal
-  const result = goals.map((goal: any) => {
-    let current = 0;
-    const history: Array<{ month: string; actual: number }> = [];
+  const result = await Promise.all(
+    goals.map(async (goal: any) => {
+      let current = 0;
+      const history: Array<{ month: string; actual: number }> = [];
 
-    if (goal.goal_type === "budget") {
-      const catName = goal.category_id
-        ? categoryNameMap.get(goal.category_id)?.toLowerCase()
-        : undefined;
+      if (goal.goal_type === "budget") {
+        const catName = goal.category_id
+          ? categoryNameMap.get(goal.category_id)?.toLowerCase()
+          : undefined;
 
-      if (currentReport?.by_category && catName) {
-        const match = currentReport.by_category.find(
-          (c: any) => c.category?.toLowerCase() === catName
-        );
-        current = match?.amount ?? 0;
-      }
-
-      for (const monthKey of monthKeys) {
-        const report = reportsByMonth.get(monthKey);
-        let actual = 0;
-        if (report?.by_category && catName) {
-          const match = report.by_category.find(
+        if (currentReport?.by_category && catName) {
+          const match = currentReport.by_category.find(
             (c: any) => c.category?.toLowerCase() === catName
           );
-          actual = match?.amount ?? 0;
+          current = match?.amount ?? 0;
         }
-        history.push({ month: monthKey, actual });
-      }
-    } else if (goal.goal_type === "monthly_savings") {
-      if (currentReport) {
-        current = (currentReport.total_income ?? 0) - (currentReport.total_expenses ?? 0);
+
+        for (const monthKey of monthKeys) {
+          const report = reportsByMonth.get(monthKey);
+          let actual = 0;
+          if (report?.by_category && catName) {
+            const match = report.by_category.find(
+              (c: any) => c.category?.toLowerCase() === catName
+            );
+            actual = match?.amount ?? 0;
+          }
+          history.push({ month: monthKey, actual });
+        }
+      } else if (goal.goal_type === "savings_amount") {
+        if (currentReport) {
+          current = (currentReport.total_income ?? 0) - (currentReport.total_expenses ?? 0);
+        }
+
+        for (const monthKey of monthKeys) {
+          const report = reportsByMonth.get(monthKey);
+          const actual = report
+            ? (report.total_income ?? 0) - (report.total_expenses ?? 0)
+            : 0;
+          history.push({ month: monthKey, actual });
+        }
+      } else if (goal.goal_type === "target_savings") {
+        current = Number(goal.current_amount ?? 0);
+
+        for (const monthKey of monthKeys) {
+          history.push({ month: monthKey, actual: Number(goal.current_amount ?? 0) });
+        }
+      } else if (goal.goal_type === "savings_rate") {
+        current = currentReport?.savings_rate ?? 0;
+
+        for (const monthKey of monthKeys) {
+          const report = reportsByMonth.get(monthKey);
+          const actual = report?.savings_rate ?? 0;
+          history.push({ month: monthKey, actual });
+        }
+      } else if (goal.goal_type === "emergency_fund") {
+        current = Number(goal.current_amount ?? 0);
+
+        for (const monthKey of monthKeys) {
+          history.push({ month: monthKey, actual: Number(goal.current_amount ?? 0) });
+        }
+      } else if (goal.goal_type === "debt_payoff") {
+        let target = Number(goal.target_amount);
+        if (goal.debt_id) {
+          const { data: debt } = await supabaseAdmin
+            .from("debts")
+            .select("original_balance, current_balance")
+            .eq("id", goal.debt_id)
+            .single();
+          if (debt) {
+            current = Number(debt.original_balance) - Number(debt.current_balance);
+            target = Number(debt.original_balance);
+          }
+        }
+
+        for (const monthKey of monthKeys) {
+          history.push({ month: monthKey, actual: current });
+        }
+
+        return {
+          goal,
+          current,
+          target,
+          history: history.reverse(),
+        };
       }
 
-      for (const monthKey of monthKeys) {
-        const report = reportsByMonth.get(monthKey);
-        const actual = report
-          ? (report.total_income ?? 0) - (report.total_expenses ?? 0)
-          : 0;
-        history.push({ month: monthKey, actual });
-      }
-    } else if (goal.goal_type === "total_savings") {
-      current = goal.current_amount ?? 0;
-    }
-
-    return {
-      goal,
-      current,
-      target: goal.target_amount,
-      history: history.reverse(),
-    };
-  });
+      return {
+        goal,
+        current,
+        target: goal.target_amount,
+        history: history.reverse(),
+      };
+    })
+  );
 
   return res.status(200).json({ goals: result });
 });

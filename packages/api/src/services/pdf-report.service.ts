@@ -47,6 +47,27 @@ interface PdfReportInput {
     percentage: number;
     suggestion: string;
   }>;
+  allocation?: {
+    needs: { amount: number; percentage: number };
+    wants: { amount: number; percentage: number };
+    savings: { amount: number; percentage: number };
+    unclassified: { amount: number; percentage: number };
+  };
+  healthScore?: {
+    score: number;
+    previous_score: number | null;
+    factors: Record<
+      string,
+      { value: number; points: number; max: number; rating: string }
+    >;
+  };
+  debts?: Array<{
+    name: string;
+    debt_type: string;
+    current_balance: number;
+    interest_rate: number;
+    minimum_payment: number;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -661,6 +682,274 @@ function drawSavingsCards(
 }
 
 // ---------------------------------------------------------------------------
+// Drawing: Health Score Gauge
+// ---------------------------------------------------------------------------
+function drawHealthScoreGauge(
+  doc: PDFKit.PDFDocument,
+  healthScore: NonNullable<PdfReportInput["healthScore"]>,
+  pageWidth: number
+) {
+  const left = doc.page.margins.left;
+
+  ensureSpace(doc, 160);
+  drawSectionTitle(doc, "Financial Health Score", pageWidth);
+
+  const score = healthScore.score;
+  const gaugeColor =
+    score >= 80 ? C.income : score >= 50 ? C.amber : C.expense;
+
+  // Gauge dimensions
+  const gaugeSize = 120;
+  const centerX = left + pageWidth / 2;
+  const centerY = doc.y + gaugeSize / 2;
+  const radius = gaugeSize / 2 - 10;
+  const lineWidth = 10;
+
+  // Draw background arc (270 degrees, gap at bottom)
+  const startAngle = (3 / 4) * Math.PI; // 135 degrees
+  const endAngle = (9 / 4) * Math.PI; // 405 degrees (270 sweep)
+  const steps = 60;
+
+  // Background arc
+  doc.save();
+  doc.lineWidth(lineWidth).strokeColor(C.divider);
+  doc.path(describeArc(centerX, centerY, radius, startAngle, endAngle, steps));
+  doc.stroke();
+
+  // Filled arc proportional to score
+  if (score > 0) {
+    const fillAngle = startAngle + (score / 100) * (endAngle - startAngle);
+    doc.lineWidth(lineWidth).strokeColor(gaugeColor);
+    doc.path(
+      describeArc(centerX, centerY, radius, startAngle, fillAngle, steps)
+    );
+    doc.stroke();
+  }
+  doc.restore();
+
+  // Score number centered
+  doc
+    .fontSize(28)
+    .fillColor(gaugeColor)
+    .text(String(score), centerX - 30, centerY - 16, {
+      width: 60,
+      align: "center",
+    });
+
+  doc
+    .fontSize(10)
+    .fillColor(C.muted)
+    .text("/100", centerX - 25, centerY + 14, {
+      width: 50,
+      align: "center",
+    });
+
+  doc.y = centerY + gaugeSize / 2 + 5;
+
+  // Previous score comparison
+  if (healthScore.previous_score !== null) {
+    const diff = score - healthScore.previous_score;
+    const arrow = diff >= 0 ? "+" : "";
+    const diffColor = diff >= 0 ? C.income : C.expense;
+    doc
+      .fontSize(9)
+      .fillColor(diffColor)
+      .text(
+        `${arrow}${diff} pts vs last month`,
+        left,
+        doc.y,
+        { width: pageWidth, align: "center" }
+      );
+    doc.moveDown(0.5);
+  }
+
+  // Factor breakdown as compact pills
+  const factors = Object.entries(healthScore.factors);
+  if (factors.length > 0) {
+    const pillWidth = Math.min((pageWidth - (factors.length - 1) * 6) / factors.length, 120);
+    let x = left + (pageWidth - factors.length * pillWidth - (factors.length - 1) * 6) / 2;
+    const pillY = doc.y;
+
+    for (const [name, factor] of factors) {
+      const pillColor =
+        factor.rating === "good" || factor.rating === "excellent"
+          ? C.incomeBg
+          : factor.rating === "fair"
+            ? C.amberBg
+            : C.expenseBg;
+      const textColor =
+        factor.rating === "good" || factor.rating === "excellent"
+          ? C.income
+          : factor.rating === "fair"
+            ? C.amber
+            : C.expense;
+
+      roundedRect(doc, x, pillY, pillWidth, 30, 4, pillColor);
+      doc
+        .fontSize(7)
+        .fillColor(C.muted)
+        .text(
+          name.replace(/_/g, " ").toUpperCase(),
+          x + 4,
+          pillY + 4,
+          { width: pillWidth - 8, align: "center" }
+        );
+      doc
+        .fontSize(9)
+        .fillColor(textColor)
+        .text(
+          `${factor.points}/${factor.max}`,
+          x + 4,
+          pillY + 16,
+          { width: pillWidth - 8, align: "center" }
+        );
+      x += pillWidth + 6;
+    }
+
+    doc.y = pillY + 38;
+  }
+}
+
+/** Build an SVG-style path string for an arc. */
+function describeArc(
+  cx: number,
+  cy: number,
+  r: number,
+  startAngle: number,
+  endAngle: number,
+  steps: number
+): string {
+  const parts: string[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const angle = startAngle + (i / steps) * (endAngle - startAngle);
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    parts.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
+  }
+  return parts.join(" ");
+}
+
+// ---------------------------------------------------------------------------
+// Drawing: Spending Allocation Bar
+// ---------------------------------------------------------------------------
+function drawAllocationBar(
+  doc: PDFKit.PDFDocument,
+  allocation: NonNullable<PdfReportInput["allocation"]>,
+  pageWidth: number
+) {
+  const left = doc.page.margins.left;
+  ensureSpace(doc, 80);
+
+  // Section title
+  drawSectionTitle(doc, "Spending Allocation", pageWidth);
+
+  const barHeight = 14;
+  const barY = doc.y;
+  const barRadius = 7;
+
+  const segments = [
+    { label: "Needs", pct: allocation.needs.percentage, color: "#3b82f6" },
+    { label: "Wants", pct: allocation.wants.percentage, color: "#8b5cf6" },
+    { label: "Savings", pct: allocation.savings.percentage, color: C.income },
+  ];
+
+  // Include unclassified only if meaningful
+  if (allocation.unclassified.percentage > 1) {
+    segments.push({
+      label: "Other",
+      pct: allocation.unclassified.percentage,
+      color: C.muted,
+    });
+  }
+
+  // Background bar with rounded ends
+  roundedRect(doc, left, barY, pageWidth, barHeight, barRadius, C.divider);
+
+  // Draw segments left-to-right
+  let x = left;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const segWidth = (seg.pct / 100) * pageWidth;
+    if (segWidth < 1) continue;
+
+    // For first and last segments, use rounded rect; middle segments use plain rect
+    if (i === 0 && segments.length === 1) {
+      roundedRect(doc, x, barY, segWidth, barHeight, barRadius, seg.color);
+    } else if (i === 0) {
+      // Round left side only — draw a full rounded rect clipped on the right
+      doc.save();
+      doc.rect(x, barY, segWidth, barHeight).clip();
+      roundedRect(doc, x, barY, segWidth + barRadius, barHeight, barRadius, seg.color);
+      doc.restore();
+    } else if (i === segments.length - 1) {
+      // Round right side only
+      doc.save();
+      doc.rect(x, barY, segWidth, barHeight).clip();
+      roundedRect(doc, x - barRadius, barY, segWidth + barRadius, barHeight, barRadius, seg.color);
+      doc.restore();
+    } else {
+      doc.rect(x, barY, segWidth, barHeight).fillColor(seg.color).fill();
+    }
+    x += segWidth;
+  }
+
+  doc.y = barY + barHeight + 8;
+
+  // Labels below
+  const labelParts = segments
+    .map((s) => `${s.label} ${s.pct.toFixed(0)}%`)
+    .join("  |  ");
+  doc
+    .fontSize(9)
+    .fillColor(C.dark)
+    .text(labelParts, left, doc.y, { width: pageWidth, align: "center" });
+  doc.moveDown(0.3);
+
+  // Benchmark text
+  doc
+    .fontSize(8)
+    .fillColor(C.muted)
+    .text("50/30/20 Guideline", left, doc.y, {
+      width: pageWidth,
+      align: "center",
+    });
+  doc.moveDown(1);
+}
+
+// ---------------------------------------------------------------------------
+// Drawing: Debt Section
+// ---------------------------------------------------------------------------
+function drawDebtSection(
+  doc: PDFKit.PDFDocument,
+  debts: NonNullable<PdfReportInput["debts"]>,
+  pageWidth: number
+) {
+  if (debts.length === 0) return;
+
+  drawSectionTitle(doc, "Outstanding Debts", pageWidth);
+
+  const headers = ["Name", "Type", "Balance", "APR", "Monthly Payment"];
+  const colWidths = [0.25, 0.18, 0.2, 0.12, 0.25];
+
+  const rows = debts.map((d) => [
+    d.name,
+    d.debt_type.replace(/_/g, " "),
+    fmt(d.current_balance),
+    `${d.interest_rate.toFixed(1)}%`,
+    fmt(d.minimum_payment),
+  ]);
+
+  // Total row
+  const totalBalance = debts.reduce((sum, d) => sum + d.current_balance, 0);
+  const totalPayment = debts.reduce((sum, d) => sum + d.minimum_payment, 0);
+  rows.push(["Total", "", fmt(totalBalance), "", fmt(totalPayment)]);
+
+  drawStyledTable(doc, headers, rows, colWidths, pageWidth, {
+    boldCols: [0, 2],
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Main builder (same signature as before)
 // ---------------------------------------------------------------------------
 export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
@@ -724,8 +1013,18 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
 
     drawMetricCards(doc, cards, pageWidth);
 
+    // Health Score Gauge — after metric cards, before AI insights
+    if (input.healthScore) {
+      drawHealthScoreGauge(doc, input.healthScore, pageWidth);
+    }
+
     if (input.aiInsights) {
       drawInsightsBox(doc, input.aiInsights, pageWidth);
+    }
+
+    // Spending Allocation Bar — after AI insights
+    if (input.allocation) {
+      drawAllocationBar(doc, input.allocation, pageWidth);
     }
 
     // =====================================================================
@@ -838,6 +1137,14 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
         drawSectionTitle(doc, "Goal Progress", pageWidth);
         drawGoalProgress(doc, input.goalProgress, pageWidth);
       }
+    }
+
+    // =====================================================================
+    // SECTION: Outstanding Debts
+    // =====================================================================
+    if (input.debts && input.debts.length > 0) {
+      ensureSpace(doc, sectionStartHeight(input.debts.length));
+      drawDebtSection(doc, input.debts, pageWidth);
     }
 
     // =====================================================================

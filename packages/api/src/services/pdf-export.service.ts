@@ -140,9 +140,9 @@ export function buildGoalProgress(
         );
         current = match?.amount ?? 0;
       }
-    } else if (goal.goal_type === "monthly_savings") {
+    } else if (goal.goal_type === "savings_amount") {
       current = reportData.total_income - reportData.total_expenses;
-    } else if (goal.goal_type === "total_savings") {
+    } else if (goal.goal_type === "target_savings") {
       current = goal.current_amount ?? 0;
     }
     return {
@@ -199,6 +199,7 @@ export async function generatePersonalPdfForUser(
     { data: profile },
     { data: allRecurringExpenses },
     { data: goals },
+    { data: debts },
   ] = await Promise.all([
     supabaseAdmin
       .from("expenses")
@@ -228,6 +229,14 @@ export async function generatePersonalPdfForUser(
       .from("goals")
       .select("*, categories(name)")
       .eq("user_id", userId),
+    supabaseAdmin
+      .from("debts")
+      .select(
+        "name, debt_type, current_balance, interest_rate, minimum_payment"
+      )
+      .eq("entity_type", "user")
+      .eq("entity_id", userId)
+      .gt("current_balance", 0),
   ]);
 
   // Build subscriptions paid this month from recurring expenses
@@ -263,6 +272,10 @@ export async function generatePersonalPdfForUser(
     subscriptionsPaid,
     goalProgress,
     savingsRecommendations,
+    allocation: (report.report_data as any).allocation ?? undefined,
+    healthScore:
+      (report.report_data as any).financial_health_score ?? undefined,
+    debts: debts ?? [],
   });
 
   return {
@@ -317,12 +330,13 @@ export async function generateHouseholdPdfForHousehold(
 
   const memberIds = (members ?? []).map((m) => m.id);
 
-  // Fetch recurring bills, income, subscriptions, and goals for all members in parallel
+  // Fetch recurring bills, income, subscriptions, goals, and debts for all members in parallel
   const [
     { data: recurringBills },
     { data: incomeSources },
     { data: allRecurringExpenses },
     { data: goals },
+    { data: debts },
   ] = await Promise.all([
     supabaseAdmin
       .from("expenses")
@@ -347,6 +361,14 @@ export async function generateHouseholdPdfForHousehold(
       .from("goals")
       .select("*, categories(name)")
       .in("user_id", memberIds),
+    supabaseAdmin
+      .from("debts")
+      .select(
+        "name, debt_type, current_balance, interest_rate, minimum_payment"
+      )
+      .eq("entity_type", "household")
+      .eq("entity_id", householdId)
+      .gt("current_balance", 0),
   ]);
 
   // Build subscriptions paid this month
@@ -417,6 +439,10 @@ export async function generateHouseholdPdfForHousehold(
     subscriptionsPaid,
     goalProgress,
     savingsRecommendations,
+    allocation: (report.report_data as any).allocation ?? undefined,
+    healthScore:
+      (report.report_data as any).financial_health_score ?? undefined,
+    debts: debts ?? [],
   });
 
   return {

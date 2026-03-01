@@ -9,6 +9,7 @@ import {
   ArrowLeftRight,
   Target,
   CreditCard,
+  Landmark,
   ShieldAlert,
   Info,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const navItems = [
   { to: "/bank-statements", label: "Bank Statements", icon: FileText },
   { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { to: "/goals", label: "Goals", icon: Target },
+  { to: "/debts", label: "Debts", icon: Landmark },
   { to: "/household", label: "Household", icon: Users },
   { to: "/billing", label: "Billing", icon: CreditCard },
   { to: "/about", label: "About", icon: Info },
