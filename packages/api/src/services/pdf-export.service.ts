@@ -216,7 +216,9 @@ export async function generatePersonalPdfForUser(
         "description, friendly_name, amount, recurrence_interval, next_due_date"
       )
       .eq("user_id", userId)
-      .eq("frequency", "recurring"),
+      .eq("frequency", "recurring")
+      .gte("next_due_date", new Date().toISOString().slice(0, 10))
+      .order("next_due_date", { ascending: true }),
     supabaseAdmin
       .from("income_entries")
       .select("source_name, amount, frequency, attributed_to_name")
@@ -355,7 +357,9 @@ export async function generateHouseholdPdfForHousehold(
         "description, friendly_name, amount, recurrence_interval, next_due_date"
       )
       .in("user_id", memberIds)
-      .eq("frequency", "recurring"),
+      .eq("frequency", "recurring")
+      .gte("next_due_date", new Date().toISOString().slice(0, 10))
+      .order("next_due_date", { ascending: true }),
     supabaseAdmin
       .from("income_entries")
       .select("source_name, amount, frequency, attributed_to_name")
