@@ -119,7 +119,7 @@ export function BankStatementsPage() {
           <CardContent className="py-8">
             <div className="flex flex-col items-center justify-center text-center">
               {selectedStatement.status === "processing" ? (
-                <ProcessingStatus parsedData={selectedStatement.parsed_data} />
+                <ProcessingStatus parsedData={selectedStatement.parsed_data} fileType={selectedStatement.file_type} />
               ) : selectedStatement.status === "failed" ? (
                 <FailedStatus
                   statementId={selectedStatement.id}
@@ -146,14 +146,17 @@ export function BankStatementsPage() {
 // Pipeline step progress
 // ---------------------------------------------------------------------------
 
-const PIPELINE_STEPS = [
-  { key: "extract_text", label: "Reading PDF" },
-  { key: "extract_transactions", label: "Extracting transactions" },
-  { key: "classify_transactions", label: "Classifying expenses" },
-  { key: "match_and_insert", label: "Matching & saving" },
-] as const;
+function getPipelineSteps(fileType?: string) {
+  return [
+    { key: "extract_text", label: fileType === "csv" ? "Reading CSV" : "Reading PDF" },
+    { key: "extract_transactions", label: "Extracting transactions" },
+    { key: "classify_transactions", label: "Classifying expenses" },
+    { key: "match_and_insert", label: "Matching & saving" },
+  ] as const;
+}
 
-function PipelineSteps({ currentStep }: { currentStep: string | undefined }) {
+function PipelineSteps({ currentStep, fileType }: { currentStep: string | undefined; fileType?: string }) {
+  const PIPELINE_STEPS = getPipelineSteps(fileType);
   const currentIdx = PIPELINE_STEPS.findIndex((s) => s.key === currentStep);
 
   return (
@@ -198,7 +201,7 @@ function PipelineSteps({ currentStep }: { currentStep: string | undefined }) {
   );
 }
 
-function ProcessingStatus({ parsedData }: { parsedData: unknown }) {
+function ProcessingStatus({ parsedData, fileType }: { parsedData: unknown; fileType?: string }) {
   const step = (parsedData as any)?.pipeline_step as string | undefined;
   const retryCount = (parsedData as any)?.retry_count as number | undefined;
 
@@ -210,7 +213,7 @@ function ProcessingStatus({ parsedData }: { parsedData: unknown }) {
           ? `Retrying... (attempt ${retryCount + 1} of 3)`
           : "This statement is being processed."}
       </p>
-      <PipelineSteps currentStep={step} />
+      <PipelineSteps currentStep={step} fileType={fileType} />
     </>
   );
 }
@@ -229,7 +232,7 @@ function FailedStatus({
   const failedStep = (parsedData as any)?.failed_step as string | undefined;
   const errorMsg = (parsedData as any)?.error as string | undefined;
   const retryCount = (parsedData as any)?.retry_count as number | undefined;
-  const stepLabel = PIPELINE_STEPS.find((s) => s.key === failedStep)?.label;
+  const stepLabel = getPipelineSteps().find((s) => s.key === failedStep)?.label;
 
   return (
     <>
