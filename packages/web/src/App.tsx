@@ -25,6 +25,7 @@ import { AdminUsersPage } from "@/pages/admin-users";
 import { PublicLayout } from "@/components/layout/public-layout";
 import { AboutPage } from "@/pages/about";
 import { GettingStartedPage } from "@/pages/getting-started";
+import { Toaster } from "@/components/ui/sonner";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,7 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
+        <Toaster />
       </AuthProvider>
     </QueryClientProvider>
   );
