@@ -65,6 +65,7 @@ mock.module("@langchain/openai", () => ({
 // We also need pdf-parse mocked since transaction-classifier imports from pdf-parser
 mock.module("../../lib/supabase", () => ({
   supabaseAdmin: { from: () => ({ insert: () => ({ error: null }) }) },
+  createSupabaseClient: () => ({ from: () => ({ insert: () => ({ error: null }) }) }),
 }));
 
 mock.module("pdf-parse", () => ({
