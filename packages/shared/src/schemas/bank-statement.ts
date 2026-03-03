@@ -17,7 +17,6 @@ export type StatementStatus = z.infer<typeof statementStatusSchema>;
 // ---------------------------------------------------------------------------
 export const uploadBankStatementSchema = z.object({
   bank_name: z.string().nullable().optional(),
-  statement_month: z.string().date().nullable().optional(),
   is_shared_account: z.preprocess(
     (v) => (typeof v === "string" ? v === "true" : v),
     z.boolean().default(false)
