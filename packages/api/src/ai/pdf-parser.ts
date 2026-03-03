@@ -69,7 +69,9 @@ export interface ExtractionResult {
   accountLast4: string | null;
 }
 
-const SYSTEM_PROMPT = `You are a financial data extraction assistant. Your job is to extract individual transactions from bank statement text and identify the bank.
+const SYSTEM_PROMPT = `You are a financial data extraction assistant. Your job is to extract EVERY individual transaction from bank statement text and identify the bank.
+
+CRITICAL: You MUST extract ALL transactions from the entire document, regardless of date range. Do NOT skip, summarize, or truncate. Every single row/line that represents a transaction must be included in your output. The document may span multiple months — extract them all.
 
 For each transaction, extract:
 - date: in YYYY-MM-DD format
@@ -111,9 +113,10 @@ export async function extractTransactions(
   const model = new ChatOpenAI({
     modelName: "gpt-5-mini",
     timeout: 150_000,
+    maxTokens: 16_384,
   });
 
-  let userPrompt = `Extract all transactions from the following bank statement text:\n\n${text}`;
+  let userPrompt = `Extract EVERY transaction from the following bank statement text. Do not skip any rows — include all dates and all months present in the data:\n\n${text}`;
 
   if (bankName) {
     userPrompt += `\n\nThis is a ${bankName} bank statement. Use ${bankName}-specific formatting conventions to help parse the data accurately.`;
