@@ -212,50 +212,18 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
 
   console.log(`[ai-pipeline] [${statementId}] extracted ${parsedTransactions.length} transactions, detected bank: ${detectedBankName ?? "none"}`);
 
-  // Auto-fill bank_name and statement_month if not set by user
-  const updates: Record<string, string> = {};
-
+  // Auto-fill bank_name if not set by user
   if (!statement.bank_name && detectedBankName) {
-    updates.bank_name = detectedBankName;
-  }
-
-  if (!statement.statement_month && parsedTransactions.length > 0) {
-    // Count occurrences of each YYYY-MM month across transaction dates
-    const monthCounts = new Map<string, number>();
-    for (const t of parsedTransactions) {
-      if (t.date) {
-        const month = t.date.slice(0, 7); // "YYYY-MM"
-        monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
-      }
-    }
-    // Pick the most frequent month
-    let bestMonth = "";
-    let bestCount = 0;
-    for (const [month, count] of monthCounts) {
-      if (count > bestCount) {
-        bestMonth = month;
-        bestCount = count;
-      }
-    }
-    if (bestMonth) {
-      updates.statement_month = bestMonth + "-01";
-      console.log(`[ai-pipeline] [${statementId}] auto-detected statement_month: ${updates.statement_month}`);
-    }
-  }
-
-  if (Object.keys(updates).length > 0) {
     await supabaseAdmin
       .from("bank_statements")
-      .update(updates)
+      .update({ bank_name: detectedBankName })
       .eq("id", statementId);
-    if (updates.bank_name) {
-      console.log(`[ai-pipeline] [${statementId}] set bank_name to: ${updates.bank_name}`);
-    }
+    console.log(`[ai-pipeline] [${statementId}] set bank_name to: ${detectedBankName}`);
   }
 
   if (parsedTransactions.length === 0) {
     // Fallback: if statement_month is still null, use current month
-    if (!statement.statement_month && !updates.statement_month) {
+    if (!statement.statement_month) {
       const fallbackMonth = new Date().toISOString().slice(0, 7) + "-01";
       await supabaseAdmin
         .from("bank_statements")
@@ -418,9 +386,78 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     }
   }
 
-  // Insert only non-duplicate transactions
-  if (newTransactions.length > 0) {
-    const transactionRows = newTransactions.map((t) => ({
+  // Group transactions by YYYY-MM for multi-month splitting
+  const monthGroups = new Map<string, typeof newTransactions>();
+  for (const t of newTransactions) {
+    const month = t.date ? t.date.slice(0, 7) : "unknown";
+    const group = monthGroups.get(month) ?? [];
+    group.push(t);
+    monthGroups.set(month, group);
+  }
+
+  // Assign "unknown" date transactions to the most common month
+  const unknownTxns = monthGroups.get("unknown");
+  if (unknownTxns && unknownTxns.length > 0) {
+    monthGroups.delete("unknown");
+    // Find most common month among dated transactions
+    let bestMonth = "";
+    let bestCount = 0;
+    for (const [month, txns] of monthGroups) {
+      if (txns.length > bestCount) {
+        bestMonth = month;
+        bestCount = txns.length;
+      }
+    }
+    if (bestMonth) {
+      const group = monthGroups.get(bestMonth) ?? [];
+      group.push(...unknownTxns);
+      monthGroups.set(bestMonth, group);
+    } else {
+      // All transactions have no date — use current month
+      const fallback = new Date().toISOString().slice(0, 7);
+      monthGroups.set(fallback, unknownTxns);
+    }
+  }
+
+  const sortedMonths = Array.from(monthGroups.keys()).sort();
+  const isMultiMonth = sortedMonths.length > 1;
+
+  if (isMultiMonth) {
+    // Clean up any previous child records from prior splits (reprocess support)
+    const { error: cleanupError } = await supabaseAdmin
+      .from("bank_statements")
+      .delete()
+      .eq("user_id", user_id)
+      .like("file_hash", `${statement.file_hash}:%`);
+
+    if (cleanupError) {
+      console.error(`[ai-pipeline] [${statementId}] cleanup error: ${cleanupError.message}`);
+    }
+  }
+
+  if (newTransactions.length === 0) {
+    console.log(`[ai-pipeline] [${statementId}] all ${skippedCount} transactions were duplicates, nothing to insert`);
+
+    // Update statement to parsed with summary (no transactions)
+    await supabaseAdmin
+      .from("bank_statements")
+      .update({
+        status: "parsed",
+        statement_month: statement.statement_month ?? new Date().toISOString().slice(0, 7) + "-01",
+        parsed_data: {
+          transaction_count: 0,
+          skipped_duplicates: skippedCount,
+          total_credits: 0,
+          total_debits: 0,
+        },
+      })
+      .eq("id", statementId);
+  } else if (!isMultiMonth) {
+    // Single month — behave exactly as before
+    const month = sortedMonths[0];
+    const txns = monthGroups.get(month)!;
+
+    const transactionRows = txns.map((t) => ({
       bank_statement_id: statementId,
       user_id,
       date: t.date,
@@ -440,36 +477,117 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
       throw new Error(`Failed to insert transactions: ${insertError.message}`);
     }
 
-    console.log(`[ai-pipeline] [${statementId}] inserted ${transactionRows.length} transactions`);
+    const totalCredits = txns.filter((t) => t.type === "credit").reduce((sum, t) => sum + t.amount, 0);
+    const totalDebits = txns.filter((t) => t.type === "debit").reduce((sum, t) => sum + t.amount, 0);
+
+    await supabaseAdmin
+      .from("bank_statements")
+      .update({
+        status: "parsed",
+        statement_month: month + "-01",
+        parsed_data: {
+          transaction_count: txns.length,
+          skipped_duplicates: skippedCount,
+          total_credits: totalCredits,
+          total_debits: totalDebits,
+        },
+      })
+      .eq("id", statementId);
+
+    console.log(
+      `[ai-pipeline] [${statementId}] complete: ${txns.length} new txns (${skippedCount} dupes skipped), credits=$${totalCredits}, debits=$${totalDebits}`
+    );
   } else {
-    console.log(`[ai-pipeline] [${statementId}] all ${skippedCount} transactions were duplicates, nothing to insert`);
+    // Multiple months — split into per-month statement records
+    console.log(`[ai-pipeline] [${statementId}] splitting into ${sortedMonths.length} monthly statements: ${sortedMonths.join(", ")}`);
+
+    for (let i = 0; i < sortedMonths.length; i++) {
+      const month = sortedMonths[i];
+      const txns = monthGroups.get(month)!;
+      let targetStatementId: string;
+
+      if (i === 0) {
+        // First month: assign to the original statement record
+        targetStatementId = statementId;
+
+        const totalCredits = txns.filter((t) => t.type === "credit").reduce((sum, t) => sum + t.amount, 0);
+        const totalDebits = txns.filter((t) => t.type === "debit").reduce((sum, t) => sum + t.amount, 0);
+
+        await supabaseAdmin
+          .from("bank_statements")
+          .update({
+            status: "parsed",
+            statement_month: month + "-01",
+            parsed_data: {
+              transaction_count: txns.length,
+              skipped_duplicates: skippedCount,
+              total_credits: totalCredits,
+              total_debits: totalDebits,
+              split_months: sortedMonths.length,
+            },
+          })
+          .eq("id", statementId);
+      } else {
+        // Additional months: create child statement records
+        const totalCredits = txns.filter((t) => t.type === "credit").reduce((sum, t) => sum + t.amount, 0);
+        const totalDebits = txns.filter((t) => t.type === "debit").reduce((sum, t) => sum + t.amount, 0);
+
+        const { data: childStatement, error: childError } = await supabaseAdmin
+          .from("bank_statements")
+          .insert({
+            user_id,
+            file_path: statement.file_path,
+            file_hash: `${statement.file_hash}:${month}`,
+            file_type: statement.file_type,
+            bank_name: statement.bank_name,
+            is_shared_account: statement.is_shared_account,
+            account_label: statement.account_label,
+            statement_month: month + "-01",
+            status: "parsed",
+            parsed_data: {
+              transaction_count: txns.length,
+              total_credits: totalCredits,
+              total_debits: totalDebits,
+              source_statement_id: statementId,
+            },
+          })
+          .select("id")
+          .single();
+
+        if (childError || !childStatement) {
+          throw new Error(`Failed to create child statement for ${month}: ${childError?.message}`);
+        }
+
+        targetStatementId = childStatement.id;
+        console.log(`[ai-pipeline] [${statementId}] created child statement ${targetStatementId} for ${month} (${txns.length} txns)`);
+      }
+
+      // Insert transactions for this month
+      const transactionRows = txns.map((t) => ({
+        bank_statement_id: targetStatementId,
+        user_id,
+        date: t.date,
+        description: t.description,
+        amount: t.amount,
+        type: t.type,
+        ai_category: t.ai_category,
+        matched_expense_id: t.matched_expense_id,
+        matched_income_id: t.matched_income_id,
+      }));
+
+      const { error: insertError } = await supabaseAdmin
+        .from("transactions")
+        .insert(transactionRows);
+
+      if (insertError) {
+        throw new Error(`Failed to insert transactions for ${month}: ${insertError.message}`);
+      }
+    }
+
+    console.log(
+      `[ai-pipeline] [${statementId}] split complete: ${newTransactions.length} new txns across ${sortedMonths.length} months (${skippedCount} dupes skipped)`
+    );
   }
-
-  // Update statement to parsed with summary
-  const totalCredits = newTransactions
-    .filter((t) => t.type === "credit")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalDebits = newTransactions
-    .filter((t) => t.type === "debit")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  await supabaseAdmin
-    .from("bank_statements")
-    .update({
-      status: "parsed",
-      parsed_data: {
-        transaction_count: newTransactions.length,
-        skipped_duplicates: skippedCount,
-        total_credits: totalCredits,
-        total_debits: totalDebits,
-      },
-    })
-    .eq("id", statementId);
-
-  console.log(
-    `[ai-pipeline] [${statementId}] complete: ${newTransactions.length} new txns (${skippedCount} dupes skipped), credits=$${totalCredits}, debits=$${totalDebits}`
-  );
 
   // Clean up raw PDF from storage — no longer needed
   await deleteRawFile(statementId, statement.file_path);
