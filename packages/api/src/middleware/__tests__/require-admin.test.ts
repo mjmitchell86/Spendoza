@@ -7,6 +7,17 @@ const TEST_TOKEN = "valid-token";
 let adminResults: Record<string, any> = {};
 
 // Mock supabase before importing app
+const mockFrom = (table: string) => {
+  const cfg = adminResults[table] || {};
+  return {
+    select: () => ({
+      eq: () => ({
+        single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
+      }),
+    }),
+  };
+};
+
 mock.module("../../lib/supabase", () => ({
   supabaseAdmin: {
     auth: {
@@ -20,18 +31,9 @@ mock.module("../../lib/supabase", () => ({
         return Promise.resolve({ data: { user: null }, error: { message: "bad token" } });
       },
     },
-    from: (table: string) => {
-      const cfg = adminResults[table] || {};
-      return {
-        select: () => ({
-          eq: () => ({
-            single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-          }),
-        }),
-      };
-    },
+    from: mockFrom,
   },
-  createSupabaseClient: () => ({}),
+  createSupabaseClient: () => ({ from: mockFrom }),
 }));
 
 let server: Server;

@@ -15,7 +15,7 @@ router.post(
   "/upload",
   upload.single("file"),
   async (req, res: Response) => {
-    const { user } = req as AuthenticatedRequest;
+    const { user, supabase: db } = req as AuthenticatedRequest;
 
     // Validate metadata fields
     const parsed = uploadBankStatementSchema.safeParse(req.body);
@@ -46,7 +46,7 @@ router.post(
     const fileHash = computeFileHash(file.buffer);
 
     // Check for duplicates
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await db
       .from("bank_statements")
       .select("id, status")
       .eq("user_id", user.id)
@@ -56,7 +56,7 @@ router.post(
     if (existing) {
       if (existing.status === "failed") {
         // Allow re-upload by deleting the failed record first
-        await supabaseAdmin
+        await db
           .from("bank_statements")
           .delete()
           .eq("id", existing.id);
@@ -80,7 +80,7 @@ router.post(
     }
 
     // Insert record into bank_statements table
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from("bank_statements")
       .insert({
         user_id: user.id,
@@ -111,9 +111,9 @@ router.post(
 // GET / — list user's bank statements
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("bank_statements")
     .select("*")
     .eq("user_id", user.id)
@@ -130,9 +130,9 @@ router.get("/", async (req, res: Response) => {
 // GET /:id — get statement with parsed transactions
 // ---------------------------------------------------------------------------
 router.get("/:id", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data: statement, error } = await supabaseAdmin
+  const { data: statement, error } = await db
     .from("bank_statements")
     .select("*")
     .eq("id", req.params.id)
@@ -143,7 +143,7 @@ router.get("/:id", async (req, res: Response) => {
     return res.status(404).json({ error: "Statement not found" });
   }
 
-  const { data: transactions } = await supabaseAdmin
+  const { data: transactions } = await db
     .from("transactions")
     .select("*")
     .eq("bank_statement_id", statement.id);
@@ -155,10 +155,10 @@ router.get("/:id", async (req, res: Response) => {
 // POST /:id/reprocess — re-trigger AI parsing
 // ---------------------------------------------------------------------------
 router.post("/:id/reprocess", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
   // Look up the statement first to determine file type
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await db
     .from("bank_statements")
     .select("file_type")
     .eq("id", req.params.id)
@@ -168,7 +168,7 @@ router.post("/:id/reprocess", async (req, res: Response) => {
   // CSVs already have text stored, so start at extract_transactions
   const startStep = existing?.file_type === "csv" ? "extract_transactions" : "extract_text";
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("bank_statements")
     .update({
       status: "processing",
@@ -192,9 +192,9 @@ router.post("/:id/reprocess", async (req, res: Response) => {
 // DELETE /:id — remove a failed statement
 // ---------------------------------------------------------------------------
 router.delete("/:id", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data: statement } = await supabaseAdmin
+  const { data: statement } = await db
     .from("bank_statements")
     .select("id, status")
     .eq("id", req.params.id)
@@ -209,7 +209,7 @@ router.delete("/:id", async (req, res: Response) => {
     return res.status(400).json({ error: "Only failed statements can be deleted" });
   }
 
-  await supabaseAdmin
+  await db
     .from("bank_statements")
     .delete()
     .eq("id", statement.id);

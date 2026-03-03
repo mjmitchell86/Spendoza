@@ -20,8 +20,8 @@ function monthRange(month: string) {
 // ---------------------------------------------------------------------------
 // Helper: find the most recent month that has transactions for a user
 // ---------------------------------------------------------------------------
-async function findLatestTransactionMonth(userId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
+async function findLatestTransactionMonth(userId: string, db: any): Promise<string | null> {
+  const { data } = await db
     .from("transactions")
     .select("date")
     .eq("user_id", userId)
@@ -37,29 +37,29 @@ async function findLatestTransactionMonth(userId: string): Promise<string | null
 // ---------------------------------------------------------------------------
 // Helper: compute dashboard data from transactions when no report exists
 // ---------------------------------------------------------------------------
-async function computeFromTransactions(userId: string, month: string) {
+async function computeFromTransactions(userId: string, month: string, db: any) {
   const { startDate, nextMonth } = monthRange(month);
 
-  const { data: transactions } = await supabaseAdmin
+  const { data: transactions } = await db
     .from("transactions")
     .select("amount, type, ai_category, date")
     .eq("user_id", userId)
     .gte("date", startDate)
     .lt("date", nextMonth);
 
-  const txns = transactions ?? [];
+  const txns: any[] = transactions ?? [];
 
   const totalCredits = txns
-    .filter((t) => t.type === "credit")
-    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+    .filter((t: any) => t.type === "credit")
+    .reduce((sum: number, t: any) => sum + (t.amount ?? 0), 0);
 
   const totalDebits = txns
-    .filter((t) => t.type === "debit")
-    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+    .filter((t: any) => t.type === "debit")
+    .reduce((sum: number, t: any) => sum + (t.amount ?? 0), 0);
 
   // Group debits by category
   const categoryMap = new Map<string, number>();
-  for (const t of txns.filter((t) => t.type === "debit")) {
+  for (const t of txns.filter((t: any) => t.type === "debit")) {
     const cat = t.ai_category ?? "Uncategorized";
     categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
   }
@@ -138,12 +138,12 @@ function toDashboardResponse(report: any) {
 // ---------------------------------------------------------------------------
 router.get("/personal", async (req: Request, res: Response) => {
   res.set("Cache-Control", "no-store");
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const requestedMonth = (req.query.month as string) ?? currentMonthStr();
 
   // Check if the requested month has bank statement transactions
   const { startDate: reqStart, nextMonth: reqNext } = monthRange(requestedMonth);
-  const { count: txnCount } = await supabaseAdmin
+  const { count: txnCount } = await db
     .from("transactions")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
@@ -156,9 +156,9 @@ router.get("/personal", async (req: Request, res: Response) => {
   // Always tell the frontend which month has the latest transactions
   const latestTransactionMonth = hasTransactions
     ? null
-    : await findLatestTransactionMonth(user.id);
+    : await findLatestTransactionMonth(user.id, db);
 
-  const { data: report } = await supabaseAdmin
+  const { data: report } = await db
     .from("reports")
     .select("*")
     .eq("entity_type", "user")
@@ -180,7 +180,7 @@ router.get("/personal", async (req: Request, res: Response) => {
   }
 
   // No report or report has no data — compute from transactions
-  let dashboard = await computeFromTransactions(user.id, month) as any;
+  let dashboard = await computeFromTransactions(user.id, month, db) as any;
 
   // Merge AI insights — try displayed month's report first, then find latest
   if (report?.ai_insights && !dashboard.insights) {
@@ -189,7 +189,7 @@ router.get("/personal", async (req: Request, res: Response) => {
   }
 
   if (!dashboard.insights) {
-    const { data: latestReport } = await supabaseAdmin
+    const { data: latestReport } = await db
       .from("reports")
       .select("ai_insights, report_month")
       .eq("entity_type", "user")

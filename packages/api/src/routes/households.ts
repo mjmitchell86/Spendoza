@@ -17,8 +17,8 @@ const router = Router();
 // Middleware: resolve user's household_id and inject it as req.params.id
 // ---------------------------------------------------------------------------
 async function resolveHousehold(req: Request, res: Response, next: NextFunction) {
-  const { user } = req as AuthenticatedRequest;
-  const { data: profile } = await supabaseAdmin
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { data: profile } = await db
     .from("profiles")
     .select("household_id")
     .eq("id", user.id)
@@ -36,11 +36,11 @@ async function resolveHousehold(req: Request, res: Response, next: NextFunction)
 // ---------------------------------------------------------------------------
 
 async function getHouseholdHandler(req: Request, res: Response) {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const householdId = req.params.id;
 
   // Verify user is a member of this household
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await db
     .from("profiles")
     .select("household_id")
     .eq("id", user.id)
@@ -51,7 +51,7 @@ async function getHouseholdHandler(req: Request, res: Response) {
   }
 
   // Get household details
-  const { data: household, error: hhError } = await supabaseAdmin
+  const { data: household, error: hhError } = await db
     .from("households")
     .select("*")
     .eq("id", householdId)
@@ -62,7 +62,7 @@ async function getHouseholdHandler(req: Request, res: Response) {
   }
 
   // Get members
-  const { data: members, error: membersError } = await supabaseAdmin
+  const { data: members, error: membersError } = await db
     .from("profiles")
     .select("id, display_name, income_sharing_mode, expense_sharing_mode")
     .eq("household_id", householdId);
@@ -75,11 +75,11 @@ async function getHouseholdHandler(req: Request, res: Response) {
 }
 
 async function inviteHandler(req: Request, res: Response) {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const householdId = req.params.id;
 
   // Verify user is head of household
-  const { data: household } = await supabaseAdmin
+  const { data: household } = await db
     .from("households")
     .select("*")
     .eq("id", householdId)
@@ -92,12 +92,12 @@ async function inviteHandler(req: Request, res: Response) {
   }
 
   // Check 10-member limit (current members + pending invitations)
-  const { data: members } = await supabaseAdmin
+  const { data: members } = await db
     .from("profiles")
     .select("id")
     .eq("household_id", householdId);
 
-  const { data: pendingInvites } = await supabaseAdmin
+  const { data: pendingInvites } = await db
     .from("household_invitations")
     .select("id")
     .eq("household_id", householdId)
@@ -111,7 +111,7 @@ async function inviteHandler(req: Request, res: Response) {
   }
 
   // Insert invitation
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("household_invitations")
     .insert({
       household_id: householdId,
@@ -217,11 +217,11 @@ async function removeMemberHandler(req: Request, res: Response) {
 }
 
 async function updateSharingHandler(req: Request, res: Response) {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const householdId = req.params.id;
 
   // Verify user is a member of this household
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await db
     .from("profiles")
     .select("household_id")
     .eq("id", user.id)
@@ -232,7 +232,7 @@ async function updateSharingHandler(req: Request, res: Response) {
   }
 
   // Update sharing preferences
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("profiles")
     .update({
       income_sharing_mode: req.body.income_sharing_mode,
@@ -251,7 +251,7 @@ async function updateSharingHandler(req: Request, res: Response) {
 }
 
 async function leaveHandler(req: Request, res: Response) {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const householdId = req.params.id;
 
   // Check if user is head of household
@@ -275,7 +275,7 @@ async function leaveHandler(req: Request, res: Response) {
     }
 
     // Sole member — remove from household then delete it
-    await supabaseAdmin
+    await db
       .from("profiles")
       .update({ household_id: null })
       .eq("id", user.id);
@@ -285,7 +285,7 @@ async function leaveHandler(req: Request, res: Response) {
     return res.status(200).json({ message: "Left and deleted household successfully" });
   }
 
-  await supabaseAdmin
+  await db
     .from("profiles")
     .update({ household_id: null })
     .eq("id", user.id);
@@ -294,11 +294,11 @@ async function leaveHandler(req: Request, res: Response) {
 }
 
 async function transferOwnershipHandler(req: Request, res: Response) {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const householdId = req.params.id;
 
   // Verify caller is head of household
-  const { data: household } = await supabaseAdmin
+  const { data: household } = await db
     .from("households")
     .select("*")
     .eq("id", householdId)
@@ -318,7 +318,7 @@ async function transferOwnershipHandler(req: Request, res: Response) {
   }
 
   // Verify new head is a member of the same household
-  const { data: targetProfile } = await supabaseAdmin
+  const { data: targetProfile } = await db
     .from("profiles")
     .select("household_id")
     .eq("id", new_head_id)
@@ -329,7 +329,7 @@ async function transferOwnershipHandler(req: Request, res: Response) {
   }
 
   // Update head_of_household_id
-  const { data: updated, error } = await supabaseAdmin
+  const { data: updated, error } = await db
     .from("households")
     .update({ head_of_household_id: new_head_id })
     .eq("id", householdId)
@@ -349,11 +349,11 @@ async function transferOwnershipHandler(req: Request, res: Response) {
 // ---------------------------------------------------------------------------
 router.get("/", resolveHousehold, getHouseholdHandler);
 router.post("/", validate(createHouseholdSchema), async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
   const invite_code = generateInviteCode();
 
-  const { data: household, error } = await supabaseAdmin
+  const { data: household, error } = await db
     .from("households")
     .insert({
       name: req.body.name,
@@ -368,7 +368,7 @@ router.post("/", validate(createHouseholdSchema), async (req, res: Response) => 
   }
 
   // Update the user's profile to set household_id
-  await supabaseAdmin
+  await db
     .from("profiles")
     .update({ household_id: household.id })
     .eq("id", user.id);

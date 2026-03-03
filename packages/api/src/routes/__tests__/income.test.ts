@@ -68,7 +68,7 @@ const mockUpdateSingle = mock(() =>
   Promise.resolve({ data: incomeEntry, error: null })
 );
 const mockUpdate = mock(() => ({
-  eq: () => ({ select: () => ({ single: mockUpdateSingle }) }),
+  eq: () => ({ eq: () => ({ select: () => ({ single: mockUpdateSingle }) }) }),
 }));
 
 // DELETE terminal: .delete().eq("id", ...).eq("user_id", ...)

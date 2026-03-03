@@ -339,7 +339,8 @@ describe("GET /api/households/:id", () => {
 
   it("returns 403 for non-member", async () => {
     // User profile has no household_id (not a member)
-    adminResults.profiles.selectSingle = {
+    // Route uses req.supabase (RLS client), so update rlsResults
+    rlsResults.profiles.selectSingle = {
       data: { ...memberProfile, household_id: null },
       error: null,
     };
@@ -377,7 +378,8 @@ describe("POST /api/households/:id/invite", () => {
 
   it("returns 403 for non-head member", async () => {
     // Household has a different head
-    adminResults.households.selectSingle = {
+    // Route inviteHandler uses req.supabase (RLS client)
+    rlsResults.households.selectSingle = {
       data: { ...householdData, head_of_household_id: "someone-else" },
       error: null,
     };
@@ -494,7 +496,8 @@ describe("PUT /api/households/:id/sharing", () => {
       expense_sharing_mode: "category" as const,
     };
 
-    adminResults.profiles.updateSingle = {
+    // Route updateSharingHandler uses req.supabase (RLS client)
+    rlsResults.profiles.updateSingle = {
       data: updatedProfile,
       error: null,
     };

@@ -1,7 +1,6 @@
 import { Router, type Response } from "express";
 import { createDebtSchema, updateDebtSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
-import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import {
   projectSingleDebt,
@@ -12,6 +11,7 @@ import type { Debt } from "@spendoza/shared";
 const router = Router();
 
 async function resolveEntity(
+  db: any,
   user: { id: string },
   entityTypeParam: string | undefined
 ): Promise<
@@ -21,7 +21,7 @@ async function resolveEntity(
   if (entityType === "user") {
     return { entityType, entityId: user.id };
   }
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await db
     .from("profiles")
     .select("household_id")
     .eq("id", user.id)
@@ -34,11 +34,11 @@ async function resolveEntity(
 
 // GET /debts
 router.get("/", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
-  const entity = await resolveEntity(user!, req.query.entity_type as string);
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const entity = await resolveEntity(db, user!, req.query.entity_type as string);
   if ("error" in entity) return res.status(400).json({ error: entity.error });
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("debts")
     .select("*")
     .eq("entity_type", entity.entityType)
@@ -54,11 +54,11 @@ router.post(
   "/",
   validate(createDebtSchema),
   async (req, res: Response) => {
-    const { user } = req as AuthenticatedRequest;
-    const entity = await resolveEntity(user!, req.body.entity_type);
+    const { user, supabase: db } = req as AuthenticatedRequest;
+    const entity = await resolveEntity(db, user!, req.body.entity_type);
     if ("error" in entity) return res.status(400).json({ error: entity.error });
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from("debts")
       .insert({
         user_id: user!.id,
@@ -86,8 +86,8 @@ router.put(
   "/:id",
   validate(updateDebtSchema),
   async (req, res: Response) => {
-    const { user } = req as AuthenticatedRequest;
-    const { data: existing } = await supabaseAdmin
+    const { user, supabase: db } = req as AuthenticatedRequest;
+    const { data: existing } = await db
       .from("debts")
       .select("*")
       .eq("id", req.params.id)
@@ -99,7 +99,7 @@ router.put(
       return res.status(403).json({ error: "Access denied" });
     }
     if (existing.entity_type === "household") {
-      const { data: profile } = await supabaseAdmin
+      const { data: profile } = await db
         .from("profiles")
         .select("household_id")
         .eq("id", user!.id)
@@ -109,7 +109,7 @@ router.put(
       }
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from("debts")
       .update({ ...req.body, updated_at: new Date().toISOString() })
       .eq("id", req.params.id)
@@ -123,8 +123,8 @@ router.put(
 
 // DELETE /debts/:id
 router.delete("/:id", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
-  const { data: existing } = await supabaseAdmin
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { data: existing } = await db
     .from("debts")
     .select("*")
     .eq("id", req.params.id)
@@ -136,7 +136,7 @@ router.delete("/:id", async (req, res: Response) => {
     return res.status(403).json({ error: "Access denied" });
   }
   if (existing.entity_type === "household") {
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await db
       .from("profiles")
       .select("household_id")
       .eq("id", user!.id)
@@ -146,7 +146,7 @@ router.delete("/:id", async (req, res: Response) => {
     }
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("debts")
     .delete()
     .eq("id", req.params.id);
@@ -157,13 +157,13 @@ router.delete("/:id", async (req, res: Response) => {
 
 // GET /debts/projections
 router.get("/projections", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
-  const entity = await resolveEntity(user!, req.query.entity_type as string);
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const entity = await resolveEntity(db, user!, req.query.entity_type as string);
   if ("error" in entity) return res.status(400).json({ error: entity.error });
 
   const extraPayment = Number(req.query.extra_payment) || 0;
 
-  const { data: debts, error } = await supabaseAdmin
+  const { data: debts, error } = await db
     .from("debts")
     .select("*")
     .eq("entity_type", entity.entityType)
