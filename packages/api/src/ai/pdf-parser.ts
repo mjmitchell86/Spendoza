@@ -66,6 +66,7 @@ export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
 export interface ExtractionResult {
   transactions: ParsedTransaction[];
   detectedBankName: string | null;
+  accountLast4: string | null;
 }
 
 const SYSTEM_PROMPT = `You are a financial data extraction assistant. Your job is to extract individual transactions from bank statement text and identify the bank.
@@ -78,11 +79,20 @@ For each transaction, extract:
 
 Also identify the bank or financial institution from the statement text (e.g. "Chase", "Bank of America", "Wells Fargo", "Capital One").
 
+Extract the last 4 digits of the account number. Look for patterns like:
+- "Account Number: XXXX-XXXX-1234" or "Account: ****1234"
+- "Acct #...1234" or "Account ending in 1234"
+- Masked formats like "XXXX1234", "****1234", or "...1234"
+If no account number is found, set account_last4 to null.
+
+For CSV files that may not contain explicit bank names: try to infer the bank from column headers (e.g. "Posted Date" is common for Chase, "Reference Number" for Bank of America), transaction description patterns, or any metadata rows at the top of the file.
+
 Respond ONLY with valid JSON in this exact format:
-{"bank_name": "...", "transactions": [{"date": "YYYY-MM-DD", "description": "...", "amount": 0.00, "type": "credit|debit"}]}
+{"bank_name": "...", "account_last4": "1234", "transactions": [{"date": "YYYY-MM-DD", "description": "...", "amount": 0.00, "type": "credit|debit"}]}
 
 If you cannot determine the bank, set bank_name to null.
-If there are no transactions, return: {"bank_name": "...", "transactions": []}`;
+If you cannot find the account last 4, set account_last4 to null.
+If there are no transactions, return: {"bank_name": "...", "account_last4": null, "transactions": []}`;
 
 /**
  * Uses ChatOpenAI to extract structured transaction data from bank statement text.
@@ -154,8 +164,13 @@ export async function extractTransactions(
       ? String(parsed.bank_name)
       : null;
 
+  const accountLast4: string | null =
+    !Array.isArray(parsed) && parsed.account_last4
+      ? String(parsed.account_last4)
+      : null;
+
   console.log(
-    `[pdf-parser] Extracted ${rawTransactions.length} transaction(s), detected bank: ${detectedBankName ?? "none"}`
+    `[pdf-parser] Extracted ${rawTransactions.length} transaction(s), detected bank: ${detectedBankName ?? "none"}, account last4: ${accountLast4 ?? "none"}`
   );
 
   // Normalize: ensure amounts are positive
@@ -166,5 +181,5 @@ export async function extractTransactions(
     type: t.type as "credit" | "debit",
   }));
 
-  return { transactions, detectedBankName };
+  return { transactions, detectedBankName, accountLast4 };
 }
