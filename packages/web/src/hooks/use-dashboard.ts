@@ -77,19 +77,35 @@ export interface HouseholdDashboardData extends DashboardData {
   member_contributions: MemberContribution[];
 }
 
-export function usePersonalDashboard(month?: string) {
-  const qs = month ? `?month=${month}` : "";
+interface DashboardParams {
+  month?: string;
+  from_date?: string;
+  to_date?: string;
+}
+
+export function usePersonalDashboard(params?: DashboardParams) {
+  const qs = new URLSearchParams();
+  if (params?.month) qs.set("month", params.month);
+  if (params?.from_date) qs.set("from_date", params.from_date);
+  if (params?.to_date) qs.set("to_date", params.to_date);
+  const qsStr = qs.toString();
+
   return useQuery<DashboardData>({
-    queryKey: ["dashboard", "personal", month],
-    queryFn: () => apiClient(`/dashboard/personal${qs}`),
+    queryKey: ["dashboard", "personal", params],
+    queryFn: () => apiClient(`/dashboard/personal${qsStr ? `?${qsStr}` : ""}`),
   });
 }
 
-export function useHouseholdDashboard(month?: string, enabled = true) {
-  const qs = month ? `?month=${month}` : "";
+export function useHouseholdDashboard(params?: DashboardParams, enabled = true) {
+  const qs = new URLSearchParams();
+  if (params?.month) qs.set("month", params.month);
+  if (params?.from_date) qs.set("from_date", params.from_date);
+  if (params?.to_date) qs.set("to_date", params.to_date);
+  const qsStr = qs.toString();
+
   return useQuery<HouseholdDashboardData>({
-    queryKey: ["dashboard", "household", month],
-    queryFn: () => apiClient(`/dashboard/household${qs}`),
+    queryKey: ["dashboard", "household", params],
+    queryFn: () => apiClient(`/dashboard/household${qsStr ? `?${qsStr}` : ""}`),
     enabled,
   });
 }
