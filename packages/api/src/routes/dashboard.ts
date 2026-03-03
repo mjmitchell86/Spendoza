@@ -168,7 +168,8 @@ router.get("/personal", async (req: Request, res: Response) => {
   const { user, supabase: db } = req as AuthenticatedRequest;
   const fromDate = req.query.from_date as string | undefined;
   const toDate = req.query.to_date as string | undefined;
-  const isRangeQuery = fromDate || toDate;
+  const allTime = req.query.all_time === "true";
+  const isRangeQuery = fromDate || toDate || allTime;
 
   // --- Range-based query (multi-month periods like all_time, this_year) ---
   if (isRangeQuery) {
@@ -479,7 +480,8 @@ router.get("/household", async (req: Request, res: Response) => {
   const { user } = req as AuthenticatedRequest;
   const fromDate = req.query.from_date as string | undefined;
   const toDate = req.query.to_date as string | undefined;
-  const isRangeQuery = fromDate || toDate;
+  const allTime = req.query.all_time === "true";
+  const isRangeQuery = fromDate || toDate || allTime;
 
   // Look up user's household
   const { data: profile } = await supabaseAdmin
