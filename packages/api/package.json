@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "mkdir -p .vercel/output/functions/api.func && bun build src/index.ts --outfile .vercel/output/functions/api.func/index.mjs --target node && node scripts/post-build.cjs && cp $(node -e \"console.log(require.resolve('pdfjs-dist/build/pdf.worker.mjs'))\") .vercel/output/functions/api.func/pdf.worker.mjs && cp -r $(node -e \"const p=require.resolve('pdfkit/js/pdfkit.js');console.log(require('path').join(require('path').dirname(p),'data'))\") .vercel/output/functions/api.func/data && printf '{\"runtime\":\"nodejs20.x\",\"handler\":\"index.mjs\",\"launcherType\":\"Nodejs\",\"maxDuration\":180}' > .vercel/output/functions/api.func/.vc-config.json && printf '{\"version\":3,\"routes\":[{\"src\":\"/(.*)\",\"dest\":\"/api\"}]}' > .vercel/output/config.json",
+    "build": "mkdir -p .vercel/output/functions/api.func && bun build src/index.ts --outfile .vercel/output/functions/api.func/index.mjs --target node && node scripts/post-build.cjs && cp $(node -e \"console.log(require.resolve('pdfjs-dist/build/pdf.worker.mjs'))\") .vercel/output/functions/api.func/pdf.worker.mjs && cp -r $(node -e \"const p=require.resolve('pdfkit/js/pdfkit.js');console.log(require('path').join(require('path').dirname(p),'data'))\") .vercel/output/functions/api.func/data && printf '{\"runtime\":\"nodejs20.x\",\"handler\":\"index.mjs\",\"launcherType\":\"Nodejs\",\"maxDuration\":300}' > .vercel/output/functions/api.func/.vc-config.json && printf '{\"version\":3,\"routes\":[{\"src\":\"/(.*)\",\"dest\":\"/api\"}]}' > .vercel/output/config.json",
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'no lint configured yet'",
