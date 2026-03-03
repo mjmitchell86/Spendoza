@@ -100,9 +100,11 @@ export function DashboardPage() {
   const dashboardParams = useMemo(() => {
     // Single-month periods use the month param (leverages cached reports)
     if (month) return { month };
+    // All Time has no date bounds — signal explicitly
+    if (timePeriod === "all_time") return { all_time: true as const };
     // Multi-month periods use date range
     return { from_date: dateRange.from_date, to_date: dateRange.to_date };
-  }, [month, dateRange]);
+  }, [month, dateRange, timePeriod]);
   const { data, isLoading, error, refetch } = usePersonalDashboard(dashboardParams);
   const generateReport = useGenerateReport();
   const exportReport = useExportPersonalReport();

@@ -81,6 +81,7 @@ interface DashboardParams {
   month?: string;
   from_date?: string;
   to_date?: string;
+  all_time?: boolean;
 }
 
 export function usePersonalDashboard(params?: DashboardParams) {
@@ -88,6 +89,7 @@ export function usePersonalDashboard(params?: DashboardParams) {
   if (params?.month) qs.set("month", params.month);
   if (params?.from_date) qs.set("from_date", params.from_date);
   if (params?.to_date) qs.set("to_date", params.to_date);
+  if (params?.all_time) qs.set("all_time", "true");
   const qsStr = qs.toString();
 
   return useQuery<DashboardData>({
@@ -101,6 +103,7 @@ export function useHouseholdDashboard(params?: DashboardParams, enabled = true) 
   if (params?.month) qs.set("month", params.month);
   if (params?.from_date) qs.set("from_date", params.from_date);
   if (params?.to_date) qs.set("to_date", params.to_date);
+  if (params?.all_time) qs.set("all_time", "true");
   const qsStr = qs.toString();
 
   return useQuery<HouseholdDashboardData>({
