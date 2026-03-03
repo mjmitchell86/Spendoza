@@ -5,7 +5,7 @@ import { BottomNav } from "./bottom-nav";
 
 export function AppShell() {
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen w-full overflow-x-hidden">
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 border-r border-sidebar-border bg-sidebar-background lg:block">
         <Sidebar />

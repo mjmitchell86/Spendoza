@@ -119,6 +119,10 @@
   * {
     @apply border-border;
   }
+  html,
+  body {
+    @apply overflow-x-hidden;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;

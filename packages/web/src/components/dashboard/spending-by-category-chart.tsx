@@ -56,9 +56,9 @@ export function SpendingByCategoryChart({
         <CardTitle>Spending by Category</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex h-[320px] items-center gap-4">
+        <div className="flex h-[320px] items-center gap-4 overflow-hidden">
           {/* Chart */}
-          <div className="relative h-full w-1/2 min-w-[180px]">
+          <div className="relative h-full w-1/2 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
