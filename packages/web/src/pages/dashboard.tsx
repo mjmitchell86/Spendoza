@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -96,7 +96,14 @@ function TrendBadge({ value }: { value: number }) {
 export function DashboardPage() {
   const { timePeriod, setTimePeriod, isExplicit } = useTimePeriod();
   const month = getMonthParam(timePeriod);
-  const { data, isLoading, error, refetch } = usePersonalDashboard(month);
+  const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
+  const dashboardParams = useMemo(() => {
+    // Single-month periods use the month param (leverages cached reports)
+    if (month) return { month };
+    // Multi-month periods use date range
+    return { from_date: dateRange.from_date, to_date: dateRange.to_date };
+  }, [month, dateRange]);
+  const { data, isLoading, error, refetch } = usePersonalDashboard(dashboardParams);
   const generateReport = useGenerateReport();
   const exportReport = useExportPersonalReport();
   const { data: statements } = useBankStatements();

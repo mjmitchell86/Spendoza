@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   DollarSign,
@@ -337,7 +337,12 @@ export function HouseholdPage() {
   const hasHousehold = !!householdData?.household;
   const { timePeriod, setTimePeriod, isExplicit } = useTimePeriod();
   const month = getMonthParam(timePeriod);
-  const { data, isLoading, error, refetch } = useHouseholdDashboard(month, hasHousehold);
+  const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
+  const dashboardParams = useMemo(() => {
+    if (month) return { month };
+    return { from_date: dateRange.from_date, to_date: dateRange.to_date };
+  }, [month, dateRange]);
+  const { data, isLoading, error, refetch } = useHouseholdDashboard(dashboardParams, hasHousehold);
   const generateReport = useGenerateReport();
   const exportHouseholdReport = useExportHouseholdReport();
 
