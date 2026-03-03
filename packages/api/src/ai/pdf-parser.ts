@@ -113,7 +113,7 @@ export async function extractTransactions(
   const model = new ChatOpenAI({
     modelName: "gpt-5-mini",
     timeout: 150_000,
-    maxTokens: 16_384,
+    modelKwargs: { max_completion_tokens: 16_384 },
   });
 
   let userPrompt = `Extract EVERY transaction from the following bank statement text. Do not skip any rows — include all dates and all months present in the data:\n\n${text}`;
