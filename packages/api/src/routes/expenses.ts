@@ -1,7 +1,6 @@
 import { Router, type Response } from "express";
 import { createExpenseSchema, updateExpenseSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
-import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
@@ -10,9 +9,9 @@ const router = Router();
 // GET / — list expenses (filterable by category, frequency, date range)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  let query = supabaseAdmin
+  let query = db
     .from("expenses")
     .select("*")
     .eq("user_id", user.id);
@@ -52,9 +51,9 @@ router.get("/", async (req, res: Response) => {
 // POST / — create expense
 // ---------------------------------------------------------------------------
 router.post("/", validate(createExpenseSchema), async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("expenses")
     .insert({ ...req.body, user_id: user.id })
     .select()
@@ -71,9 +70,9 @@ router.post("/", validate(createExpenseSchema), async (req, res: Response) => {
 // PUT /:id — update expense
 // ---------------------------------------------------------------------------
 router.put("/:id", validate(updateExpenseSchema), async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("expenses")
     .update(req.body)
     .eq("id", req.params.id)
@@ -92,9 +91,9 @@ router.put("/:id", validate(updateExpenseSchema), async (req, res: Response) => 
 // DELETE /:id — delete expense
 // ---------------------------------------------------------------------------
 router.delete("/:id", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("expenses")
     .delete()
     .eq("id", req.params.id)

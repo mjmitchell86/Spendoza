@@ -53,6 +53,7 @@ const mockFromFn = mock(() => chainable());
 
 mock.module("../../lib/supabase", () => ({
   supabaseAdmin: { from: mockFromFn },
+  createSupabaseClient: () => ({ from: mockFromFn }),
 }));
 
 // ---------------------------------------------------------------------------

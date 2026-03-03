@@ -10,6 +10,7 @@ const router = Router();
 
 // Helper: resolve entity ID for household requests
 async function resolveEntity(
+  db: any,
   user: { id: string },
   entityTypeParam: string | undefined
 ): Promise<{ entityType: "user" | "household"; entityId: string } | { error: string }> {
@@ -17,7 +18,7 @@ async function resolveEntity(
   let entityId = user.id;
 
   if (entityType === "household") {
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await db
       .from("profiles")
       .select("household_id")
       .eq("id", user.id)
@@ -34,10 +35,11 @@ async function resolveEntity(
 
 // Helper: check if user has access to a goal
 async function checkGoalAccess(
+  db: any,
   goalId: string,
   userId: string
 ): Promise<{ allowed: boolean; goal?: any }> {
-  const { data: goal } = await supabaseAdmin
+  const { data: goal } = await db
     .from("goals")
     .select("entity_type, entity_id")
     .eq("id", goalId)
@@ -50,7 +52,7 @@ async function checkGoalAccess(
   }
 
   // Household: check membership
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await db
     .from("profiles")
     .select("household_id")
     .eq("id", userId)
@@ -64,13 +66,13 @@ async function checkGoalAccess(
 
 // Get AI-suggested goals based on latest report data
 router.get("/suggestions", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
-  const resolved = await resolveEntity(user, req.query.entity_type as string);
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const resolved = await resolveEntity(db, user, req.query.entity_type as string);
   if ("error" in resolved) return res.status(400).json({ error: resolved.error });
   const { entityType, entityId } = resolved;
 
   // Fetch the latest report for this entity
-  const { data: report } = await supabaseAdmin
+  const { data: report } = await db
     .from("reports")
     .select("report_month, report_data")
     .eq("entity_type", entityType)
@@ -94,7 +96,7 @@ router.get("/suggestions", async (req, res: Response) => {
   }
 
   // Fetch existing goals for deduplication (by entity, not user)
-  const { data: existingGoals } = await supabaseAdmin
+  const { data: existingGoals } = await db
     .from("goals")
     .select("name, goal_type")
     .eq("entity_type", entityType)
@@ -131,12 +133,12 @@ router.get("/suggestions", async (req, res: Response) => {
 
 // List goals filtered by entity
 router.get("/", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
-  const resolved = await resolveEntity(user, req.query.entity_type as string);
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const resolved = await resolveEntity(db, user, req.query.entity_type as string);
   if ("error" in resolved) return res.status(400).json({ error: resolved.error });
   const { entityType, entityId } = resolved;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("goals")
     .select("*")
     .eq("entity_type", entityType)
@@ -152,13 +154,13 @@ router.get("/", async (req, res: Response) => {
 
 // Create a goal
 router.post("/", validate(createGoalSchema), async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const entityType = req.body.entity_type ?? "user";
   let entityId = req.body.entity_id ?? user.id;
 
   // For household goals, verify the user belongs to the household
   if (entityType === "household") {
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await db
       .from("profiles")
       .select("household_id")
       .eq("id", user.id)
@@ -171,7 +173,7 @@ router.post("/", validate(createGoalSchema), async (req, res: Response) => {
 
   const { entity_type: _et, entity_id: _eid, ...goalFields } = req.body;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("goals")
     .insert({
       ...goalFields,
@@ -191,16 +193,16 @@ router.post("/", validate(createGoalSchema), async (req, res: Response) => {
 
 // Update a goal
 router.put("/:id", validate(updateGoalSchema), async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const access = await checkGoalAccess(req.params.id, user.id);
+  const access = await checkGoalAccess(db, req.params.id, user.id);
   if (!access.allowed) {
     return res.status(access.goal ? 403 : 404).json({
       error: access.goal ? "Forbidden" : "Goal not found",
     });
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("goals")
     .update({ ...req.body, updated_at: new Date().toISOString() })
     .eq("id", req.params.id)
@@ -216,16 +218,16 @@ router.put("/:id", validate(updateGoalSchema), async (req, res: Response) => {
 
 // Delete a goal
 router.delete("/:id", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const access = await checkGoalAccess(req.params.id, user.id);
+  const access = await checkGoalAccess(db, req.params.id, user.id);
   if (!access.allowed) {
     return res.status(access.goal ? 403 : 404).json({
       error: access.goal ? "Forbidden" : "Goal not found",
     });
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await db
     .from("goals")
     .delete()
     .eq("id", req.params.id);
@@ -239,14 +241,14 @@ router.delete("/:id", async (req, res: Response) => {
 
 // Get progress for goals with historical data
 router.get("/progress", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const months = Math.min(parseInt(req.query.months as string) || 6, 24);
-  const resolved = await resolveEntity(user, req.query.entity_type as string);
+  const resolved = await resolveEntity(db, user, req.query.entity_type as string);
   if ("error" in resolved) return res.status(400).json({ error: resolved.error });
   const { entityType, entityId } = resolved;
 
   // 1. Fetch goals for this entity (join category name for budget goals)
-  const { data: goals, error: goalsError } = await supabaseAdmin
+  const { data: goals, error: goalsError } = await db
     .from("goals")
     .select("*, categories(name)")
     .eq("entity_type", entityType)
@@ -277,7 +279,7 @@ router.get("/progress", async (req, res: Response) => {
     monthKeys.push(d.toISOString().slice(0, 10));
   }
 
-  const { data: reports } = await supabaseAdmin
+  const { data: reports } = await db
     .from("reports")
     .select("report_month, report_data")
     .eq("entity_type", entityType)
@@ -358,7 +360,7 @@ router.get("/progress", async (req, res: Response) => {
       } else if (goal.goal_type === "debt_payoff") {
         let target = Number(goal.target_amount);
         if (goal.debt_id) {
-          const { data: debt } = await supabaseAdmin
+          const { data: debt } = await db
             .from("debts")
             .select("original_balance, current_balance")
             .eq("id", goal.debt_id)

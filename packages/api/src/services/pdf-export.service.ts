@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "../lib/supabase";
 import {
   generateUserReport,
@@ -171,10 +172,13 @@ export function buildGoalProgress(
 export async function generatePersonalPdfForUser(
   userId: string,
   month: string,
-  opts?: PdfExportOptions
+  opts?: PdfExportOptions,
+  client?: SupabaseClient
 ): Promise<PdfExportResult | null> {
+  const db = client ?? supabaseAdmin;
+
   // Try cached report
-  let { data: report } = await supabaseAdmin
+  let { data: report } = await db
     .from("reports")
     .select("*")
     .eq("entity_type", "user")
@@ -187,7 +191,8 @@ export async function generatePersonalPdfForUser(
     report = await generateUserReport(
       userId,
       new Date(month + "T00:00:00Z"),
-      true
+      true,
+      client
     );
   }
 
@@ -210,7 +215,7 @@ export async function generatePersonalPdfForUser(
     { data: goals },
     { data: debts },
   ] = await Promise.all([
-    supabaseAdmin
+    db
       .from("expenses")
       .select(
         "description, friendly_name, amount, recurrence_interval, next_due_date"
@@ -219,18 +224,18 @@ export async function generatePersonalPdfForUser(
       .eq("frequency", "recurring")
       .gte("next_due_date", new Date().toISOString().slice(0, 10))
       .order("next_due_date", { ascending: true }),
-    supabaseAdmin
+    db
       .from("income_entries")
       .select("source_name, amount, frequency, attributed_to_name")
       .eq("user_id", userId)
       .neq("frequency", "one_time")
       .or(`end_date.is.null,end_date.gte.${month}`),
-    supabaseAdmin
+    db
       .from("profiles")
       .select("display_name")
       .eq("id", userId)
       .single(),
-    supabaseAdmin
+    db
       .from("expenses")
       .select(
         "description, friendly_name, amount, recurrence_interval, category_id, categories(name)"
@@ -238,11 +243,11 @@ export async function generatePersonalPdfForUser(
       .eq("user_id", userId)
       .eq("frequency", "recurring")
       .or(`end_date.is.null,end_date.gte.${month}`),
-    supabaseAdmin
+    db
       .from("goals")
       .select("*, categories(name)")
       .eq("user_id", userId),
-    supabaseAdmin
+    db
       .from("debts")
       .select(
         "name, debt_type, current_balance, interest_rate, minimum_payment"
@@ -304,17 +309,20 @@ export async function generatePersonalPdfForUser(
 export async function generateHouseholdPdfForHousehold(
   householdId: string,
   month: string,
-  opts?: PdfExportOptions
+  opts?: PdfExportOptions,
+  client?: SupabaseClient
 ): Promise<PdfExportResult | null> {
+  const db = client ?? supabaseAdmin;
+
   // Get household name
-  const { data: household } = await supabaseAdmin
+  const { data: household } = await db
     .from("households")
     .select("name")
     .eq("id", householdId)
     .single();
 
   // Try cached report
-  let { data: report } = await supabaseAdmin
+  let { data: report } = await db
     .from("reports")
     .select("*")
     .eq("entity_type", "household")
@@ -327,7 +335,8 @@ export async function generateHouseholdPdfForHousehold(
     report = await generateHouseholdReport(
       householdId,
       new Date(month + "T00:00:00Z"),
-      true
+      true,
+      client
     );
   }
 
@@ -336,7 +345,7 @@ export async function generateHouseholdPdfForHousehold(
   }
 
   // Get all household member IDs
-  const { data: members } = await supabaseAdmin
+  const { data: members } = await db
     .from("profiles")
     .select("id, display_name")
     .eq("household_id", householdId);
@@ -351,7 +360,7 @@ export async function generateHouseholdPdfForHousehold(
     { data: goals },
     { data: debts },
   ] = await Promise.all([
-    supabaseAdmin
+    db
       .from("expenses")
       .select(
         "description, friendly_name, amount, recurrence_interval, next_due_date"
@@ -360,13 +369,13 @@ export async function generateHouseholdPdfForHousehold(
       .eq("frequency", "recurring")
       .gte("next_due_date", new Date().toISOString().slice(0, 10))
       .order("next_due_date", { ascending: true }),
-    supabaseAdmin
+    db
       .from("income_entries")
       .select("source_name, amount, frequency, attributed_to_name")
       .in("user_id", memberIds)
       .neq("frequency", "one_time")
       .or(`end_date.is.null,end_date.gte.${month}`),
-    supabaseAdmin
+    db
       .from("expenses")
       .select(
         "description, friendly_name, amount, recurrence_interval, category_id, categories(name)"
@@ -374,11 +383,11 @@ export async function generateHouseholdPdfForHousehold(
       .in("user_id", memberIds)
       .eq("frequency", "recurring")
       .or(`end_date.is.null,end_date.gte.${month}`),
-    supabaseAdmin
+    db
       .from("goals")
       .select("*, categories(name)")
       .in("user_id", memberIds),
-    supabaseAdmin
+    db
       .from("debts")
       .select(
         "name, debt_type, current_balance, interest_rate, minimum_payment"
@@ -418,7 +427,7 @@ export async function generateHouseholdPdfForHousehold(
 
   const memberContributions = await Promise.all(
     (members ?? []).map(async (member) => {
-      const { data: txns } = await supabaseAdmin
+      const { data: txns } = await db
         .from("transactions")
         .select("type, amount")
         .eq("user_id", member.id)

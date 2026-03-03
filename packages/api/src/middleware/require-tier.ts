@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
 import type { AuthenticatedRequest } from "./auth";
-import { supabaseAdmin } from "../lib/supabase";
 import type { SubscriptionTier } from "@spendoza/shared";
 
 const TIER_RANK: Record<SubscriptionTier, number> = {
@@ -16,9 +15,9 @@ export function requireTier(minimumTier: SubscriptionTier) {
     // In non-production environments, all users are treated as pro
     if (!stripeEnabled) return next();
 
-    const { user } = req as AuthenticatedRequest;
+    const { user, supabase: db } = req as AuthenticatedRequest;
 
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await db
       .from("profiles")
       .select("subscription_tier")
       .eq("id", user.id)

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "../lib/supabase";
 import { generateInsights, type ReportData } from "../ai/report-insights";
 import type { AllocationBreakdown, DebtSummary } from "../ai/report-insights";
@@ -29,9 +30,10 @@ function pct(part: number, whole: number): number {
 
 async function computeAllocation(
   byCategory: Array<{ category: string; amount: number; percentage: number }>,
-  userId: string
+  userId: string,
+  db: SupabaseClient = supabaseAdmin
 ): Promise<AllocationBreakdown> {
-  const { data: categories } = await supabaseAdmin
+  const { data: categories } = await db
     .from("categories")
     .select("name, budget_class")
     .eq("user_id", userId);
@@ -65,9 +67,10 @@ async function computeAllocation(
 async function computeDebtSummary(
   entityType: "user" | "household",
   entityId: string,
-  totalIncome: number
+  totalIncome: number,
+  db: SupabaseClient = supabaseAdmin
 ): Promise<DebtSummary | undefined> {
-  const { data: debts } = await supabaseAdmin
+  const { data: debts } = await db
     .from("debts")
     .select("*")
     .eq("entity_type", entityType)
@@ -110,11 +113,12 @@ async function computeDebtSummary(
 async function getEmergencyFundMonths(
   entityType: "user" | "household",
   entityId: string,
-  avgMonthlyExpenses: number
+  avgMonthlyExpenses: number,
+  db: SupabaseClient = supabaseAdmin
 ): Promise<number> {
   if (avgMonthlyExpenses <= 0) return 0;
 
-  const { data: efGoals } = await supabaseAdmin
+  const { data: efGoals } = await db
     .from("goals")
     .select("current_amount")
     .eq("entity_type", entityType)
@@ -134,14 +138,16 @@ async function getEmergencyFundMonths(
 export async function generateUserReport(
   userId: string,
   month: Date,
-  force = false
+  force = false,
+  client?: SupabaseClient
 ): Promise<any> {
+  const db = client ?? supabaseAdmin;
   const monthStart = startOfMonth(month);
 
   const monthStr = toDateStr(monthStart);
 
   // 1. Check for cached report with no new data
-  const { data: existingReport } = await supabaseAdmin
+  const { data: existingReport } = await db
     .from("reports")
     .select("*")
     .eq("entity_type", "user")
@@ -157,7 +163,7 @@ export async function generateUserReport(
   const nextMonthDate = new Date(
     Date.UTC(monthStart.getFullYear(), monthStart.getMonth() + 1, 1)
   );
-  const { data: transactions } = await supabaseAdmin
+  const { data: transactions } = await db
     .from("transactions")
     .select("amount, type, ai_category")
     .eq("user_id", userId)
@@ -207,7 +213,7 @@ export async function generateUserReport(
   );
   const prevMonthStr = toDateStr(prevMonthDate);
 
-  const { data: prevReport } = await supabaseAdmin
+  const { data: prevReport } = await db
     .from("reports")
     .select("report_data")
     .eq("entity_type", "user")
@@ -247,17 +253,17 @@ export async function generateUserReport(
   };
 
   // Compute allocation breakdown
-  const allocation = await computeAllocation(reportData.by_category, userId);
+  const allocation = await computeAllocation(reportData.by_category, userId, db);
   reportData.allocation = allocation;
 
   // Compute debt summary
-  const debtSummary = await computeDebtSummary("user", userId, reportData.total_income);
+  const debtSummary = await computeDebtSummary("user", userId, reportData.total_income, db);
   if (debtSummary) reportData.debt_summary = debtSummary;
 
   // Get previous health score
   const prevHealthMonth = new Date(month);
   prevHealthMonth.setMonth(prevHealthMonth.getMonth() - 1);
-  const { data: prevHealthReport } = await supabaseAdmin
+  const { data: prevHealthReport } = await db
     .from("reports")
     .select("report_data")
     .eq("entity_type", "user")
@@ -267,7 +273,7 @@ export async function generateUserReport(
   const previousScore = (prevHealthReport?.report_data as any)?.financial_health_score?.score ?? null;
 
   // Emergency fund months
-  const efMonths = await getEmergencyFundMonths("user", userId, reportData.total_expenses);
+  const efMonths = await getEmergencyFundMonths("user", userId, reportData.total_expenses, db);
 
   // Financial health score
   reportData.financial_health_score = calculateHealthScore(
@@ -287,7 +293,7 @@ export async function generateUserReport(
   }
 
   // 9. Upsert report
-  const { data: upsertedReport } = await supabaseAdmin
+  const { data: upsertedReport } = await db
     .from("reports")
     .upsert(
       {
@@ -322,14 +328,16 @@ export async function generateUserReport(
 export async function generateHouseholdReport(
   householdId: string,
   month: Date,
-  force = false
+  force = false,
+  client?: SupabaseClient
 ): Promise<any> {
+  const db = client ?? supabaseAdmin;
   const monthStart = startOfMonth(month);
 
   const monthStr = toDateStr(monthStart);
 
   // 1. Check for cached report
-  const { data: existingReport } = await supabaseAdmin
+  const { data: existingReport } = await db
     .from("reports")
     .select("*")
     .eq("entity_type", "household")
@@ -342,7 +350,7 @@ export async function generateHouseholdReport(
   }
 
   // 2. Get all household members with sharing preferences
-  const { data: members } = await supabaseAdmin
+  const { data: members } = await db
     .from("profiles")
     .select("id, income_sharing_mode, expense_sharing_mode")
     .eq("household_id", householdId);
@@ -362,7 +370,7 @@ export async function generateHouseholdReport(
     const includeExpenses = member.expense_sharing_mode === "all";
     if (!includeIncome && !includeExpenses) continue;
 
-    const { data: transactions } = await supabaseAdmin
+    const { data: transactions } = await db
       .from("transactions")
       .select("amount, type, ai_category")
       .eq("user_id", member.id)
@@ -407,7 +415,7 @@ export async function generateHouseholdReport(
   );
   const prevMonthStr = toDateStr(prevMonthDate);
 
-  const { data: prevReport } = await supabaseAdmin
+  const { data: prevReport } = await db
     .from("reports")
     .select("report_data")
     .eq("entity_type", "household")
@@ -447,7 +455,7 @@ export async function generateHouseholdReport(
   };
 
   // Use head of household's categories for allocation classification
-  const { data: household } = await supabaseAdmin
+  const { data: household } = await db
     .from("households")
     .select("head_of_household_id")
     .eq("id", householdId)
@@ -455,18 +463,19 @@ export async function generateHouseholdReport(
 
   const allocation = await computeAllocation(
     reportData.by_category,
-    household!.head_of_household_id
+    household!.head_of_household_id,
+    db
   );
   reportData.allocation = allocation;
 
-  const debtSummary = await computeDebtSummary("household", householdId, reportData.total_income);
+  const debtSummary = await computeDebtSummary("household", householdId, reportData.total_income, db);
   if (debtSummary) reportData.debt_summary = debtSummary;
 
-  const efMonths = await getEmergencyFundMonths("household", householdId, reportData.total_expenses);
+  const efMonths = await getEmergencyFundMonths("household", householdId, reportData.total_expenses, db);
 
   const prevHHMonth = new Date(month);
   prevHHMonth.setMonth(prevHHMonth.getMonth() - 1);
-  const { data: prevHHReport } = await supabaseAdmin
+  const { data: prevHHReport } = await db
     .from("reports")
     .select("report_data")
     .eq("entity_type", "household")
@@ -492,7 +501,7 @@ export async function generateHouseholdReport(
   }
 
   // 9. Upsert report
-  const { data: upsertedReport } = await supabaseAdmin
+  const { data: upsertedReport } = await db
     .from("reports")
     .upsert(
       {

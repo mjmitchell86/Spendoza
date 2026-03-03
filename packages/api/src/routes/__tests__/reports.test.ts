@@ -363,8 +363,9 @@ describe("GET /api/reports/personal", () => {
   });
 
   it("returns 404 when no report exists", async () => {
-    adminResults.reports.selectSingle = { data: null, error: null };
-    adminResults.reports.selectMaybeSingle = { data: null, error: null };
+    // Route uses req.supabase (RLS client)
+    rlsResults.reports.selectSingle = { data: null, error: null };
+    rlsResults.reports.selectMaybeSingle = { data: null, error: null };
 
     const res = await fetch(url("2026-01-01"), {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
@@ -392,11 +393,12 @@ describe("GET /api/reports/household", () => {
   };
 
   it("returns 200 with household report", async () => {
-    adminResults.reports.selectSingle = {
+    // Route uses req.supabase (RLS client) for profiles + reports queries
+    rlsResults.reports.selectSingle = {
       data: sampleHouseholdReport,
       error: null,
     };
-    adminResults.reports.selectMaybeSingle = {
+    rlsResults.reports.selectMaybeSingle = {
       data: sampleHouseholdReport,
       error: null,
     };
@@ -411,7 +413,8 @@ describe("GET /api/reports/household", () => {
   });
 
   it("returns 400 when user has no household", async () => {
-    adminResults.profiles.selectSingle = {
+    // Route uses req.supabase (RLS client) for profiles query
+    rlsResults.profiles.selectSingle = {
       data: { id: TEST_USER_ID, household_id: null },
       error: null,
     };
@@ -451,10 +454,13 @@ describe("POST /api/reports/generate", () => {
     const originalEnv = process.env.VERCEL_ENV;
     process.env.VERCEL_ENV = "production";
 
-    adminResults.report_requests.selectList = {
-      data: null,
-      count: 2,
-      error: null,
+    // Route uses req.supabase (RLS client) for rate-limit query
+    rlsResults.report_requests = {
+      selectList: {
+        data: null,
+        count: 2,
+        error: null,
+      },
     };
 
     try {
@@ -587,9 +593,10 @@ describe("GET /api/dashboard/personal", () => {
   });
 
   it("returns 200 with computed data when no report exists", async () => {
-    adminResults.reports.selectSingle = { data: null, error: null };
-    adminResults.reports.selectMaybeSingle = { data: null, error: null };
-    adminResults.transactions = {
+    // Dashboard /personal uses req.supabase (RLS client)
+    rlsResults.reports.selectSingle = { data: null, error: null };
+    rlsResults.reports.selectMaybeSingle = { data: null, error: null };
+    rlsResults.transactions = {
       selectList: { data: [], error: null },
     };
 

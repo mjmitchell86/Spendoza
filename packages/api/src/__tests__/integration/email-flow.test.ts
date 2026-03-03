@@ -105,6 +105,9 @@ mock.module("../../lib/supabase", () => ({
       },
     },
   },
+  createSupabaseClient: () => ({
+    from: (...args: any[]) => buildChain(adminResults, adminCalls)(...args),
+  }),
 }));
 
 // Mock email service

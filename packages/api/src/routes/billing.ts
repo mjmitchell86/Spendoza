@@ -23,7 +23,7 @@ if (!stripeEnabled) {
 } else {
   // POST /checkout — create Stripe Checkout session
   router.post("/checkout", async (req, res: Response) => {
-    const { user } = req as AuthenticatedRequest;
+    const { user, supabase: db } = req as AuthenticatedRequest;
     const { price_id } = req.body;
 
     if (!price_id) {
@@ -31,7 +31,7 @@ if (!stripeEnabled) {
     }
 
     // Get or create Stripe customer
-    const { data: sub } = await supabaseAdmin
+    const { data: sub } = await db
       .from("subscriptions")
       .select("stripe_customer_id")
       .eq("user_id", user.id)
@@ -71,9 +71,9 @@ if (!stripeEnabled) {
 
   // POST /portal — create Stripe Customer Portal session
   router.post("/portal", async (req, res: Response) => {
-    const { user } = req as AuthenticatedRequest;
+    const { user, supabase: db } = req as AuthenticatedRequest;
 
-    const { data: sub } = await supabaseAdmin
+    const { data: sub } = await db
       .from("subscriptions")
       .select("stripe_customer_id")
       .eq("user_id", user.id)
@@ -93,9 +93,9 @@ if (!stripeEnabled) {
 
   // GET /subscription — get current subscription details
   router.get("/subscription", async (req, res: Response) => {
-    const { user } = req as AuthenticatedRequest;
+    const { user, supabase: db } = req as AuthenticatedRequest;
 
-    const { data } = await supabaseAdmin
+    const { data } = await db
       .from("subscriptions")
       .select("*")
       .eq("user_id", user.id)
