@@ -340,9 +340,8 @@ export function HouseholdPage() {
   const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
   const dashboardParams = useMemo(() => {
     if (month) return { month };
-    if (timePeriod === "all_time") return { all_time: true as const };
     return { from_date: dateRange.from_date, to_date: dateRange.to_date };
-  }, [month, dateRange, timePeriod]);
+  }, [month, dateRange]);
   const { data, isLoading, error, refetch } = useHouseholdDashboard(dashboardParams, hasHousehold);
   const generateReport = useGenerateReport();
   const exportHouseholdReport = useExportHouseholdReport();
