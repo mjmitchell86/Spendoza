@@ -112,7 +112,7 @@ export async function extractTransactions(
 
   const model = new ChatOpenAI({
     modelName: "gpt-5-mini",
-    timeout: 150_000,
+    timeout: 300_000,
     modelKwargs: { max_completion_tokens: 16_384 },
   });
 
