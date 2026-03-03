@@ -298,7 +298,7 @@ async function stepClassifyTransactions(statementId: string): Promise<void> {
   } else {
     classifiedTransactions = await withTimeout(
       classifyTransactions(rawTransactions, categoryNames),
-      110_000,
+      280_000,
       "OpenAI transaction classification"
     );
   }

@@ -58,7 +58,7 @@ export async function classifyTransactions(
 
   const model = new ChatOpenAI({
     modelName: "gpt-5-mini",
-    timeout: 60_000,
+    timeout: 120_000,
   });
 
   const results: ClassifiedTransaction[] = [];
