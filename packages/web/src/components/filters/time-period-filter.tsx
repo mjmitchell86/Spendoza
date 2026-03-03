@@ -163,7 +163,10 @@ export function getDateRange(period: TimePeriod): {
         to_date: `${year - 1}-12-31`,
       };
     case "all_time":
-      return {};
+      return {
+        from_date: "2000-01-01",
+        to_date: `${year}-12-31`,
+      };
   }
 }
 
