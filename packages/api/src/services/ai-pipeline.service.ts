@@ -204,21 +204,26 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
     throw new Error("No pdf_text found in parsed_data");
   }
 
-  const { transactions: parsedTransactions, detectedBankName } = await withTimeout(
+  const { transactions: parsedTransactions, detectedBankName, accountLast4 } = await withTimeout(
     extractTransactions(pdfText, statement.bank_name ?? undefined),
     150_000,
     "OpenAI transaction extraction"
   );
 
-  console.log(`[ai-pipeline] [${statementId}] extracted ${parsedTransactions.length} transactions, detected bank: ${detectedBankName ?? "none"}`);
+  console.log(`[ai-pipeline] [${statementId}] extracted ${parsedTransactions.length} transactions, detected bank: ${detectedBankName ?? "none"}, account last4: ${accountLast4 ?? "none"}`);
 
-  // Auto-fill bank_name if not set by user
-  if (!statement.bank_name && detectedBankName) {
+  // Determine the best bank_name: user-provided takes priority, then AI-detected
+  const baseBankName = statement.bank_name ?? detectedBankName;
+  const finalBankName = baseBankName && accountLast4
+    ? `${baseBankName}-${accountLast4}`
+    : baseBankName;
+
+  if (finalBankName && finalBankName !== statement.bank_name) {
     await supabaseAdmin
       .from("bank_statements")
-      .update({ bank_name: detectedBankName })
+      .update({ bank_name: finalBankName })
       .eq("id", statementId);
-    console.log(`[ai-pipeline] [${statementId}] set bank_name to: ${detectedBankName}`);
+    console.log(`[ai-pipeline] [${statementId}] set bank_name to: ${finalBankName}`);
   }
 
   if (parsedTransactions.length === 0) {
