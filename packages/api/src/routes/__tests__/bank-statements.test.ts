@@ -339,7 +339,6 @@ describe("POST /api/bank-statements/upload", () => {
         Authorization: `Bearer ${TEST_TOKEN}`,
       },
       body: JSON.stringify({
-        statement_month: "2026-01-01",
         bank_name: "Chase",
       }),
     });
@@ -367,9 +366,7 @@ describe("POST /api/bank-statements/upload", () => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${TEST_TOKEN}`,
       },
-      body: JSON.stringify({
-        statement_month: "2026-01-01",
-      }),
+      body: JSON.stringify({}),
     });
 
     expect(res.status).toBe(409);
@@ -396,7 +393,7 @@ describe("POST /api/bank-statements/upload", () => {
     const res = await fetch(url(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ statement_month: "2026-01-01" }),
+      body: JSON.stringify({}),
     });
 
     expect(res.status).toBe(401);

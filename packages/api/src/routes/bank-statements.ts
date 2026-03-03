@@ -88,7 +88,7 @@ router.post(
         file_hash: fileHash,
         file_type: fileType,
         bank_name: parsed.data.bank_name ?? null,
-        statement_month: parsed.data.statement_month ?? null,
+        statement_month: null,
         is_shared_account: parsed.data.is_shared_account,
         account_label: parsed.data.account_label ?? null,
         status: "processing",
@@ -196,7 +196,7 @@ router.delete("/:id", async (req, res: Response) => {
 
   const { data: statement } = await db
     .from("bank_statements")
-    .select("id, status")
+    .select("id, status, file_hash")
     .eq("id", req.params.id)
     .eq("user_id", user.id)
     .single();
@@ -208,6 +208,13 @@ router.delete("/:id", async (req, res: Response) => {
   if (statement.status !== "failed") {
     return res.status(400).json({ error: "Only failed statements can be deleted" });
   }
+
+  // Delete child records from multi-month splits (CASCADE removes their transactions)
+  await db
+    .from("bank_statements")
+    .delete()
+    .eq("user_id", user.id)
+    .like("file_hash", `${statement.file_hash}:%`);
 
   await db
     .from("bank_statements")

@@ -47,7 +47,6 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
 
   const [files, setFiles] = useState<QueuedFile[]>([]);
   const [bankName, setBankName] = useState("");
-  const [statementMonth, setStatementMonth] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -142,9 +141,6 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
 
       const formData = new FormData();
       formData.append("file", files[i].file);
-      if (statementMonth) {
-        formData.append("statement_month", statementMonth + "-01");
-      }
       const fileBankName = files[i].bankName.trim() || bankName.trim();
       if (fileBankName) {
         formData.append("bank_name", fileBankName);
@@ -305,42 +301,25 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="ob_bank_name">
-              Default Bank Name{hasCSV ? "" : " (optional)"}
-            </Label>
-            <Input
-              id="ob_bank_name"
-              list="ob-bank-name-suggestions"
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              placeholder={hasCSV ? "Select or enter bank name" : "e.g. Chase, Wells Fargo"}
-              disabled={isUploading}
-            />
-            {bankNames.length > 0 && (
-              <datalist id="ob-bank-name-suggestions">
-                {bankNames.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="ob_statement_month">
-              Statement Month (optional)
-            </Label>
-            <Input
-              id="ob_statement_month"
-              type="month"
-              value={statementMonth}
-              onChange={(e) => setStatementMonth(e.target.value)}
-              disabled={isUploading}
-            />
-            <p className="text-xs text-muted-foreground">
-              Auto-detected from transactions if not provided
-            </p>
-          </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="ob_bank_name">
+            Default Bank Name{hasCSV ? "" : " (optional)"}
+          </Label>
+          <Input
+            id="ob_bank_name"
+            list="ob-bank-name-suggestions"
+            value={bankName}
+            onChange={(e) => setBankName(e.target.value)}
+            placeholder={hasCSV ? "Select or enter bank name" : "e.g. Chase, Wells Fargo"}
+            disabled={isUploading}
+          />
+          {bankNames.length > 0 && (
+            <datalist id="ob-bank-name-suggestions">
+              {bankNames.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          )}
         </div>
 
         <div className="flex items-center justify-between pt-2">

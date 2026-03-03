@@ -429,7 +429,6 @@ describe("Bank Statement Flow: Upload -> Process -> Review -> Attribute", () => 
         Authorization: `Bearer ${TEST_TOKEN}`,
       },
       body: JSON.stringify({
-        statement_month: "2026-01-01",
         bank_name: "Chase",
         is_shared_account: true,
         account_label: "Joint Checking",
