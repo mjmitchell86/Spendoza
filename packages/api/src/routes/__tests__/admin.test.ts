@@ -34,6 +34,63 @@ mock.module("../../services/income-detection.service", () => ({
   },
 }));
 
+const mockFrom = (table: string) => {
+  const cfg = adminResults[table] || {};
+  return {
+    select: (...args: any[]) => {
+      // Handle count queries
+      if (args[1]?.count === "exact" && args[1]?.head === true) {
+        return {
+          eq: () => ({
+            eq: () => ({
+              ilike: () => Promise.resolve({ count: cfg.count ?? 0, error: null }),
+              then: (resolve: any) => resolve({ count: cfg.count ?? 0, error: null }),
+            }),
+            ilike: () => Promise.resolve({ count: cfg.count ?? 0, error: null }),
+            then: (resolve: any) => resolve({ count: cfg.count ?? 0, error: null }),
+          }),
+          ilike: () => Promise.resolve({ count: cfg.count ?? 0, error: null }),
+          then: (resolve: any) => resolve({ count: cfg.count ?? 0, error: null }),
+        };
+      }
+      return {
+        eq: (...eqArgs: any[]) => ({
+          single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
+          eq: () => ({
+            single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
+          }),
+          order: () => ({
+            range: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
+            limit: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
+            then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
+          }),
+          range: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
+        }),
+        single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
+        gte: () => ({
+          order: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
+          then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
+        }),
+        order: () => ({
+          range: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
+          then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
+        }),
+        then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
+      };
+    },
+    update: (data: any) => ({
+      eq: () => ({
+        select: () => ({
+          single: () => Promise.resolve(cfg.updateSingle ?? { data: null, error: null }),
+        }),
+      }),
+    }),
+    delete: () => ({
+      eq: () => Promise.resolve(cfg.deleteResult ?? { error: null }),
+    }),
+  };
+};
+
 mock.module("../../lib/supabase", () => ({
   supabaseAdmin: {
     auth: {
@@ -56,65 +113,10 @@ mock.module("../../lib/supabase", () => ({
         },
       },
     },
-    from: (table: string) => {
-      const cfg = adminResults[table] || {};
-      return {
-        select: (...args: any[]) => {
-          // Handle count queries
-          if (args[1]?.count === "exact" && args[1]?.head === true) {
-            return {
-              eq: () => ({
-                eq: () => ({
-                  ilike: () => Promise.resolve({ count: cfg.count ?? 0, error: null }),
-                  then: (resolve: any) => resolve({ count: cfg.count ?? 0, error: null }),
-                }),
-                ilike: () => Promise.resolve({ count: cfg.count ?? 0, error: null }),
-                then: (resolve: any) => resolve({ count: cfg.count ?? 0, error: null }),
-              }),
-              ilike: () => Promise.resolve({ count: cfg.count ?? 0, error: null }),
-              then: (resolve: any) => resolve({ count: cfg.count ?? 0, error: null }),
-            };
-          }
-          return {
-            eq: (...eqArgs: any[]) => ({
-              single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-              eq: () => ({
-                single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-              }),
-              order: () => ({
-                range: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
-                limit: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
-                then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
-              }),
-              range: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
-            }),
-            single: () => Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-            gte: () => ({
-              order: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
-              then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
-            }),
-            order: () => ({
-              range: () => Promise.resolve(cfg.selectList ?? { data: [], error: null }),
-              then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
-            }),
-            then: (resolve: any) => resolve(cfg.selectList ?? { data: [], error: null }),
-          };
-        },
-        update: (data: any) => ({
-          eq: () => ({
-            select: () => ({
-              single: () => Promise.resolve(cfg.updateSingle ?? { data: null, error: null }),
-            }),
-          }),
-        }),
-        delete: () => ({
-          eq: () => Promise.resolve(cfg.deleteResult ?? { error: null }),
-        }),
-      };
-    },
+    from: mockFrom,
     rpc: (fn: string) => Promise.resolve(adminResults._rpc?.[fn] ?? { data: null, error: null }),
   },
-  createSupabaseClient: () => ({}),
+  createSupabaseClient: () => ({ from: mockFrom }),
 }));
 
 let server: Server;

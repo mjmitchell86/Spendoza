@@ -233,8 +233,8 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     currentUserEmail = HEAD_EMAIL;
     resetResults();
 
-    rlsResults = {};
-    adminResults = {
+    // POST / uses req.supabase (RLS client) for households.insert + profiles.update
+    rlsResults = {
       households: {
         insertSingle: { data: householdData, error: null },
       },
@@ -242,6 +242,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
         updateResult: { data: null, error: null },
       },
     };
+    adminResults = {};
 
     const res = await fetch(`${baseUrl}/api/households`, {
       method: "POST",
@@ -265,7 +266,8 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     currentUserEmail = HEAD_EMAIL;
     resetResults();
 
-    adminResults = {
+    // POST /:id/invite uses req.supabase (RLS client) for all queries
+    rlsResults = {
       households: {
         selectSingle: { data: householdData, error: null },
       },
@@ -277,6 +279,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
         insertResult: { data: null, error: null },
       },
     };
+    adminResults = {};
 
     const res = await fetch(`${baseUrl}/api/households/${HOUSEHOLD_ID}/invite`, {
       method: "POST",
@@ -339,12 +342,14 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
       expense_sharing_mode: "all" as const,
     };
 
-    adminResults = {
+    // PUT /:id/sharing uses req.supabase (RLS client) for profiles.select + profiles.update
+    rlsResults = {
       profiles: {
         selectSingle: { data: { ...memberProfile, household_id: HOUSEHOLD_ID }, error: null },
         updateSingle: { data: updatedMemberProfile, error: null },
       },
     };
+    adminResults = {};
 
     const res = await fetch(`${baseUrl}/api/households/${HOUSEHOLD_ID}/sharing`, {
       method: "PUT",
@@ -376,7 +381,8 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
       { ...memberProfile, household_id: HOUSEHOLD_ID },
     ];
 
-    adminResults = {
+    // GET /:id uses req.supabase (RLS client) for profiles.select + households.select
+    rlsResults = {
       profiles: {
         selectSingle: { data: headProfile, error: null },
         selectList: { data: membersList, error: null },
@@ -385,6 +391,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
         selectSingle: { data: householdData, error: null },
       },
     };
+    adminResults = {};
 
     const res = await fetch(`${baseUrl}/api/households/${HOUSEHOLD_ID}`, {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
@@ -430,7 +437,8 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     currentUserEmail = MEMBER_EMAIL;
     resetResults();
 
-    adminResults = {
+    // POST /:id/invite uses req.supabase (RLS client) for households.select
+    rlsResults = {
       households: {
         selectSingle: {
           data: { ...householdData, head_of_household_id: HEAD_USER_ID },
@@ -438,6 +446,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
         },
       },
     };
+    adminResults = {};
 
     const res = await fetch(`${baseUrl}/api/households/${HOUSEHOLD_ID}/invite`, {
       method: "POST",

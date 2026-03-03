@@ -1,6 +1,5 @@
 import { Router, type Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth";
-import { supabaseAdmin } from "../lib/supabase";
 import { generateInviteCode } from "../services/household.service";
 
 const router = Router();
@@ -11,9 +10,9 @@ const MAX_CODES_PER_USER = 3;
 // GET / — list current user's invite codes
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("invite_codes")
     .select("*")
     .eq("created_by", user.id)
@@ -30,11 +29,11 @@ router.get("/", async (req, res: Response) => {
 // POST / — generate a new invite code (max 3 per user)
 // ---------------------------------------------------------------------------
 router.post("/", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const userId = user.id;
 
   // Check count
-  const { count, error: countError } = await supabaseAdmin
+  const { count, error: countError } = await db
     .from("invite_codes")
     .select("id", { count: "exact", head: true })
     .eq("created_by", userId);
@@ -49,7 +48,7 @@ router.post("/", async (req, res: Response) => {
 
   const code = generateInviteCode();
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("invite_codes")
     .insert({ code, created_by: userId })
     .select()

@@ -18,9 +18,9 @@ const router = Router();
 // GET / — get authenticated user's profile
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("profiles")
     .select("*")
     .eq("id", user.id)
@@ -37,9 +37,9 @@ router.get("/", async (req, res: Response) => {
 // PUT / — update profile fields
 // ---------------------------------------------------------------------------
 router.put("/", validate(updateProfileSchema), async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("profiles")
     .update(req.body)
     .eq("id", user.id)
@@ -57,9 +57,9 @@ router.put("/", validate(updateProfileSchema), async (req, res: Response) => {
 // PUT /onboarding — mark onboarding complete
 // ---------------------------------------------------------------------------
 router.put("/onboarding", async (req, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db
     .from("profiles")
     .update({ onboarding_completed: true })
     .eq("id", user.id)
@@ -128,7 +128,7 @@ router.post(
     });
   },
   async (req, res: Response) => {
-    const { user } = req as AuthenticatedRequest;
+    const { user, supabase: db } = req as AuthenticatedRequest;
     const file = (req as any).file as Express.Multer.File | undefined;
 
     if (!file) {
@@ -160,7 +160,7 @@ router.post(
     // Append cache-buster so browsers pick up new avatars
     const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db
       .from("profiles")
       .update({ avatar_url: avatarUrl })
       .eq("id", user.id)

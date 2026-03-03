@@ -31,10 +31,10 @@ function parseMonth(monthParam?: string): string {
 // GET /personal — get latest personal report
 // ---------------------------------------------------------------------------
 router.get("/personal", requireAuth, async (req: Request, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const month = parseMonth(req.query.month as string | undefined);
 
-  const { data: report } = await supabaseAdmin
+  const { data: report } = await db
     .from("reports")
     .select("*")
     .eq("entity_type", "user")
@@ -53,11 +53,11 @@ router.get("/personal", requireAuth, async (req: Request, res: Response) => {
 // GET /household — get latest household report
 // ---------------------------------------------------------------------------
 router.get("/household", requireAuth, async (req: Request, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const month = parseMonth(req.query.month as string | undefined);
 
   // Look up user's household
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await db
     .from("profiles")
     .select("household_id")
     .eq("id", user.id)
@@ -69,7 +69,7 @@ router.get("/household", requireAuth, async (req: Request, res: Response) => {
       .json({ error: "You are not a member of a household" });
   }
 
-  const { data: report } = await supabaseAdmin
+  const { data: report } = await db
     .from("reports")
     .select("*")
     .eq("entity_type", "household")
@@ -88,7 +88,7 @@ router.get("/household", requireAuth, async (req: Request, res: Response) => {
 // POST /generate — manual trigger (max 2 per 24h in production)
 // ---------------------------------------------------------------------------
 router.post("/generate", requireAuth, async (req: Request, res: Response) => {
-  const { user } = req as AuthenticatedRequest;
+  const { user, supabase: db } = req as AuthenticatedRequest;
   const now = new Date();
   const isProduction = process.env.VERCEL_ENV === "production";
 
@@ -98,7 +98,7 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
       now.getTime() - 24 * 60 * 60 * 1000
     ).toISOString();
 
-    const { count } = await supabaseAdmin
+    const { count } = await db
       .from("report_requests")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
@@ -112,7 +112,7 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   }
 
   // Find the latest month with transactions; skip current month if empty
-  const { data: latestTxn } = await supabaseAdmin
+  const { data: latestTxn } = await db
     .from("transactions")
     .select("date")
     .eq("user_id", user.id)
@@ -124,10 +124,10 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     : now;
 
   // Generate the personal report for the month with data (force=true to bypass cache)
-  const report = await generateUserReport(user.id, reportDate, true);
+  const report = await generateUserReport(user.id, reportDate, true, db);
 
   // Also generate household report if user belongs to one
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await db
     .from("profiles")
     .select("household_id")
     .eq("id", user.id)
@@ -135,13 +135,13 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
 
   if (profile?.household_id) {
     try {
-      await generateHouseholdReport(profile.household_id, reportDate, true);
+      await generateHouseholdReport(profile.household_id, reportDate, true, db);
     } catch (err) {
       console.error(`Failed to generate household report:`, err);
     }
   }
 
-  // Record the request for rate-limiting
+  // Record the request for rate-limiting (system table — use admin client)
   await supabaseAdmin.from("report_requests").insert({
     user_id: user.id,
     report_month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
@@ -186,10 +186,10 @@ router.get(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
-      const { user } = req as AuthenticatedRequest;
+      const { user, supabase: db } = req as AuthenticatedRequest;
       const month = parseMonth(req.query.month as string | undefined);
 
-      const result = await generatePersonalPdfForUser(user.id, month);
+      const result = await generatePersonalPdfForUser(user.id, month, undefined, db);
 
       if (!result) {
         return res
@@ -224,10 +224,10 @@ router.get(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
-      const { user } = req as AuthenticatedRequest;
+      const { user, supabase: db } = req as AuthenticatedRequest;
       const month = parseMonth(req.query.month as string | undefined);
 
-      const { data: userProfile } = await supabaseAdmin
+      const { data: userProfile } = await db
         .from("profiles")
         .select("household_id")
         .eq("id", user.id)
@@ -241,7 +241,9 @@ router.get(
 
       const result = await generateHouseholdPdfForHousehold(
         userProfile.household_id,
-        month
+        month,
+        undefined,
+        db
       );
 
       if (!result) {
