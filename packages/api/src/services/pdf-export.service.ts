@@ -519,12 +519,17 @@ async function aggregateTransactionsForRange(
   fromDate: string,
   toDate: string
 ): Promise<ReportData> {
-  const { data: transactions } = await db
+  const { data: transactions, error: txnError } = await db
     .from("transactions")
     .select("type, amount, categories(name)")
     .in("user_id", userIds)
     .gte("date", fromDate)
     .lte("date", toDate);
+
+  if (txnError) {
+    console.error(`[aggregateTransactions] query error for ${fromDate}..${toDate}, users=${userIds.join(",")}:`, txnError.message);
+  }
+  console.error(`[aggregateTransactions] ${fromDate}..${toDate}: ${transactions?.length ?? 0} rows`);
 
   let totalIncome = 0;
   let totalExpenses = 0;
