@@ -351,6 +351,8 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
     rangeLabel = `${fmt(fromDate)} – ${fmt(toDate)}`;
   }
 
+  console.error(`[admin] quarterly: user=${id} range=${fromDate}..${toDate}`);
+
   try {
     // Generate PDF with fresh quarterly AI insights
     const result = await generatePersonalPdfForRange(
