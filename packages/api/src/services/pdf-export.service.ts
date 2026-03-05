@@ -529,8 +529,6 @@ async function aggregateTransactionsForRange(
   if (txnError) {
     throw new Error(`Transaction query failed: ${txnError.message}`);
   }
-  console.error(`[aggregateTransactions] ${fromDate}..${toDate}: ${transactions?.length ?? 0} rows`);
-
   let totalIncome = 0;
   let totalExpenses = 0;
   const categoryMap = new Map<string, number>();

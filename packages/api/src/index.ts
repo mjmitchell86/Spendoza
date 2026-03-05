@@ -64,7 +64,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
 app.use("/api/auth", authLimiter);
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), version: "2026-03-05-debug" });
+  res.json({ status: "ok", timestamp: new Date().toISOString(), version: "1.0.0" });
 });
 
 app.use("/api/auth", authRouter);
@@ -87,8 +87,7 @@ app.use("/api/emails", emailsRouter);
 app.use("/api/admin", adminRouter);
 
 // Catch-all for unmatched routes
-app.use((req, res) => {
-  console.error(`[404] unmatched: ${req.method} ${req.originalUrl}`);
+app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
 
