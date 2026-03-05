@@ -22,7 +22,6 @@ import billingRouter from "./routes/billing";
 import adminRouter from "./routes/admin";
 import { requireAuth } from "./middleware/auth";
 import { requireTier } from "./middleware/require-tier";
-import { requireAdmin } from "./middleware/require-admin";
 import { errorHandler } from "./middleware/error-handler";
 
 const app: Express = express();
@@ -85,7 +84,7 @@ app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/goals", requireAuth, requireTier("starter"), goalsRouter);
 app.use("/api/debts", requireAuth, requireTier("starter"), debtsRouter);
 app.use("/api/emails", emailsRouter);
-app.use("/api/admin", requireAuth, requireAdmin, adminRouter);
+app.use("/api/admin", adminRouter);
 
 // Global error handler (must be LAST middleware)
 app.use(errorHandler);
