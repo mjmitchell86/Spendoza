@@ -193,7 +193,17 @@ export function DashboardPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => exportReport.mutate(data?.month ?? month)}
+            onClick={() => {
+              if (timePeriod === "all_time") {
+                const range = getDateRange("last_3_months");
+                exportReport.mutate(
+                  { from_date: range.from_date!, to_date: range.to_date! },
+                  { onSuccess: () => setTimePeriod("last_3_months") }
+                );
+              } else {
+                exportReport.mutate(data?.month ?? month);
+              }
+            }}
             disabled={exportReport.isPending}
           >
             <Download className="size-4" />
@@ -303,7 +313,18 @@ export function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <TopExpensesList categories={data.by_category} />
         <UpcomingBillsList />
-        <AiInsightsCard insights={data.insights} insightsMonth={data.insights_month} />
+        {/* Hide insights in All Time view unless they're from the last 3 months */}
+        {(() => {
+          if (timePeriod === "all_time" && data.insights_month) {
+            const threeMonthsAgo = new Date();
+            threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+            const cutoff = threeMonthsAgo.toISOString().slice(0, 10);
+            if (data.insights_month < cutoff) return null;
+          }
+          return (
+            <AiInsightsCard insights={data.insights} insightsMonth={data.insights_month} />
+          );
+        })()}
       </div>
     </div>
   );

@@ -136,6 +136,8 @@ mock.module("../../services/pdf-export.service", () => ({
     })
   ),
   generateHouseholdPdfForHousehold: mock(() => Promise.resolve(null)),
+  generatePersonalPdfForRange: mock(() => Promise.resolve(null)),
+  generateHouseholdPdfForRange: mock(() => Promise.resolve(null)),
 }));
 
 // Mock unsubscribe token
