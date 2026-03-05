@@ -7,6 +7,7 @@ interface ProcessingStepProps {
   statementIds: string[];
   onComplete: () => void;
   onError: () => void;
+  onSkipReview: () => void;
 }
 
 const STEP_MESSAGES: Record<string, string> = {
@@ -26,6 +27,7 @@ export function ProcessingStep({
   statementIds,
   onComplete,
   onError,
+  onSkipReview,
 }: ProcessingStepProps) {
   // Poll all statements via the list endpoint (already has auto-refetch)
   const { data: allStatements } = useBankStatements();
@@ -50,14 +52,46 @@ export function ProcessingStep({
     | undefined;
   const statusMessage = getStepMessage(pipelineStep, processing?.file_type);
 
+  // Detect parent-split CSVs (multi-month CSVs split into child statements)
+  const parentSplits = tracked.filter(
+    (s) => s.status === "parsed" && (s.parsed_data as any)?.is_parent_split === true
+  );
+  const allParsedAreParentSplits =
+    allDone && parsedCount > 0 && parentSplits.length === parsedCount;
+
   useEffect(() => {
     if (!allDone) return;
 
     if (allFailed) return; // Don't auto-advance if everything failed
+    if (allParsedAreParentSplits) return; // Don't auto-advance for parent-splits
 
     const timer = setTimeout(onComplete, 1200);
     return () => clearTimeout(timer);
-  }, [allDone, allFailed, onComplete]);
+  }, [allDone, allFailed, allParsedAreParentSplits, onComplete]);
+
+  // All parsed statements are parent-splits — show split message + continue button
+  if (allParsedAreParentSplits) {
+    const childCount = parentSplits.reduce((sum, s) => {
+      const count = (s.parsed_data as any)?.child_count;
+      return sum + (typeof count === "number" ? count : 0);
+    }, 0);
+
+    return (
+      <div className="flex flex-col items-center gap-6 py-8 text-center">
+        <CheckCircle2 className="size-16 text-green-500" />
+        <div>
+          <h2 className="text-xl font-semibold">Statements Split Successfully</h2>
+          <p className="text-sm text-muted-foreground">
+            {parentSplits.length === 1
+              ? `Your statement was split into ${childCount || "multiple"} monthly statements.`
+              : `Your statements were split into ${childCount || "multiple"} monthly statements.`}
+            {" "}They're processing in the background.
+          </p>
+        </div>
+        <Button onClick={onSkipReview}>Continue to Dashboard</Button>
+      </div>
+    );
+  }
 
   if (allDone && allParsed) {
     return (
