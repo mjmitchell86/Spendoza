@@ -9,11 +9,6 @@ export interface AuthenticatedRequest extends Request<any, any, any, any> {
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const isAdminPost = req.originalUrl.includes("/admin/") && req.method === "POST";
-  if (isAdminPost) {
-    console.error(`[auth] ENTER: ${req.method} ${req.originalUrl}`);
-  }
-
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing authorization header" });
@@ -23,7 +18,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
 
   if (error || !user) {
-    if (isAdminPost) console.error(`[auth] FAIL: token invalid`);
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
@@ -31,7 +25,5 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   (req as AuthenticatedRequest).accessToken = token;
   (req as AuthenticatedRequest).supabase = createSupabaseClient(token);
 
-  if (isAdminPost) console.error(`[auth] OK, calling next() for user ${user.id}`);
   next();
-  if (isAdminPost) console.error(`[auth] next() returned`);
 }

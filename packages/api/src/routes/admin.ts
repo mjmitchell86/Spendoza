@@ -22,12 +22,6 @@ import {
 
 const router = Router();
 
-// Log all requests entering the admin router
-router.use((req, _res, next) => {
-  console.error(`[admin-router] ENTER: ${req.method} ${req.originalUrl} content-type:${req.headers["content-type"]} content-length:${req.headers["content-length"]}`);
-  next();
-});
-
 // Auth + admin middleware applied at the router level
 router.use(requireAuth, requireAdmin);
 
@@ -281,8 +275,6 @@ router.post("/users/:id/detect-recurring", async (req, res: Response) => {
 // POST /api/admin/users/:id/send-quarterly-report — generate + email quarterly report
 router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
   const { id } = req.params;
-  console.error(`[admin] quarterly handler entered, user=${id}`);
-
   // Verify user exists
   const { data: profile, error: profileErr } = await supabaseAdmin
     .from("profiles")
@@ -351,8 +343,6 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
     rangeLabel = `${fmt(fromDate)} – ${fmt(toDate)}`;
   }
 
-  console.error(`[admin] quarterly: user=${id} range=${fromDate}..${toDate}`);
-
   try {
     // Generate PDF with fresh quarterly AI insights
     const result = await generatePersonalPdfForRange(
@@ -366,7 +356,7 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
     if (!result) {
       return res
         .status(404)
-        .json({ error: "No transaction data for the specified period" });
+        .json({ error: `No transactions found for ${fromDate} to ${toDate}` });
     }
 
     // Parse AI insights into bullet points
@@ -419,7 +409,7 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
       toDate,
     });
   } catch (err) {
-    console.error(`[admin] Failed to send quarterly report for ${id}:`, err);
+    console.error("Failed to send quarterly report:", err);
     return res.status(500).json({
       error: err instanceof Error ? err.message : "Internal error",
     });
@@ -429,8 +419,6 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
 // POST /api/admin/users/:id/send-annual-report — generate + email annual report
 router.post("/users/:id/send-annual-report", async (req, res: Response) => {
   const { id } = req.params;
-  console.error(`[admin] annual handler entered, user=${id}`);
-
   // Verify user exists
   const { data: profile, error: profileErr } = await supabaseAdmin
     .from("profiles")
@@ -467,7 +455,7 @@ router.post("/users/:id/send-annual-report", async (req, res: Response) => {
     if (!result) {
       return res
         .status(404)
-        .json({ error: "No transaction data for the specified year" });
+        .json({ error: `No transactions found for year ${year}` });
     }
     // Fetch goals and compute achievement for email metrics
     const { data: goals } = await supabaseAdmin
@@ -526,7 +514,7 @@ router.post("/users/:id/send-annual-report", async (req, res: Response) => {
       year,
     });
   } catch (err) {
-    console.error(`[admin] Failed to send annual report for ${id}:`, err);
+    console.error("Failed to send annual report:", err);
     return res.status(500).json({
       error: err instanceof Error ? err.message : "Internal error",
     });
