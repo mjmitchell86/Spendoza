@@ -64,7 +64,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
 app.use("/api/auth", authLimiter);
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({ status: "ok", timestamp: new Date().toISOString(), version: "2026-03-05-debug" });
 });
 
 app.use("/api/auth", authRouter);
