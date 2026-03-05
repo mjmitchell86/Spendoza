@@ -9,9 +9,6 @@ export interface AuthenticatedRequest extends Request<any, any, any, any> {
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (req.originalUrl.includes("/admin/users/") && req.method === "POST") {
-    console.error(`[auth] requireAuth hit for: ${req.method} ${req.originalUrl}`);
-  }
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing authorization header" });
