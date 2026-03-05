@@ -521,13 +521,13 @@ async function aggregateTransactionsForRange(
 ): Promise<ReportData> {
   const { data: transactions, error: txnError } = await db
     .from("transactions")
-    .select("type, amount, categories(name)")
+    .select("type, amount, ai_category")
     .in("user_id", userIds)
     .gte("date", fromDate)
     .lte("date", toDate);
 
   if (txnError) {
-    console.error(`[aggregateTransactions] query error for ${fromDate}..${toDate}, users=${userIds.join(",")}:`, txnError.message);
+    throw new Error(`Transaction query failed: ${txnError.message}`);
   }
   console.error(`[aggregateTransactions] ${fromDate}..${toDate}: ${transactions?.length ?? 0} rows`);
 
@@ -541,7 +541,7 @@ async function aggregateTransactionsForRange(
       totalIncome += amount;
     } else if (t.type === "debit") {
       totalExpenses += amount;
-      const catName = (t as any).categories?.name ?? "Uncategorized";
+      const catName = (t as any).ai_category ?? "Uncategorized";
       categoryMap.set(catName, (categoryMap.get(catName) ?? 0) + amount);
     }
   }
