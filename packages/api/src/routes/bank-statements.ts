@@ -157,16 +157,21 @@ router.get("/:id", async (req, res: Response) => {
 router.post("/:id/reprocess", async (req, res: Response) => {
   const { user, supabase: db } = req as AuthenticatedRequest;
 
-  // Look up the statement first to determine file type
+  // Look up the statement first to determine file type and split status
   const { data: existing } = await db
     .from("bank_statements")
-    .select("file_type")
+    .select("file_type, parsed_data")
     .eq("id", req.params.id)
     .eq("user_id", user.id)
     .single();
 
-  // CSVs already have text stored, so start at extract_transactions
-  const startStep = existing?.file_type === "csv" ? "extract_transactions" : "extract_text";
+  // CSVs that were parent-split need to re-run from extract_text so splitting re-runs.
+  // Other CSVs already have text stored, so start at extract_transactions.
+  const isParentSplit = existing?.parsed_data?.is_parent_split === true;
+  const startStep =
+    existing?.file_type === "csv" && !isParentSplit
+      ? "extract_transactions"
+      : "extract_text";
 
   const { data, error } = await db
     .from("bank_statements")

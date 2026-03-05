@@ -8,6 +8,7 @@ import { matchTransactions } from "../ai/expense-matcher";
 import { detectRecurringBills } from "./bill-detection.service";
 import { detectRecurringIncome } from "./income-detection.service";
 import { generateUserReport, generateHouseholdReport } from "./report.service";
+import { splitCsvByMonth } from "./csv-splitter";
 
 /** Normalize a transaction description for dedup comparison. */
 function normalizeDescription(desc: string): string {
@@ -178,6 +179,72 @@ async function stepExtractText(statementId: string): Promise<void> {
 
   if (!extractedText.trim()) {
     throw new Error(`No text could be extracted from the ${statement.file_type === "csv" ? "CSV" : "PDF"}`);
+  }
+
+  // For CSVs, check if the file spans multiple months and split if so.
+  // Each child gets its own pipeline run, avoiding AI timeouts on large files.
+  if (statement.file_type === "csv") {
+    const splitResult = splitCsvByMonth(extractedText);
+
+    if (splitResult.isMultiMonth) {
+      const { monthChunks } = splitResult;
+      const sortedMonths = Array.from(monthChunks.keys()).sort();
+
+      console.log(
+        `[ai-pipeline] [${statementId}] multi-month CSV detected, splitting into ${sortedMonths.length} chunks: ${sortedMonths.join(", ")}`
+      );
+
+      // Clean up any previous children (reprocess support)
+      await supabaseAdmin
+        .from("bank_statements")
+        .delete()
+        .eq("user_id", statement.user_id)
+        .like("file_hash", `${statement.file_hash}:%`);
+
+      // Create child statement records — DB trigger auto-fires each pipeline
+      for (const month of sortedMonths) {
+        const chunkText = monthChunks.get(month)!;
+
+        const { error: childError } = await supabaseAdmin
+          .from("bank_statements")
+          .insert({
+            user_id: statement.user_id,
+            file_path: statement.file_path,
+            file_hash: `${statement.file_hash}:${month}`,
+            file_type: statement.file_type,
+            bank_name: statement.bank_name,
+            is_shared_account: statement.is_shared_account,
+            account_label: statement.account_label,
+            status: "processing",
+            parsed_data: {
+              pipeline_step: "extract_transactions",
+              pdf_text: chunkText,
+              source_statement_id: statementId,
+            },
+          });
+
+        if (childError) {
+          throw new Error(`Failed to create child statement for ${month}: ${childError.message}`);
+        }
+
+        console.log(`[ai-pipeline] [${statementId}] created child for ${month} (${chunkText.length} chars)`);
+      }
+
+      // Mark parent as split — done processing, children take over
+      await supabaseAdmin
+        .from("bank_statements")
+        .update({
+          status: "parsed",
+          parsed_data: {
+            is_parent_split: true,
+            split_months: sortedMonths,
+            child_count: sortedMonths.length,
+          },
+        })
+        .eq("id", statementId);
+
+      return; // Children auto-trigger via DB trigger
+    }
   }
 
   // Store text and advance to next step
@@ -594,8 +661,12 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     );
   }
 
-  // Clean up raw PDF from storage — no longer needed
-  await deleteRawFile(statementId, statement.file_path);
+  // Clean up raw file from storage — but not for child statements (they share
+  // the parent's file, which may still be needed by sibling children).
+  const isChildStatement = statement.file_hash?.includes(":");
+  if (!isChildStatement) {
+    await deleteRawFile(statementId, statement.file_path);
+  }
 
   // Detect recurring bills from transaction patterns (non-fatal)
   try {
