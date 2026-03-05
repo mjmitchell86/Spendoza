@@ -6,6 +6,7 @@ import {
 } from "../services/report.service";
 import { buildReportPdf } from "../services/pdf-report.service";
 import type { ReportData } from "../ai/report-insights";
+import { generateQuarterlyInsights } from "../ai/report-insights";
 
 // ---------------------------------------------------------------------------
 // Options for PDF export generators
@@ -568,7 +569,8 @@ export async function generatePersonalPdfForRange(
   userId: string,
   fromDate: string,
   toDate: string,
-  client?: SupabaseClient
+  client?: SupabaseClient,
+  generateFreshInsights?: boolean
 ): Promise<PdfExportResult | null> {
   const db = client ?? supabaseAdmin;
 
@@ -584,18 +586,25 @@ export async function generatePersonalPdfForRange(
     return null;
   }
 
-  // Find most recent AI insights from any report for this user
-  const { data: latestReport } = await db
-    .from("reports")
-    .select("ai_insights")
-    .eq("entity_type", "user")
-    .eq("entity_id", userId)
-    .not("ai_insights", "is", null)
-    .order("report_month", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let aiInsights: string | null;
 
-  const aiInsights = latestReport?.ai_insights ?? null;
+  if (generateFreshInsights) {
+    const rangeLabel = formatRangeLabel(fromDate, toDate);
+    aiInsights = await generateQuarterlyInsights(reportData, "user", rangeLabel);
+  } else {
+    // Find most recent AI insights from any report for this user
+    const { data: latestReport } = await db
+      .from("reports")
+      .select("ai_insights")
+      .eq("entity_type", "user")
+      .eq("entity_id", userId)
+      .not("ai_insights", "is", null)
+      .order("report_month", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    aiInsights = latestReport?.ai_insights ?? null;
+  }
 
   // Fetch supplementary data in parallel
   const [
@@ -692,7 +701,8 @@ export async function generateHouseholdPdfForRange(
   householdId: string,
   fromDate: string,
   toDate: string,
-  client?: SupabaseClient
+  client?: SupabaseClient,
+  generateFreshInsights?: boolean
 ): Promise<PdfExportResult | null> {
   const db = client ?? supabaseAdmin;
 
@@ -725,18 +735,25 @@ export async function generateHouseholdPdfForRange(
     return null;
   }
 
-  // Find most recent AI insights from any household report
-  const { data: latestReport } = await db
-    .from("reports")
-    .select("ai_insights")
-    .eq("entity_type", "household")
-    .eq("entity_id", householdId)
-    .not("ai_insights", "is", null)
-    .order("report_month", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let aiInsights: string | null;
 
-  const aiInsights = latestReport?.ai_insights ?? null;
+  if (generateFreshInsights) {
+    const rangeLabel = formatRangeLabel(fromDate, toDate);
+    aiInsights = await generateQuarterlyInsights(reportData, "household", rangeLabel);
+  } else {
+    // Find most recent AI insights from any household report
+    const { data: latestReport } = await db
+      .from("reports")
+      .select("ai_insights")
+      .eq("entity_type", "household")
+      .eq("entity_id", householdId)
+      .not("ai_insights", "is", null)
+      .order("report_month", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    aiInsights = latestReport?.ai_insights ?? null;
+  }
 
   // Fetch supplementary data in parallel
   const [

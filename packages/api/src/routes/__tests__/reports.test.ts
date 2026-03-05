@@ -192,6 +192,7 @@ const mockGenerateInsights = mock(() =>
 
 mock.module("../../ai/report-insights", () => ({
   generateInsights: mockGenerateInsights,
+  generateQuarterlyInsights: mock(() => Promise.resolve("quarterly test insights")),
 }));
 
 mock.module("@langchain/openai", () => ({
