@@ -90,3 +90,10 @@ export function useAdminDetectRecurring() {
     },
   });
 }
+
+export function useAdminSendQuarterlyReport() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient(`/admin/users/${id}/send-quarterly-report`, { method: "POST" }),
+  });
+}

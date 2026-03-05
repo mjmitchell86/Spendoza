@@ -7,6 +7,9 @@ import {
 } from "../services/report.service";
 import { detectRecurringBills } from "../services/bill-detection.service";
 import { detectRecurringIncome } from "../services/income-detection.service";
+import { generatePersonalPdfForRange } from "../services/pdf-export.service";
+import { sendReportEmail } from "../services/email.service";
+import { buildReportEmailHtml } from "../services/email-template.service";
 
 const router = Router();
 
@@ -255,6 +258,151 @@ router.post("/users/:id/detect-recurring", async (req, res: Response) => {
   await detectRecurringIncome(id);
 
   return res.json({ success: true });
+});
+
+// POST /api/admin/users/:id/send-quarterly-report — generate + email quarterly report
+router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
+  const { id } = req.params;
+
+  // Verify user exists
+  const { data: profile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id, display_name")
+    .eq("id", id)
+    .single();
+
+  if (profileErr || !profile) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  // Get user email
+  const { data: authUser } =
+    await supabaseAdmin.auth.admin.getUserById(id);
+  const userEmail = authUser?.user?.email;
+  if (!userEmail) {
+    return res.status(400).json({ error: "User has no email address" });
+  }
+
+  // Compute date range — use body params or default to last complete quarter
+  let fromDate: string;
+  let toDate: string;
+  let rangeLabel: string;
+
+  if (req.body.from_date && req.body.to_date) {
+    fromDate = req.body.from_date;
+    toDate = req.body.to_date;
+    const fmt = (d: string) =>
+      new Date(d + "T00:00:00Z").toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    rangeLabel = `${fmt(fromDate)} – ${fmt(toDate)}`;
+  } else {
+    // Default to last complete quarter
+    const now = new Date();
+    const month = now.getUTCMonth();
+    const year = now.getUTCFullYear();
+
+    let qStart: Date;
+    let qEnd: Date;
+
+    if (month < 3) {
+      qStart = new Date(Date.UTC(year - 1, 9, 1));
+      qEnd = new Date(Date.UTC(year - 1, 11, 31));
+    } else if (month < 6) {
+      qStart = new Date(Date.UTC(year, 0, 1));
+      qEnd = new Date(Date.UTC(year, 2, 31));
+    } else if (month < 9) {
+      qStart = new Date(Date.UTC(year, 3, 1));
+      qEnd = new Date(Date.UTC(year, 5, 30));
+    } else {
+      qStart = new Date(Date.UTC(year, 6, 1));
+      qEnd = new Date(Date.UTC(year, 8, 30));
+    }
+
+    fromDate = qStart.toISOString().slice(0, 10);
+    toDate = qEnd.toISOString().slice(0, 10);
+    const fmt = (d: string) =>
+      new Date(d + "T00:00:00Z").toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    rangeLabel = `${fmt(fromDate)} – ${fmt(toDate)}`;
+  }
+
+  try {
+    // Generate PDF with fresh quarterly AI insights
+    const result = await generatePersonalPdfForRange(
+      id,
+      fromDate,
+      toDate,
+      undefined,
+      true
+    );
+
+    if (!result) {
+      return res
+        .status(404)
+        .json({ error: "No transaction data for the specified period" });
+    }
+
+    // Parse AI insights into bullet points
+    const aiInsights = result.aiInsights
+      ? result.aiInsights
+          .split("\n")
+          .map((line) => line.replace(/^[-*]\s*/, "").trim())
+          .filter(Boolean)
+          .slice(0, 5)
+      : [];
+
+    const reportTitle = "Quarterly Report";
+    const appUrl = process.env.APP_URL || "https://spendoza.io";
+    const subject = `Your Spendoza ${reportTitle} \u2014 ${rangeLabel}`;
+
+    const htmlBody = buildReportEmailHtml({
+      userName: profile.display_name ?? "there",
+      reportTitle,
+      monthLabel: rangeLabel,
+      totalIncome: result.reportData.total_income,
+      totalExpenses: result.reportData.total_expenses,
+      netSavings:
+        result.reportData.total_income - result.reportData.total_expenses,
+      savingsRate: result.reportData.savings_rate,
+      aiInsights,
+      appReportUrl: `${appUrl}/dashboard`,
+      unsubscribeUrl: `${appUrl}/profile`,
+    });
+
+    const pdfFilename = `spendoza-quarterly-report-${fromDate}-to-${toDate}.pdf`;
+
+    const sendResult = await sendReportEmail({
+      to: userEmail,
+      subject,
+      htmlBody,
+      pdfBuffer: result.pdfBuffer,
+      pdfFilename,
+    });
+
+    if (!sendResult.success) {
+      return res
+        .status(500)
+        .json({ error: `Email send failed: ${sendResult.error}` });
+    }
+
+    return res.json({
+      success: true,
+      email: userEmail,
+      fromDate,
+      toDate,
+    });
+  } catch (err) {
+    console.error(`[admin] Failed to send quarterly report for ${id}:`, err);
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal error",
+    });
+  }
 });
 
 export default router;

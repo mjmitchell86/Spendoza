@@ -34,6 +34,39 @@ mock.module("../../services/income-detection.service", () => ({
   },
 }));
 
+mock.module("../../services/pdf-export.service", () => ({
+  generatePersonalPdfForRange: (...args: any[]) => {
+    mockServiceCalls.generatePersonalPdfForRange = args;
+    return Promise.resolve({
+      pdfBuffer: Buffer.from("fake-pdf"),
+      reportData: {
+        total_income: 15000,
+        total_expenses: 6000,
+        savings_rate: 60,
+        expense_to_income_ratio: 0.4,
+        by_category: [],
+        top_categories: [],
+        month_over_month: null,
+      },
+      aiInsights: "Quarterly insight 1.\nQuarterly insight 2.",
+    });
+  },
+}));
+
+mock.module("../../services/email.service", () => ({
+  sendReportEmail: (...args: any[]) => {
+    mockServiceCalls.sendReportEmail = args;
+    return Promise.resolve({ success: true, emailId: "email-123" });
+  },
+}));
+
+mock.module("../../services/email-template.service", () => ({
+  buildReportEmailHtml: (...args: any[]) => {
+    mockServiceCalls.buildReportEmailHtml = args;
+    return "<html>mock email</html>";
+  },
+}));
+
 const mockFrom = (table: string) => {
   const cfg = adminResults[table] || {};
   return {
@@ -353,6 +386,75 @@ describe("POST /api/admin/users/:id/detect-recurring", () => {
     const res = await fetch(
       `http://localhost:${port}/api/admin/users/nonexistent/detect-recurring`,
       { method: "POST", headers }
+    );
+    expect([403, 404]).toContain(res.status);
+  });
+});
+
+describe("POST /api/admin/users/:id/send-quarterly-report", () => {
+  it("sends a quarterly report for the target user", async () => {
+    const targetUserId = "target-user-1";
+    adminResults.profiles = {
+      selectSingle: {
+        data: { is_admin: true, id: targetUserId, display_name: "Test User" },
+        error: null,
+      },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/${targetUserId}/send-quarterly-report`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.email).toBe(`${targetUserId}@test.com`);
+    expect(mockServiceCalls.generatePersonalPdfForRange).toBeDefined();
+    expect(mockServiceCalls.generatePersonalPdfForRange[0]).toBe(targetUserId);
+    // 5th arg = generateFreshInsights = true
+    expect(mockServiceCalls.generatePersonalPdfForRange[4]).toBe(true);
+    expect(mockServiceCalls.sendReportEmail).toBeDefined();
+  });
+
+  it("sends quarterly report with custom date range", async () => {
+    const targetUserId = "target-user-2";
+    adminResults.profiles = {
+      selectSingle: {
+        data: { is_admin: true, id: targetUserId, display_name: "User 2" },
+        error: null,
+      },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/${targetUserId}/send-quarterly-report`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ from_date: "2025-10-01", to_date: "2025-12-31" }),
+      }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.fromDate).toBe("2025-10-01");
+    expect(body.toDate).toBe("2025-12-31");
+  });
+
+  it("returns 404 when user does not exist", async () => {
+    adminResults.profiles = {
+      selectSingle: { data: null, error: { message: "not found" } },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/nonexistent/send-quarterly-report`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
     );
     expect([403, 404]).toContain(res.status);
   });
