@@ -57,6 +57,10 @@ export function OnboardingPage() {
     setCurrentStep("complete");
   }, []);
 
+  const handleSkipReview = useCallback(() => {
+    setCurrentStep("complete");
+  }, []);
+
   function renderStep() {
     switch (currentStep) {
       case "welcome":
@@ -79,6 +83,7 @@ export function OnboardingPage() {
             statementIds={statementIds}
             onComplete={handleProcessingComplete}
             onError={handleProcessingError}
+            onSkipReview={handleSkipReview}
           />
         ) : null;
 
