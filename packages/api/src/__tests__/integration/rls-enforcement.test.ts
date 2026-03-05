@@ -168,6 +168,8 @@ mock.module("../../services/report.service", () => ({
 mock.module("../../services/pdf-export.service", () => ({
   generatePersonalPdfForUser: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
   generateHouseholdPdfForHousehold: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
+  generatePersonalPdfForRange: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
+  generateHouseholdPdfForRange: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
   buildSavingsRecommendations: mock(() => []),
   buildGoalProgress: mock(() => []),
 }));
