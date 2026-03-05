@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Search, Trash2, RefreshCw, Repeat } from "lucide-react";
+import { ArrowLeft, Search, Trash2, RefreshCw, Repeat, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { useAdminUsers, useUpdateAdminUser, useDeleteAdminUser, useAdminGenerateReport, useAdminDetectRecurring } from "@/hooks/use-admin";
+import { useAdminUsers, useUpdateAdminUser, useDeleteAdminUser, useAdminGenerateReport, useAdminDetectRecurring, useAdminSendQuarterlyReport } from "@/hooks/use-admin";
 import { toast } from "sonner";
 import type { AdminUserRow } from "@spendoza/shared";
 import { Loader2 } from "lucide-react";
@@ -43,6 +43,7 @@ export function AdminUsersPage() {
   const deleteUser = useDeleteAdminUser();
   const generateReport = useAdminGenerateReport();
   const detectRecurring = useAdminDetectRecurring();
+  const sendQuarterlyReport = useAdminSendQuarterlyReport();
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -210,6 +211,24 @@ export function AdminUsersPage() {
                               <Loader2 className="size-4 animate-spin" />
                             ) : (
                               <Repeat className="size-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Send Quarterly Report"
+                            disabled={sendQuarterlyReport.isPending}
+                            onClick={() =>
+                              sendQuarterlyReport.mutate(user.id, {
+                                onSuccess: () => toast.success(`Quarterly report sent to ${user.display_name}`),
+                                onError: () => toast.error(`Failed to send quarterly report for ${user.display_name}`),
+                              })
+                            }
+                          >
+                            {sendQuarterlyReport.isPending && sendQuarterlyReport.variables === user.id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Mail className="size-4" />
                             )}
                           </Button>
                           <Button
