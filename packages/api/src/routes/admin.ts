@@ -1,5 +1,7 @@
 import { Router, type Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { requireAuth } from "../middleware/auth";
+import { requireAdmin } from "../middleware/require-admin";
 import { supabaseAdmin } from "../lib/supabase";
 import {
   generateUserReport,
@@ -19,6 +21,9 @@ import {
 } from "../services/email-template.service";
 
 const router = Router();
+
+// Auth + admin middleware applied at the router level
+router.use(requireAuth, requireAdmin);
 
 // GET /api/admin/stats — aggregate dashboard metrics
 router.get("/stats", async (req, res: Response) => {
@@ -270,7 +275,6 @@ router.post("/users/:id/detect-recurring", async (req, res: Response) => {
 // POST /api/admin/users/:id/send-quarterly-report — generate + email quarterly report
 router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
   const { id } = req.params;
-  console.error(`[admin] send-quarterly-report handler entered for user ${id}`);
 
   // Verify user exists
   const { data: profile, error: profileErr } = await supabaseAdmin
@@ -280,7 +284,6 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
     .single();
 
   if (profileErr || !profile) {
-    console.error(`[admin] send-quarterly: user not found`, { profileErr, profile });
     return res.status(404).json({ error: "User not found" });
   }
 
@@ -297,7 +300,7 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
   let toDate: string;
   let rangeLabel: string;
 
-  if (req.body.from_date && req.body.to_date) {
+  if (req.body?.from_date && req.body?.to_date) {
     fromDate = req.body.from_date;
     toDate = req.body.to_date;
     const fmt = (d: string) =>
@@ -352,13 +355,10 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
     );
 
     if (!result) {
-      console.error(`[admin] send-quarterly: no data for ${fromDate} to ${toDate}, user ${id}`);
       return res
         .status(404)
         .json({ error: "No transaction data for the specified period" });
     }
-
-    console.error(`[admin] send-quarterly: PDF generated, building email`);
 
     // Parse AI insights into bullet points
     const aiInsights = result.aiInsights
@@ -420,7 +420,6 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
 // POST /api/admin/users/:id/send-annual-report — generate + email annual report
 router.post("/users/:id/send-annual-report", async (req, res: Response) => {
   const { id } = req.params;
-  console.error(`[admin] send-annual-report handler entered for user ${id}`);
 
   // Verify user exists
   const { data: profile, error: profileErr } = await supabaseAdmin
@@ -430,7 +429,6 @@ router.post("/users/:id/send-annual-report", async (req, res: Response) => {
     .single();
 
   if (profileErr || !profile) {
-    console.error(`[admin] send-annual: user not found`, { profileErr, profile });
     return res.status(404).json({ error: "User not found" });
   }
 
@@ -444,7 +442,7 @@ router.post("/users/:id/send-annual-report", async (req, res: Response) => {
 
   // Determine year — use body param or default to previous calendar year
   const currentYear = new Date().getUTCFullYear();
-  const year = req.body.year ? Number(req.body.year) : currentYear - 1;
+  const year = req.body?.year ? Number(req.body.year) : currentYear - 1;
 
   if (isNaN(year) || year < 2020 || year > currentYear) {
     return res
@@ -457,13 +455,10 @@ router.post("/users/:id/send-annual-report", async (req, res: Response) => {
     const result = await generatePersonalAnnualPdf(id, year);
 
     if (!result) {
-      console.error(`[admin] send-annual: no data for year ${year}, user ${id}`);
       return res
         .status(404)
         .json({ error: "No transaction data for the specified year" });
     }
-    console.error(`[admin] send-annual: PDF generated, building email`);
-
     // Fetch goals and compute achievement for email metrics
     const { data: goals } = await supabaseAdmin
       .from("goals")
@@ -526,12 +521,6 @@ router.post("/users/:id/send-annual-report", async (req, res: Response) => {
       error: err instanceof Error ? err.message : "Internal error",
     });
   }
-});
-
-// Debug: catch unmatched admin routes
-router.all("*", (req, res) => {
-  console.error(`[admin] unmatched route: ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ error: "Admin endpoint not found" });
 });
 
 export default router;

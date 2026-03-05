@@ -192,7 +192,6 @@ let baseUrl: string;
 beforeAll(async () => {
   const express = (await import("express")).default;
   const { requireAuth } = await import("../../middleware/auth");
-  const { requireAdmin } = await import("../../middleware/require-admin");
 
   const { default: categoriesRouter } = await import("../../routes/categories");
   const { default: expensesRouter } = await import("../../routes/expenses");
@@ -220,7 +219,7 @@ beforeAll(async () => {
   app.use("/api/goals", requireAuth, goalsRouter);
   app.use("/api/debts", requireAuth, debtsRouter);
   app.use("/api/households", requireAuth, householdsRouter);
-  app.use("/api/admin", requireAuth, requireAdmin, adminRouter);
+  app.use("/api/admin", adminRouter);
 
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => {
