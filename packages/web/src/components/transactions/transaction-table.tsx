@@ -53,7 +53,6 @@ export function TransactionTable({
   }
 
   return (
-    <div className="overflow-x-auto">
     <Table>
       <TableHeader>
         <TableRow>
@@ -91,7 +90,7 @@ export function TransactionTable({
                   )
                 }
               >
-                <SelectTrigger className="h-8 w-[160px]">
+                <SelectTrigger className="h-8 w-[120px] sm:w-[160px]">
                   <SelectValue placeholder="Uncategorized" />
                 </SelectTrigger>
                 <SelectContent>
@@ -117,6 +116,5 @@ export function TransactionTable({
         ))}
       </TableBody>
     </Table>
-    </div>
   );
 }
