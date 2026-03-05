@@ -33,6 +33,12 @@ interface PdfReportInput {
     category: string | null;
     recurrence_interval: string;
   }>;
+  recurringExpenses: Array<{
+    name: string;
+    amount: number;
+    category: string | null;
+    recurrence_interval: string;
+  }>;
   goalProgress: Array<{
     name: string;
     goal_type: string;
@@ -1075,9 +1081,10 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
     if (
       input.incomeSources.length > 0 ||
       input.subscriptionsPaid.length > 0 ||
+      input.recurringExpenses.length > 0 ||
       input.goalProgress.length > 0
     ) {
-      const nextSectionRows = input.incomeSources.length || input.subscriptionsPaid.length || input.goalProgress.length;
+      const nextSectionRows = input.incomeSources.length || input.subscriptionsPaid.length || input.recurringExpenses.length || input.goalProgress.length;
       ensureSpace(doc, sectionStartHeight(nextSectionRows));
 
       if (input.incomeSources.length > 0) {
@@ -1130,6 +1137,45 @@ export function buildReportPdf(input: PdfReportInput): Promise<Buffer> {
           pageWidth,
           C.amber,
           C.amberBg
+        );
+      }
+
+      if (input.recurringExpenses.length > 0) {
+        drawSectionTitle(doc, "Recurring Expenses", pageWidth);
+        const reHeaders = ["Name", "Amount", "Frequency", "Category"];
+        const reRows = input.recurringExpenses.map((e) => [
+          e.name,
+          fmt(e.amount),
+          e.recurrence_interval,
+          e.category ?? "—",
+        ]);
+        drawStyledTable(
+          doc,
+          reHeaders,
+          reRows,
+          [0.35, 0.2, 0.2, 0.25],
+          pageWidth,
+          { boldCols: [1] }
+        );
+
+        const totalRecurring = input.recurringExpenses.reduce(
+          (sum, e) => sum + e.amount,
+          0
+        );
+        const rePct =
+          input.reportData.total_expenses > 0
+            ? (
+                (totalRecurring / input.reportData.total_expenses) *
+                100
+              ).toFixed(1)
+            : "0.0";
+        drawCalloutBox(
+          doc,
+          `Total Recurring Expenses: ${fmt(totalRecurring)}/mo`,
+          `Recurring expenses represent ${rePct}% of total expenses`,
+          pageWidth,
+          C.savings,
+          C.savingsBg
         );
       }
 

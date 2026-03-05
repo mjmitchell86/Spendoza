@@ -257,13 +257,19 @@ export async function generatePersonalPdfForUser(
       .gt("current_balance", 0),
   ]);
 
-  // Build subscriptions paid this month from recurring expenses
-  const subscriptionsPaid = (allRecurringExpenses ?? []).map((e: any) => ({
+  // Split recurring expenses: true subscriptions vs other recurring expenses
+  const allMapped = (allRecurringExpenses ?? []).map((e: any) => ({
     name: e.friendly_name || e.description,
     amount: e.amount ?? 0,
     category: e.categories?.name ?? null,
     recurrence_interval: e.recurrence_interval ?? "monthly",
   }));
+  const subscriptionsPaid = allMapped.filter(
+    (e) => e.category === "Subscriptions"
+  );
+  const recurringExpenses = allMapped.filter(
+    (e) => e.category !== "Subscriptions"
+  );
 
   // Build goal progress
   const reportData = report.report_data as ReportData;
@@ -288,6 +294,7 @@ export async function generatePersonalPdfForUser(
     recurringBills: recurringBills ?? [],
     incomeSources: incomeSources ?? [],
     subscriptionsPaid,
+    recurringExpenses,
     goalProgress,
     savingsRecommendations,
     allocation: (report.report_data as any).allocation ?? undefined,
@@ -397,13 +404,19 @@ export async function generateHouseholdPdfForHousehold(
       .gt("current_balance", 0),
   ]);
 
-  // Build subscriptions paid this month
-  const subscriptionsPaid = (allRecurringExpenses ?? []).map((e: any) => ({
+  // Split recurring expenses: true subscriptions vs other recurring expenses
+  const allMappedHH = (allRecurringExpenses ?? []).map((e: any) => ({
     name: e.friendly_name || e.description,
     amount: e.amount ?? 0,
     category: e.categories?.name ?? null,
     recurrence_interval: e.recurrence_interval ?? "monthly",
   }));
+  const subscriptionsPaid = allMappedHH.filter(
+    (e) => e.category === "Subscriptions"
+  );
+  const recurringExpenses = allMappedHH.filter(
+    (e) => e.category !== "Subscriptions"
+  );
 
   // Build goal progress
   const reportData = report.report_data as ReportData;
@@ -463,6 +476,7 @@ export async function generateHouseholdPdfForHousehold(
     incomeSources: incomeSources ?? [],
     memberContributions,
     subscriptionsPaid,
+    recurringExpenses,
     goalProgress,
     savingsRecommendations,
     allocation: (report.report_data as any).allocation ?? undefined,
