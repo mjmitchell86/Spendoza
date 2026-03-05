@@ -291,6 +291,19 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
       .update({ bank_name: finalBankName })
       .eq("id", statementId);
     console.log(`[ai-pipeline] [${statementId}] set bank_name to: ${finalBankName}`);
+
+    // For child statements from a multi-month split, propagate the discovered
+    // bank name to siblings and the parent so the LLM doesn't re-detect it.
+    if (statement.file_hash?.includes(":")) {
+      const parentHash = statement.file_hash.split(":")[0];
+      await supabaseAdmin
+        .from("bank_statements")
+        .update({ bank_name: finalBankName })
+        .eq("user_id", statement.user_id)
+        .like("file_hash", `${parentHash}%`)
+        .is("bank_name", null);
+      console.log(`[ai-pipeline] [${statementId}] propagated bank_name to siblings`);
+    }
   }
 
   if (parsedTransactions.length === 0) {
