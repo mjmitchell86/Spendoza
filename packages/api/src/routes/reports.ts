@@ -9,6 +9,8 @@ import {
 import {
   generatePersonalPdfForUser,
   generateHouseholdPdfForHousehold,
+  generatePersonalPdfForRange,
+  generateHouseholdPdfForRange,
 } from "../services/pdf-export.service";
 
 const router = Router();
@@ -187,17 +189,26 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { user, supabase: db } = req as AuthenticatedRequest;
-      const month = parseMonth(req.query.month as string | undefined);
+      const fromDate = req.query.from_date as string | undefined;
+      const toDate = req.query.to_date as string | undefined;
 
-      const result = await generatePersonalPdfForUser(user.id, month, undefined, db);
+      let result;
+      let filename: string;
+
+      if (fromDate && toDate) {
+        result = await generatePersonalPdfForRange(user.id, fromDate, toDate, db);
+        filename = `spendoza-report-${fromDate.slice(0, 7)}-to-${toDate.slice(0, 7)}.pdf`;
+      } else {
+        const month = parseMonth(req.query.month as string | undefined);
+        result = await generatePersonalPdfForUser(user.id, month, undefined, db);
+        filename = `spendoza-report-${month.slice(0, 7)}.pdf`;
+      }
 
       if (!result) {
         return res
           .status(404)
-          .json({ error: "No report data available for this month" });
+          .json({ error: "No report data available for this period" });
       }
-
-      const filename = `spendoza-report-${month.slice(0, 7)}.pdf`;
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
@@ -225,7 +236,8 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { user, supabase: db } = req as AuthenticatedRequest;
-      const month = parseMonth(req.query.month as string | undefined);
+      const fromDate = req.query.from_date as string | undefined;
+      const toDate = req.query.to_date as string | undefined;
 
       const { data: userProfile } = await db
         .from("profiles")
@@ -239,20 +251,33 @@ router.get(
           .json({ error: "You are not a member of a household" });
       }
 
-      const result = await generateHouseholdPdfForHousehold(
-        userProfile.household_id,
-        month,
-        undefined,
-        db
-      );
+      let result;
+      let filename: string;
+
+      if (fromDate && toDate) {
+        result = await generateHouseholdPdfForRange(
+          userProfile.household_id,
+          fromDate,
+          toDate,
+          db
+        );
+        filename = `spendoza-household-report-${fromDate.slice(0, 7)}-to-${toDate.slice(0, 7)}.pdf`;
+      } else {
+        const month = parseMonth(req.query.month as string | undefined);
+        result = await generateHouseholdPdfForHousehold(
+          userProfile.household_id,
+          month,
+          undefined,
+          db
+        );
+        filename = `spendoza-household-report-${month.slice(0, 7)}.pdf`;
+      }
 
       if (!result) {
         return res
           .status(404)
-          .json({ error: "No report data available for this month" });
+          .json({ error: "No report data available for this period" });
       }
-
-      const filename = `spendoza-household-report-${month.slice(0, 7)}.pdf`;
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(

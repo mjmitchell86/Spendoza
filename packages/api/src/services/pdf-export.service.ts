@@ -491,3 +491,357 @@ export async function generateHouseholdPdfForHousehold(
     aiInsights: report.ai_insights ?? null,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Helper: format a date range as a human-readable label
+// ---------------------------------------------------------------------------
+function formatRangeLabel(fromDate: string, toDate: string): string {
+  const fmt = (d: string) =>
+    new Date(d + "T00:00:00Z").toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  return `${fmt(fromDate)} – ${fmt(toDate)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: aggregate transactions into ReportData shape for a date range
+// ---------------------------------------------------------------------------
+async function aggregateTransactionsForRange(
+  db: SupabaseClient,
+  userIds: string[],
+  fromDate: string,
+  toDate: string
+): Promise<ReportData> {
+  const { data: transactions } = await db
+    .from("transactions")
+    .select("type, amount, categories(name)")
+    .in("user_id", userIds)
+    .gte("date", fromDate)
+    .lte("date", toDate);
+
+  let totalIncome = 0;
+  let totalExpenses = 0;
+  const categoryMap = new Map<string, number>();
+
+  for (const t of transactions ?? []) {
+    const amount = Number(t.amount);
+    if (t.type === "credit") {
+      totalIncome += amount;
+    } else if (t.type === "debit") {
+      totalExpenses += amount;
+      const catName = (t as any).categories?.name ?? "Uncategorized";
+      categoryMap.set(catName, (categoryMap.get(catName) ?? 0) + amount);
+    }
+  }
+
+  const byCategory = Array.from(categoryMap.entries())
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const savingsRate =
+    totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
+
+  return {
+    total_income: totalIncome,
+    total_expenses: totalExpenses,
+    savings_rate: Math.round(savingsRate * 10) / 10,
+    expense_to_income_ratio:
+      totalIncome > 0
+        ? Math.round((totalExpenses / totalIncome) * 1000) / 10
+        : 0,
+    by_category: byCategory,
+    top_categories: byCategory.slice(0, 5).map((c) => c.category),
+    month_over_month: null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// generatePersonalPdfForRange — multi-month personal PDF
+// ---------------------------------------------------------------------------
+export async function generatePersonalPdfForRange(
+  userId: string,
+  fromDate: string,
+  toDate: string,
+  client?: SupabaseClient
+): Promise<PdfExportResult | null> {
+  const db = client ?? supabaseAdmin;
+
+  // Aggregate transactions for the date range
+  const reportData = await aggregateTransactionsForRange(
+    db,
+    [userId],
+    fromDate,
+    toDate
+  );
+
+  if (reportData.total_income === 0 && reportData.total_expenses === 0) {
+    return null;
+  }
+
+  // Find most recent AI insights from any report for this user
+  const { data: latestReport } = await db
+    .from("reports")
+    .select("ai_insights")
+    .eq("entity_type", "user")
+    .eq("entity_id", userId)
+    .not("ai_insights", "is", null)
+    .order("report_month", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const aiInsights = latestReport?.ai_insights ?? null;
+
+  // Fetch supplementary data in parallel
+  const [
+    { data: recurringBills },
+    { data: incomeSources },
+    { data: profile },
+    { data: allRecurringExpenses },
+    { data: goals },
+    { data: debts },
+  ] = await Promise.all([
+    db
+      .from("expenses")
+      .select(
+        "description, friendly_name, amount, recurrence_interval, next_due_date"
+      )
+      .eq("user_id", userId)
+      .eq("frequency", "recurring")
+      .gte("next_due_date", new Date().toISOString().slice(0, 10))
+      .order("next_due_date", { ascending: true }),
+    db
+      .from("income_entries")
+      .select("source_name, amount, frequency, attributed_to_name")
+      .eq("user_id", userId)
+      .neq("frequency", "one_time")
+      .or(`end_date.is.null,end_date.gte.${fromDate}`),
+    db
+      .from("profiles")
+      .select("display_name")
+      .eq("id", userId)
+      .single(),
+    db
+      .from("expenses")
+      .select(
+        "description, friendly_name, amount, recurrence_interval, category_id, categories(name)"
+      )
+      .eq("user_id", userId)
+      .eq("frequency", "recurring")
+      .or(`end_date.is.null,end_date.gte.${fromDate}`),
+    db
+      .from("goals")
+      .select("*, categories(name)")
+      .eq("user_id", userId),
+    db
+      .from("debts")
+      .select(
+        "name, debt_type, current_balance, interest_rate, minimum_payment"
+      )
+      .eq("entity_type", "user")
+      .eq("entity_id", userId)
+      .gt("current_balance", 0),
+  ]);
+
+  // Split recurring expenses
+  const allMapped = (allRecurringExpenses ?? []).map((e: any) => ({
+    name: e.friendly_name || e.description,
+    amount: e.amount ?? 0,
+    category: e.categories?.name ?? null,
+    recurrence_interval: e.recurrence_interval ?? "monthly",
+  }));
+  const subscriptionsPaid = allMapped.filter(
+    (e) => e.category === "Subscriptions"
+  );
+  const recurringExpenses = allMapped.filter(
+    (e) => e.category !== "Subscriptions"
+  );
+
+  const goalProgress = buildGoalProgress(goals ?? [], reportData);
+  const savingsRecommendations = buildSavingsRecommendations(
+    reportData,
+    subscriptionsPaid
+  );
+
+  const pdfBuffer = await buildReportPdf({
+    title: `${profile?.display_name ?? "Personal"} — Personal Finance Report`,
+    month: formatRangeLabel(fromDate, toDate),
+    reportData,
+    aiInsights,
+    recurringBills: recurringBills ?? [],
+    incomeSources: incomeSources ?? [],
+    subscriptionsPaid,
+    recurringExpenses,
+    goalProgress,
+    savingsRecommendations,
+    debts: debts ?? [],
+  });
+
+  return { pdfBuffer, reportData, aiInsights };
+}
+
+// ---------------------------------------------------------------------------
+// generateHouseholdPdfForRange — multi-month household PDF
+// ---------------------------------------------------------------------------
+export async function generateHouseholdPdfForRange(
+  householdId: string,
+  fromDate: string,
+  toDate: string,
+  client?: SupabaseClient
+): Promise<PdfExportResult | null> {
+  const db = client ?? supabaseAdmin;
+
+  // Get household name
+  const { data: household } = await db
+    .from("households")
+    .select("name")
+    .eq("id", householdId)
+    .single();
+
+  // Get all household member IDs
+  const { data: members } = await db
+    .from("profiles")
+    .select("id, display_name")
+    .eq("household_id", householdId);
+
+  const memberIds = (members ?? []).map((m) => m.id);
+
+  if (memberIds.length === 0) return null;
+
+  // Aggregate transactions for the date range
+  const reportData = await aggregateTransactionsForRange(
+    db,
+    memberIds,
+    fromDate,
+    toDate
+  );
+
+  if (reportData.total_income === 0 && reportData.total_expenses === 0) {
+    return null;
+  }
+
+  // Find most recent AI insights from any household report
+  const { data: latestReport } = await db
+    .from("reports")
+    .select("ai_insights")
+    .eq("entity_type", "household")
+    .eq("entity_id", householdId)
+    .not("ai_insights", "is", null)
+    .order("report_month", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const aiInsights = latestReport?.ai_insights ?? null;
+
+  // Fetch supplementary data in parallel
+  const [
+    { data: recurringBills },
+    { data: incomeSources },
+    { data: allRecurringExpenses },
+    { data: goals },
+    { data: debts },
+  ] = await Promise.all([
+    db
+      .from("expenses")
+      .select(
+        "description, friendly_name, amount, recurrence_interval, next_due_date"
+      )
+      .in("user_id", memberIds)
+      .eq("frequency", "recurring")
+      .gte("next_due_date", new Date().toISOString().slice(0, 10))
+      .order("next_due_date", { ascending: true }),
+    db
+      .from("income_entries")
+      .select("source_name, amount, frequency, attributed_to_name")
+      .in("user_id", memberIds)
+      .neq("frequency", "one_time")
+      .or(`end_date.is.null,end_date.gte.${fromDate}`),
+    db
+      .from("expenses")
+      .select(
+        "description, friendly_name, amount, recurrence_interval, category_id, categories(name)"
+      )
+      .in("user_id", memberIds)
+      .eq("frequency", "recurring")
+      .or(`end_date.is.null,end_date.gte.${fromDate}`),
+    db
+      .from("goals")
+      .select("*, categories(name)")
+      .in("user_id", memberIds),
+    db
+      .from("debts")
+      .select(
+        "name, debt_type, current_balance, interest_rate, minimum_payment"
+      )
+      .eq("entity_type", "household")
+      .eq("entity_id", householdId)
+      .gt("current_balance", 0),
+  ]);
+
+  // Split recurring expenses
+  const allMappedHH = (allRecurringExpenses ?? []).map((e: any) => ({
+    name: e.friendly_name || e.description,
+    amount: e.amount ?? 0,
+    category: e.categories?.name ?? null,
+    recurrence_interval: e.recurrence_interval ?? "monthly",
+  }));
+  const subscriptionsPaid = allMappedHH.filter(
+    (e) => e.category === "Subscriptions"
+  );
+  const recurringExpenses = allMappedHH.filter(
+    (e) => e.category !== "Subscriptions"
+  );
+
+  const goalProgress = buildGoalProgress(goals ?? [], reportData);
+  const savingsRecommendations = buildSavingsRecommendations(
+    reportData,
+    subscriptionsPaid
+  );
+
+  // Compute member contributions for the date range
+  const memberContributions = await Promise.all(
+    (members ?? []).map(async (member) => {
+      const { data: txns } = await db
+        .from("transactions")
+        .select("type, amount")
+        .eq("user_id", member.id)
+        .gte("date", fromDate)
+        .lte("date", toDate);
+
+      let income = 0;
+      let expenses = 0;
+      for (const t of txns ?? []) {
+        if (t.type === "credit") income += Number(t.amount);
+        else if (t.type === "debit") expenses += Number(t.amount);
+      }
+
+      return {
+        display_name: member.display_name ?? "Unknown",
+        income,
+        expenses,
+      };
+    })
+  );
+
+  const pdfBuffer = await buildReportPdf({
+    title: `${household?.name ?? "Household"} — Household Finance Report`,
+    month: formatRangeLabel(fromDate, toDate),
+    reportData,
+    aiInsights,
+    recurringBills: recurringBills ?? [],
+    incomeSources: incomeSources ?? [],
+    memberContributions,
+    subscriptionsPaid,
+    recurringExpenses,
+    goalProgress,
+    savingsRecommendations,
+    debts: debts ?? [],
+  });
+
+  return { pdfBuffer, reportData, aiInsights };
+}
