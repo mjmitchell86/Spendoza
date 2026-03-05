@@ -22,6 +22,12 @@ import {
 
 const router = Router();
 
+// Log all requests entering the admin router
+router.use((req, _res, next) => {
+  console.error(`[admin-router] ENTER: ${req.method} ${req.originalUrl} content-type:${req.headers["content-type"]} content-length:${req.headers["content-length"]}`);
+  next();
+});
+
 // Auth + admin middleware applied at the router level
 router.use(requireAuth, requireAdmin);
 
@@ -275,6 +281,7 @@ router.post("/users/:id/detect-recurring", async (req, res: Response) => {
 // POST /api/admin/users/:id/send-quarterly-report — generate + email quarterly report
 router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
   const { id } = req.params;
+  console.error(`[admin] quarterly handler entered, user=${id}`);
 
   // Verify user exists
   const { data: profile, error: profileErr } = await supabaseAdmin
@@ -420,6 +427,7 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
 // POST /api/admin/users/:id/send-annual-report — generate + email annual report
 router.post("/users/:id/send-annual-report", async (req, res: Response) => {
   const { id } = req.params;
+  console.error(`[admin] annual handler entered, user=${id}`);
 
   // Verify user exists
   const { data: profile, error: profileErr } = await supabaseAdmin
