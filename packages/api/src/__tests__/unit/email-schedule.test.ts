@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isScheduledTime } from "../../lib/email-schedule";
+import { isScheduledTime, isNewYearMidnight } from "../../lib/email-schedule";
 
 describe("isScheduledTime", () => {
   // Saturday Feb 21, 2026 at 14:00 UTC = 9:00 AM EST
@@ -61,5 +61,42 @@ describe("isScheduledTime", () => {
     expect(
       isScheduledTime("Invalid/Timezone", "saturday", 9, saturdayMorningEST)
     ).toBe(false);
+  });
+});
+
+describe("isNewYearMidnight", () => {
+  it("returns true at midnight Jan 1 EST", () => {
+    // Jan 1, 2026 at 05:00 UTC = midnight EST (UTC-5)
+    const midnightEST = new Date("2026-01-01T05:00:00Z");
+    expect(isNewYearMidnight("America/New_York", midnightEST)).toBe(true);
+  });
+
+  it("returns false when not midnight", () => {
+    // Jan 1, 2026 at 14:00 UTC = 9:00 AM EST
+    const morningEST = new Date("2026-01-01T14:00:00Z");
+    expect(isNewYearMidnight("America/New_York", morningEST)).toBe(false);
+  });
+
+  it("returns false on Dec 31 in user's timezone", () => {
+    // Dec 31, 2025 at 20:00 UTC = 3:00 PM EST (still Dec 31)
+    const dec31EST = new Date("2025-12-31T20:00:00Z");
+    expect(isNewYearMidnight("America/New_York", dec31EST)).toBe(false);
+  });
+
+  it("works with UTC+14 (Line Islands)", () => {
+    // Dec 31, 2025 at 10:00 UTC = Jan 1, 2026 00:00 in Pacific/Kiritimati (UTC+14)
+    const midnightKiritimati = new Date("2025-12-31T10:00:00Z");
+    expect(isNewYearMidnight("Pacific/Kiritimati", midnightKiritimati)).toBe(true);
+  });
+
+  it("works with UTC-12 (Baker Island)", () => {
+    // Jan 1, 2026 at 12:00 UTC = Jan 1, 2026 00:00 in Etc/GMT+12 (UTC-12)
+    const midnightBaker = new Date("2026-01-01T12:00:00Z");
+    expect(isNewYearMidnight("Etc/GMT+12", midnightBaker)).toBe(true);
+  });
+
+  it("handles invalid timezone gracefully", () => {
+    const midnightUTC = new Date("2026-01-01T00:00:00Z");
+    expect(isNewYearMidnight("Invalid/Timezone", midnightUTC)).toBe(false);
   });
 });
