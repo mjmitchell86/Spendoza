@@ -6,7 +6,11 @@ import {
 } from "../services/report.service";
 import { buildReportPdf } from "../services/pdf-report.service";
 import type { ReportData } from "../ai/report-insights";
-import { generateQuarterlyInsights } from "../ai/report-insights";
+import {
+  generateQuarterlyInsights,
+  generateAnnualInsights,
+} from "../ai/report-insights";
+import type { GoalSummary } from "../ai/report-insights";
 
 // ---------------------------------------------------------------------------
 // Options for PDF export generators
@@ -853,6 +857,181 @@ export async function generateHouseholdPdfForRange(
     recurringBills: recurringBills ?? [],
     incomeSources: incomeSources ?? [],
     memberContributions,
+    subscriptionsPaid,
+    recurringExpenses,
+    goalProgress,
+    savingsRecommendations,
+    debts: debts ?? [],
+  });
+
+  return { pdfBuffer, reportData, aiInsights };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute goal achievement from goals and report data
+// ---------------------------------------------------------------------------
+export function computeGoalAchievement(
+  goals: any[],
+  reportData: ReportData
+): GoalSummary {
+  const achieved: string[] = [];
+  const inProgress: string[] = [];
+
+  for (const goal of goals) {
+    let current = 0;
+    const target = goal.target_amount ?? 0;
+    const name = goal.name ?? "Unnamed Goal";
+
+    if (goal.goal_type === "budget") {
+      const catName = goal.categories?.name?.toLowerCase();
+      if (catName && reportData.by_category) {
+        const match = reportData.by_category.find(
+          (c) => c.category?.toLowerCase() === catName
+        );
+        current = match?.amount ?? 0;
+      }
+      // Budget goal: achieved if spent <= target
+      if (current <= target) {
+        achieved.push(name);
+      } else {
+        inProgress.push(name);
+      }
+    } else if (
+      goal.goal_type === "savings_amount" ||
+      goal.goal_type === "target_savings"
+    ) {
+      current =
+        goal.goal_type === "savings_amount"
+          ? reportData.total_income - reportData.total_expenses
+          : goal.current_amount ?? 0;
+      // Savings/debt goal: achieved if current >= target
+      if (current >= target) {
+        achieved.push(name);
+      } else {
+        inProgress.push(name);
+      }
+    } else {
+      inProgress.push(name);
+    }
+  }
+
+  return { achieved, inProgress, totalCreated: goals.length };
+}
+
+// ---------------------------------------------------------------------------
+// generatePersonalAnnualPdf — 12-month annual personal PDF
+// ---------------------------------------------------------------------------
+export async function generatePersonalAnnualPdf(
+  userId: string,
+  year: number,
+  client?: SupabaseClient
+): Promise<PdfExportResult | null> {
+  const db = client ?? supabaseAdmin;
+  const fromDate = `${year}-01-01`;
+  const toDate = `${year}-12-31`;
+
+  // Aggregate transactions for the full year
+  const reportData = await aggregateTransactionsForRange(
+    db,
+    [userId],
+    fromDate,
+    toDate
+  );
+
+  if (reportData.total_income === 0 && reportData.total_expenses === 0) {
+    return null;
+  }
+
+  // Fetch goals and compute achievement
+  const { data: goals } = await db
+    .from("goals")
+    .select("*, categories(name)")
+    .eq("user_id", userId);
+
+  const goalSummary = computeGoalAchievement(goals ?? [], reportData);
+
+  // Generate fresh annual AI insights with goal summary
+  const periodLabel = `${year} Annual Review`;
+  const aiInsights = await generateAnnualInsights(
+    reportData,
+    "user",
+    periodLabel,
+    goalSummary
+  );
+
+  // Fetch supplementary data in parallel
+  const [
+    { data: recurringBills },
+    { data: incomeSources },
+    { data: profile },
+    { data: allRecurringExpenses },
+    { data: debts },
+  ] = await Promise.all([
+    db
+      .from("expenses")
+      .select(
+        "description, friendly_name, amount, recurrence_interval, next_due_date"
+      )
+      .eq("user_id", userId)
+      .eq("frequency", "recurring")
+      .gte("next_due_date", new Date().toISOString().slice(0, 10))
+      .order("next_due_date", { ascending: true }),
+    db
+      .from("income_entries")
+      .select("source_name, amount, frequency, attributed_to_name")
+      .eq("user_id", userId)
+      .neq("frequency", "one_time")
+      .or(`end_date.is.null,end_date.gte.${fromDate}`),
+    db
+      .from("profiles")
+      .select("display_name")
+      .eq("id", userId)
+      .single(),
+    db
+      .from("expenses")
+      .select(
+        "description, friendly_name, amount, recurrence_interval, category_id, categories(name)"
+      )
+      .eq("user_id", userId)
+      .eq("frequency", "recurring")
+      .or(`end_date.is.null,end_date.gte.${fromDate}`),
+    db
+      .from("debts")
+      .select(
+        "name, debt_type, current_balance, interest_rate, minimum_payment"
+      )
+      .eq("entity_type", "user")
+      .eq("entity_id", userId)
+      .gt("current_balance", 0),
+  ]);
+
+  // Split recurring expenses
+  const allMapped = (allRecurringExpenses ?? []).map((e: any) => ({
+    name: e.friendly_name || e.description,
+    amount: e.amount ?? 0,
+    category: e.categories?.name ?? null,
+    recurrence_interval: e.recurrence_interval ?? "monthly",
+  }));
+  const subscriptionsPaid = allMapped.filter(
+    (e) => e.category === "Subscriptions"
+  );
+  const recurringExpenses = allMapped.filter(
+    (e) => e.category !== "Subscriptions"
+  );
+
+  const goalProgress = buildGoalProgress(goals ?? [], reportData);
+  const savingsRecommendations = buildSavingsRecommendations(
+    reportData,
+    subscriptionsPaid
+  );
+
+  const pdfBuffer = await buildReportPdf({
+    title: `${profile?.display_name ?? "Personal"} \u2014 ${year} Annual Report`,
+    month: periodLabel,
+    reportData,
+    aiInsights,
+    recurringBills: recurringBills ?? [],
+    incomeSources: incomeSources ?? [],
     subscriptionsPaid,
     recurringExpenses,
     goalProgress,

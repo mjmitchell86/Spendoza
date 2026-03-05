@@ -160,6 +160,7 @@ mock.module("@langchain/core/messages", () => ({
 mock.module("../../ai/report-insights", () => ({
   generateInsights: mock(() => Promise.resolve("test insights")),
   generateQuarterlyInsights: mock(() => Promise.resolve("quarterly test insights")),
+  generateAnnualInsights: mock(() => Promise.resolve("annual test insights")),
 }));
 mock.module("../../services/report.service", () => ({
   generateUserReport: mock(() => Promise.resolve({ id: "r1", report_data: { total_income: 5000, total_expenses: 2000, savings_rate: 60, by_category: [], top_categories: [] }, ai_insights: "test" })),
@@ -171,6 +172,8 @@ mock.module("../../services/pdf-export.service", () => ({
   generateHouseholdPdfForHousehold: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
   generatePersonalPdfForRange: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
   generateHouseholdPdfForRange: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
+  generatePersonalAnnualPdf: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
+  computeGoalAchievement: mock(() => ({ achieved: [], inProgress: [], totalCreated: 0 })),
   buildSavingsRecommendations: mock(() => []),
   buildGoalProgress: mock(() => []),
 }));

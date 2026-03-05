@@ -138,6 +138,8 @@ mock.module("../../services/pdf-export.service", () => ({
   generateHouseholdPdfForHousehold: mock(() => Promise.resolve(null)),
   generatePersonalPdfForRange: mock(() => Promise.resolve(null)),
   generateHouseholdPdfForRange: mock(() => Promise.resolve(null)),
+  generatePersonalAnnualPdf: mock(() => Promise.resolve(null)),
+  computeGoalAchievement: mock(() => ({ achieved: [], inProgress: [], totalCreated: 0 })),
 }));
 
 // Mock unsubscribe token
@@ -153,6 +155,7 @@ mock.module("../../lib/unsubscribe-token", () => ({
 // Mock email template
 mock.module("../../services/email-template.service", () => ({
   buildReportEmailHtml: mock(() => "<html>mock email</html>"),
+  buildAnnualReportEmailHtml: mock(() => "<html>mock annual email</html>"),
 }));
 
 let server: Server;
