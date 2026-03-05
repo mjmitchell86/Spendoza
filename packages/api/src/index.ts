@@ -86,6 +86,12 @@ app.use("/api/debts", requireAuth, requireTier("starter"), debtsRouter);
 app.use("/api/emails", emailsRouter);
 app.use("/api/admin", adminRouter);
 
+// Catch-all for unmatched routes
+app.use((req, res) => {
+  console.error(`[404] unmatched: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ error: "Not found" });
+});
+
 // Global error handler (must be LAST middleware)
 app.use(errorHandler);
 
