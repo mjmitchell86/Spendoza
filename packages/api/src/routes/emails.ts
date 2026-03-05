@@ -2,18 +2,23 @@ import { Router, type Request, type Response } from "express";
 import { waitUntil } from "@vercel/functions";
 import { supabaseAdmin } from "../lib/supabase";
 import { sendReportEmail } from "../services/email.service";
-import { buildReportEmailHtml } from "../services/email-template.service";
+import {
+  buildReportEmailHtml,
+  buildAnnualReportEmailHtml,
+} from "../services/email-template.service";
 import {
   generatePersonalPdfForUser,
   generateHouseholdPdfForHousehold,
   generatePersonalPdfForRange,
   generateHouseholdPdfForRange,
+  generatePersonalAnnualPdf,
+  computeGoalAchievement,
 } from "../services/pdf-export.service";
 import {
   createUnsubscribeToken,
   verifyUnsubscribeToken,
 } from "../lib/unsubscribe-token";
-import { isScheduledTime } from "../lib/email-schedule";
+import { isScheduledTime, isNewYearMidnight } from "../lib/email-schedule";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
@@ -708,6 +713,304 @@ async function processQuarterlyEmailJob(jobId: string): Promise<void> {
     );
   } catch (err) {
     console.error(`[email] Failed to process quarterly job ${jobId}:`, err);
+    await supabaseAdmin
+      .from("email_jobs")
+      .update({
+        status: "failed",
+        error: err instanceof Error ? err.message : String(err),
+        processed_at: new Date().toISOString(),
+      })
+      .eq("id", jobId);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Annual helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Given a reference date and timezone, compute the previous year.
+ * If it's Jan 1 at midnight in the user's timezone, the previous year is last year.
+ */
+function getPreviousYear(timezone: string, now: Date = new Date()): number {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+  });
+  const localYear = parseInt(formatter.format(now), 10);
+  // Since this runs at midnight Jan 1, the previous year is localYear - 1
+  return localYear - 1;
+}
+
+// ---------------------------------------------------------------------------
+// POST /dispatch-annual — called by pg_cron hourly on Dec 31 and Jan 1 UTC
+// ---------------------------------------------------------------------------
+router.post("/dispatch-annual", async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (token !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    // Get all users with email reports enabled
+    const { data: users, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id, timezone, household_id")
+      .eq("email_reports_enabled", true);
+
+    if (error || !users) {
+      console.error("[dispatch-annual] Failed to fetch users:", error);
+      return res.status(200).json({ dispatched: 0, error: error?.message });
+    }
+
+    const now = new Date();
+    let dispatched = 0;
+
+    for (const user of users) {
+      const tz = user.timezone || "America/New_York";
+
+      // Only dispatch if it's midnight Jan 1 in the user's timezone
+      if (!isNewYearMidnight(tz, now)) continue;
+
+      const previousYear = getPreviousYear(tz, now);
+      const fromDate = `${previousYear}-01-01`;
+      const toDate = `${previousYear}-12-31`;
+
+      // Check if user has transactions in that year
+      const { count } = await supabaseAdmin
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("date", fromDate)
+        .lte("date", toDate);
+
+      if (!count || count === 0) continue;
+
+      // Check not already sent
+      const { data: alreadySent } = await supabaseAdmin
+        .from("email_report_log")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("entity_type", "user")
+        .eq("entity_id", user.id)
+        .eq("report_month", fromDate)
+        .eq("report_type", "annual")
+        .maybeSingle();
+
+      if (alreadySent) continue;
+
+      // Insert personal annual email job
+      await supabaseAdmin.from("email_jobs").insert({
+        user_id: user.id,
+        entity_type: "user",
+        entity_id: user.id,
+        report_month: fromDate,
+        report_type: "annual",
+        from_date: fromDate,
+        to_date: toDate,
+      });
+      dispatched++;
+
+      // Insert household annual email job if applicable
+      if (user.household_id) {
+        const { data: hhAlreadySent } = await supabaseAdmin
+          .from("email_report_log")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("entity_type", "household")
+          .eq("entity_id", user.household_id)
+          .eq("report_month", fromDate)
+          .eq("report_type", "annual")
+          .maybeSingle();
+
+        if (!hhAlreadySent) {
+          await supabaseAdmin.from("email_jobs").insert({
+            user_id: user.id,
+            entity_type: "household",
+            entity_id: user.household_id,
+            report_month: fromDate,
+            report_type: "annual",
+            from_date: fromDate,
+            to_date: toDate,
+          });
+          dispatched++;
+        }
+      }
+    }
+
+    console.log(
+      `[dispatch-annual] Dispatched ${dispatched} annual email jobs`
+    );
+    return res.status(200).json({ dispatched });
+  } catch (err) {
+    console.error("[dispatch-annual] Error:", err);
+    return res.status(200).json({ dispatched: 0, error: String(err) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /send-annual — called by pg_net trigger per annual email job
+// ---------------------------------------------------------------------------
+router.post("/send-annual", async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (token !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { job_id } = req.body;
+  if (!job_id) {
+    return res.status(400).json({ error: "job_id required" });
+  }
+
+  waitUntil(processAnnualEmailJob(job_id));
+
+  return res.status(200).json({ message: "Annual job accepted", job_id });
+});
+
+async function processAnnualEmailJob(jobId: string): Promise<void> {
+  try {
+    // Mark as processing
+    await supabaseAdmin
+      .from("email_jobs")
+      .update({ status: "processing" })
+      .eq("id", jobId);
+
+    // Fetch job details
+    const { data: job } = await supabaseAdmin
+      .from("email_jobs")
+      .select("*")
+      .eq("id", jobId)
+      .single();
+
+    if (!job || job.status === "sent") return;
+    if (!job.from_date || !job.to_date) {
+      throw new Error("Annual job missing from_date/to_date");
+    }
+
+    // Get user's email
+    const { data: authUser } =
+      await supabaseAdmin.auth.admin.getUserById(job.user_id);
+    const userEmail = authUser?.user?.email;
+    if (!userEmail) throw new Error(`No email for user ${job.user_id}`);
+
+    // Extract year from from_date
+    const year = parseInt(job.from_date.slice(0, 4), 10);
+
+    // Generate annual PDF with fresh AI insights
+    const result = await generatePersonalAnnualPdf(job.user_id, year);
+
+    if (!result) {
+      await supabaseAdmin
+        .from("email_jobs")
+        .update({
+          status: "failed",
+          error: "No report data available for year",
+          processed_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    // Get user display name and goals for email metrics
+    const [{ data: profile }, { data: goals }] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("display_name")
+        .eq("id", job.user_id)
+        .single(),
+      supabaseAdmin
+        .from("goals")
+        .select("*, categories(name)")
+        .eq("user_id", job.user_id),
+    ]);
+
+    const goalSummary = computeGoalAchievement(goals ?? [], result.reportData);
+
+    // Parse AI insights into bullet points
+    const aiInsights = result.aiInsights
+      ? result.aiInsights
+          .split("\n")
+          .map((line) => line.replace(/^[-*]\s*/, "").trim())
+          .filter(Boolean)
+          .slice(0, 7)
+      : [];
+
+    const unsubscribeUrl = `${API_URL()}/api/emails/unsubscribe?token=${createUnsubscribeToken(job.user_id)}`;
+
+    const subject = `Your ${year} Year in Review \u2014 Spendoza Annual Report`;
+
+    const htmlBody = buildAnnualReportEmailHtml({
+      userName: profile?.display_name ?? "there",
+      year,
+      totalIncome: result.reportData.total_income,
+      totalExpenses: result.reportData.total_expenses,
+      netSavings:
+        result.reportData.total_income - result.reportData.total_expenses,
+      savingsRate: result.reportData.savings_rate,
+      goalsAchieved: goalSummary.achieved.length,
+      goalsTotal: goalSummary.totalCreated,
+      aiInsights,
+      appReportUrl: `${APP_URL()}/dashboard`,
+      unsubscribeUrl,
+    });
+
+    const pdfFilename = `spendoza-annual-report-${year}.pdf`;
+
+    // Send email
+    const sendResult = await sendReportEmail({
+      to: userEmail,
+      subject,
+      htmlBody,
+      pdfBuffer: result.pdfBuffer,
+      pdfFilename,
+    });
+
+    if (!sendResult.success) {
+      await supabaseAdmin
+        .from("email_jobs")
+        .update({
+          status: "failed",
+          error: sendResult.error,
+          processed_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    // Log success
+    await supabaseAdmin.from("email_report_log").upsert(
+      {
+        user_id: job.user_id,
+        entity_type: job.entity_type,
+        entity_id: job.entity_id,
+        report_month: job.from_date,
+        report_type: "annual",
+        email_subject: subject,
+        email_preview: `Income: $${result.reportData.total_income}, Expenses: $${result.reportData.total_expenses}`,
+        sent_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,entity_type,entity_id,report_month,report_type" }
+    );
+
+    // Mark job as sent
+    await supabaseAdmin
+      .from("email_jobs")
+      .update({ status: "sent", processed_at: new Date().toISOString() })
+      .eq("id", jobId);
+
+    console.log(
+      `[email] Sent annual ${job.entity_type} report to ${userEmail} for ${year}`
+    );
+  } catch (err) {
+    console.error(`[email] Failed to process annual job ${jobId}:`, err);
     await supabaseAdmin
       .from("email_jobs")
       .update({

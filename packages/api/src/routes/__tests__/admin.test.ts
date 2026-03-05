@@ -34,22 +34,32 @@ mock.module("../../services/income-detection.service", () => ({
   },
 }));
 
+const fakePdfResult = {
+  pdfBuffer: Buffer.from("fake-pdf"),
+  reportData: {
+    total_income: 15000,
+    total_expenses: 6000,
+    savings_rate: 60,
+    expense_to_income_ratio: 0.4,
+    by_category: [],
+    top_categories: [],
+    month_over_month: null,
+  },
+  aiInsights: "Quarterly insight 1.\nQuarterly insight 2.",
+};
+
 mock.module("../../services/pdf-export.service", () => ({
   generatePersonalPdfForRange: (...args: any[]) => {
     mockServiceCalls.generatePersonalPdfForRange = args;
-    return Promise.resolve({
-      pdfBuffer: Buffer.from("fake-pdf"),
-      reportData: {
-        total_income: 15000,
-        total_expenses: 6000,
-        savings_rate: 60,
-        expense_to_income_ratio: 0.4,
-        by_category: [],
-        top_categories: [],
-        month_over_month: null,
-      },
-      aiInsights: "Quarterly insight 1.\nQuarterly insight 2.",
-    });
+    return Promise.resolve(fakePdfResult);
+  },
+  generatePersonalAnnualPdf: (...args: any[]) => {
+    mockServiceCalls.generatePersonalAnnualPdf = args;
+    return Promise.resolve(fakePdfResult);
+  },
+  computeGoalAchievement: (...args: any[]) => {
+    mockServiceCalls.computeGoalAchievement = args;
+    return { achieved: ["Save $5k"], inProgress: ["Budget groceries"], totalCreated: 2 };
   },
 }));
 
@@ -64,6 +74,10 @@ mock.module("../../services/email-template.service", () => ({
   buildReportEmailHtml: (...args: any[]) => {
     mockServiceCalls.buildReportEmailHtml = args;
     return "<html>mock email</html>";
+  },
+  buildAnnualReportEmailHtml: (...args: any[]) => {
+    mockServiceCalls.buildAnnualReportEmailHtml = args;
+    return "<html>mock annual email</html>";
   },
 }));
 
@@ -450,6 +464,80 @@ describe("POST /api/admin/users/:id/send-quarterly-report", () => {
 
     const res = await fetch(
       `http://localhost:${port}/api/admin/users/nonexistent/send-quarterly-report`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
+    );
+    expect([403, 404]).toContain(res.status);
+  });
+});
+
+describe("POST /api/admin/users/:id/send-annual-report", () => {
+  it("sends an annual report for the target user", async () => {
+    const targetUserId = "target-user-1";
+    adminResults.profiles = {
+      selectSingle: {
+        data: { is_admin: true, id: targetUserId, display_name: "Test User" },
+        error: null,
+      },
+    };
+    adminResults.goals = {
+      selectList: { data: [], error: null },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/${targetUserId}/send-annual-report`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.email).toBe(`${targetUserId}@test.com`);
+    expect(mockServiceCalls.generatePersonalAnnualPdf).toBeDefined();
+    expect(mockServiceCalls.generatePersonalAnnualPdf[0]).toBe(targetUserId);
+    expect(mockServiceCalls.sendReportEmail).toBeDefined();
+    expect(mockServiceCalls.buildAnnualReportEmailHtml).toBeDefined();
+  });
+
+  it("sends annual report with custom year", async () => {
+    const targetUserId = "target-user-2";
+    adminResults.profiles = {
+      selectSingle: {
+        data: { is_admin: true, id: targetUserId, display_name: "User 2" },
+        error: null,
+      },
+    };
+    adminResults.goals = {
+      selectList: { data: [], error: null },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/${targetUserId}/send-annual-report`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ year: 2024 }),
+      }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.year).toBe(2024);
+    expect(mockServiceCalls.generatePersonalAnnualPdf[1]).toBe(2024);
+  });
+
+  it("returns 404 when user does not exist", async () => {
+    adminResults.profiles = {
+      selectSingle: { data: null, error: { message: "not found" } },
+    };
+
+    const res = await fetch(
+      `http://localhost:${port}/api/admin/users/nonexistent/send-annual-report`,
       {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },

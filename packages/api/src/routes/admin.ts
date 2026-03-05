@@ -7,9 +7,16 @@ import {
 } from "../services/report.service";
 import { detectRecurringBills } from "../services/bill-detection.service";
 import { detectRecurringIncome } from "../services/income-detection.service";
-import { generatePersonalPdfForRange } from "../services/pdf-export.service";
+import {
+  generatePersonalPdfForRange,
+  generatePersonalAnnualPdf,
+  computeGoalAchievement,
+} from "../services/pdf-export.service";
 import { sendReportEmail } from "../services/email.service";
-import { buildReportEmailHtml } from "../services/email-template.service";
+import {
+  buildReportEmailHtml,
+  buildAnnualReportEmailHtml,
+} from "../services/email-template.service";
 
 const router = Router();
 
@@ -399,6 +406,113 @@ router.post("/users/:id/send-quarterly-report", async (req, res: Response) => {
     });
   } catch (err) {
     console.error(`[admin] Failed to send quarterly report for ${id}:`, err);
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal error",
+    });
+  }
+});
+
+// POST /api/admin/users/:id/send-annual-report — generate + email annual report
+router.post("/users/:id/send-annual-report", async (req, res: Response) => {
+  const { id } = req.params;
+
+  // Verify user exists
+  const { data: profile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id, display_name")
+    .eq("id", id)
+    .single();
+
+  if (profileErr || !profile) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  // Get user email
+  const { data: authUser } =
+    await supabaseAdmin.auth.admin.getUserById(id);
+  const userEmail = authUser?.user?.email;
+  if (!userEmail) {
+    return res.status(400).json({ error: "User has no email address" });
+  }
+
+  // Determine year — use body param or default to previous calendar year
+  const currentYear = new Date().getUTCFullYear();
+  const year = req.body.year ? Number(req.body.year) : currentYear - 1;
+
+  if (isNaN(year) || year < 2020 || year > currentYear) {
+    return res
+      .status(400)
+      .json({ error: `Year must be between 2020 and ${currentYear}` });
+  }
+
+  try {
+    // Generate annual PDF with fresh AI insights
+    const result = await generatePersonalAnnualPdf(id, year);
+
+    if (!result) {
+      return res
+        .status(404)
+        .json({ error: "No transaction data for the specified year" });
+    }
+
+    // Fetch goals and compute achievement for email metrics
+    const { data: goals } = await supabaseAdmin
+      .from("goals")
+      .select("*, categories(name)")
+      .eq("user_id", id);
+
+    const goalSummary = computeGoalAchievement(goals ?? [], result.reportData);
+
+    // Parse AI insights into bullet points
+    const aiInsights = result.aiInsights
+      ? result.aiInsights
+          .split("\n")
+          .map((line) => line.replace(/^[-*]\s*/, "").trim())
+          .filter(Boolean)
+          .slice(0, 7)
+      : [];
+
+    const appUrl = process.env.APP_URL || "https://spendoza.io";
+    const subject = `Your ${year} Year in Review \u2014 Spendoza Annual Report`;
+
+    const htmlBody = buildAnnualReportEmailHtml({
+      userName: profile.display_name ?? "there",
+      year,
+      totalIncome: result.reportData.total_income,
+      totalExpenses: result.reportData.total_expenses,
+      netSavings:
+        result.reportData.total_income - result.reportData.total_expenses,
+      savingsRate: result.reportData.savings_rate,
+      goalsAchieved: goalSummary.achieved.length,
+      goalsTotal: goalSummary.totalCreated,
+      aiInsights,
+      appReportUrl: `${appUrl}/dashboard`,
+      unsubscribeUrl: `${appUrl}/profile`,
+    });
+
+    const pdfFilename = `spendoza-annual-report-${year}.pdf`;
+
+    const sendResult = await sendReportEmail({
+      to: userEmail,
+      subject,
+      htmlBody,
+      pdfBuffer: result.pdfBuffer,
+      pdfFilename,
+    });
+
+    if (!sendResult.success) {
+      return res
+        .status(500)
+        .json({ error: `Email send failed: ${sendResult.error}` });
+    }
+
+    return res.json({
+      success: true,
+      email: userEmail,
+      year,
+    });
+  } catch (err) {
+    console.error(`[admin] Failed to send annual report for ${id}:`, err);
     return res.status(500).json({
       error: err instanceof Error ? err.message : "Internal error",
     });

@@ -97,3 +97,10 @@ export function useAdminSendQuarterlyReport() {
       apiClient(`/admin/users/${id}/send-quarterly-report`, { method: "POST" }),
   });
 }
+
+export function useAdminSendAnnualReport() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient(`/admin/users/${id}/send-annual-report`, { method: "POST" }),
+  });
+}
