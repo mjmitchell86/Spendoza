@@ -222,7 +222,7 @@ export function AdminUsersPage() {
                             onClick={() =>
                               sendQuarterlyReport.mutate(user.id, {
                                 onSuccess: () => toast.success(`Quarterly report sent to ${user.display_name}`),
-                                onError: () => toast.error(`Failed to send quarterly report for ${user.display_name}`),
+                                onError: (e: Error) => toast.error(`Quarterly report failed: ${e.message}`),
                               })
                             }
                           >
@@ -240,7 +240,7 @@ export function AdminUsersPage() {
                             onClick={() =>
                               sendAnnualReport.mutate(user.id, {
                                 onSuccess: () => toast.success(`Annual report sent to ${user.display_name}`),
-                                onError: () => toast.error(`Failed to send annual report for ${user.display_name}`),
+                                onError: (e: Error) => toast.error(`Annual report failed: ${e.message}`),
                               })
                             }
                           >
