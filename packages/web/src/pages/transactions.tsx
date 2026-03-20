@@ -75,6 +75,7 @@ export function TransactionsPage() {
       linkTransaction.mutate({
         transaction_id: transactionId,
         debt_id: null,
+        update_balance: false,
       });
       return;
     }
