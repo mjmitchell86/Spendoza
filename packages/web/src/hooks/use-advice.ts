@@ -4,6 +4,7 @@ import type {
   AdviceResponse,
   AdviceUsage,
   AskAdviceInput,
+  FollowUpAdviceInput,
 } from "@spendoza/shared";
 
 export function useAdviceUsage() {
@@ -25,6 +26,24 @@ export function useAskAdvice() {
   return useMutation<AdviceResponse, Error, AskAdviceInput>({
     mutationFn: (data) =>
       apiClient("/advice", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["advice"] });
+    },
+  });
+}
+
+export function useFollowUpAdvice() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    AdviceResponse,
+    Error,
+    FollowUpAdviceInput & { threadId: string }
+  >({
+    mutationFn: ({ threadId, ...data }) =>
+      apiClient(`/advice/${threadId}/follow-up`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["advice"] });
     },

@@ -24,6 +24,9 @@ mock.module("@langchain/core/messages", () => ({
   HumanMessage: class {
     constructor(public content: string) {}
   },
+  AIMessage: class {
+    constructor(public content: string) {}
+  },
 }));
 
 const { generateFinancialAdvice } = await import("../financial-advisor");
@@ -171,6 +174,47 @@ describe("generateFinancialAdvice", () => {
     const call = mockInvoke.mock.calls[0];
     const humanMessage = call[0][1];
     expect(humanMessage.content).toContain("No financial data available");
+  });
+
+  it("passes conversation history to LLM when provided", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      content: "Following up on your debt question...",
+      usage_metadata: null,
+    });
+
+    const history = [
+      { role: "user" as const, content: "How should I handle my credit card debt?" },
+      { role: "assistant" as const, content: "You should prioritize paying it off." },
+    ];
+
+    await generateFinancialAdvice(
+      "What about the avalanche method?",
+      sampleContext,
+      "user-123",
+      history
+    );
+
+    const call = mockInvoke.mock.calls[0];
+    const messages = call[0];
+
+    // System + first human (with context) + AI response + follow-up question
+    expect(messages.length).toBe(4);
+    expect(messages[0].content).toContain("personal finance advisor");
+    expect(messages[1].content).toContain("credit card debt");
+    expect(messages[2].content).toContain("prioritize paying");
+    expect(messages[3].content).toContain("avalanche method");
+  });
+
+  it("uses single-message format when no history provided", async () => {
+    mockInvoke.mockResolvedValueOnce({ content: "Advice here.", usage_metadata: null });
+
+    await generateFinancialAdvice("Test?", sampleContext, "user-123");
+
+    const call = mockInvoke.mock.calls[0];
+    const messages = call[0];
+
+    // System + single human message
+    expect(messages.length).toBe(2);
   });
 
   it("handles non-string LLM response content", async () => {

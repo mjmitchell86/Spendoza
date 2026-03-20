@@ -7,14 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useProfile } from "@/hooks/use-profile";
-import { useAdviceUsage, useAdviceHistory, useAskAdvice } from "@/hooks/use-advice";
+import { useAdviceUsage, useAdviceHistory, useAskAdvice, useFollowUpAdvice } from "@/hooks/use-advice";
+import { MAX_THREAD_MESSAGES } from "@spendoza/shared";
 
 export function AdvicePage() {
   const { data: profile } = useProfile();
   const { data: usage, isLoading: usageLoading } = useAdviceUsage();
   const { data: history, isLoading: historyLoading } = useAdviceHistory();
   const askAdvice = useAskAdvice();
+  const followUpAdvice = useFollowUpAdvice();
   const [question, setQuestion] = useState("");
+  const [followUpText, setFollowUpText] = useState<Record<string, string>>({});
 
   // Free users get upgrade prompt
   if (profile && profile.subscription_tier === "free") {
@@ -31,6 +34,27 @@ export function AdvicePage() {
         <UpgradePrompt feature="Financial Advisor" requiredTier="Starter" />
       </div>
     );
+  }
+
+  type Thread = { threadId: string; messages: NonNullable<typeof history> };
+
+  function groupByThread(items: NonNullable<typeof history>): Thread[] {
+    const map = new Map<string, NonNullable<typeof history>>();
+    for (const item of items) {
+      const tid = item.thread_id;
+      if (!map.has(tid)) map.set(tid, []);
+      map.get(tid)!.push(item);
+    }
+    const threads = Array.from(map.entries()).map(([threadId, messages]) => ({
+      threadId,
+      messages: messages.sort((a, b) => a.message_index - b.message_index),
+    }));
+    threads.sort(
+      (a, b) =>
+        new Date(b.messages[0].created_at).getTime() -
+        new Date(a.messages[0].created_at).getTime()
+    );
+    return threads;
   }
 
   const canAsk = (usage?.remaining ?? 0) > 0;
@@ -164,33 +188,92 @@ export function AdvicePage() {
       ) : history && history.length > 0 ? (
         <div className="flex flex-col gap-4">
           <h2 className="text-lg font-medium">Your Questions</h2>
-          {history.map((item, idx) => (
-            <Card key={item.id ?? idx}>
-              <CardContent className="py-4">
-                <div className="mb-2 flex items-start gap-2">
-                  <MessageCircle className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <p className="text-sm font-medium">{item.question}</p>
-                </div>
-                <Separator className="my-3" />
-                <div className="prose prose-sm max-w-none text-sm text-muted-foreground dark:prose-invert">
-                  {item.answer.split("\n").map((line, i) => (
-                    <p key={i} className={line.trim() === "" ? "h-2" : ""}>
-                      {line}
-                    </p>
+          {groupByThread(history).map((thread) => {
+            const threadFollowUp = followUpText[thread.threadId] ?? "";
+            const canFollowUp = thread.messages.length < MAX_THREAD_MESSAGES;
+            const remaining = MAX_THREAD_MESSAGES - thread.messages.length;
+
+            return (
+              <Card key={thread.threadId}>
+                <CardContent className="py-4">
+                  {thread.messages.map((item, idx) => (
+                    <div key={item.id ?? idx}>
+                      {idx > 0 && <Separator className="my-3" />}
+                      <div className="mb-2 flex items-start gap-2">
+                        <MessageCircle className="mt-0.5 size-4 shrink-0 text-primary" />
+                        <p className="text-sm font-medium">{item.question}</p>
+                      </div>
+                      <div className="prose prose-sm ml-6 max-w-none text-sm text-muted-foreground dark:prose-invert">
+                        {item.answer.split("\n").map((line, i) => (
+                          <p key={i} className={line.trim() === "" ? "h-2" : ""}>
+                            {line}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground/60">
-                  {new Date(item.created_at).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+
+                  {/* Thread metadata + follow-up */}
+                  <div className="mt-4 flex items-center gap-2">
+                    <Badge variant={canFollowUp ? "secondary" : "outline"} className="text-xs">
+                      {remaining}/{MAX_THREAD_MESSAGES} follow-ups remaining
+                    </Badge>
+                    <span className="text-xs text-muted-foreground/60">
+                      {new Date(thread.messages[0].created_at).toLocaleDateString(
+                        "en-US",
+                        { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }
+                      )}
+                    </span>
+                  </div>
+
+                  {canFollowUp && (
+                    <form
+                      className="mt-3 flex gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const trimmed = threadFollowUp.trim();
+                        if (!trimmed || followUpAdvice.isPending) return;
+                        followUpAdvice.mutate(
+                          { threadId: thread.threadId, question: trimmed },
+                          {
+                            onSuccess: () =>
+                              setFollowUpText((prev) => ({ ...prev, [thread.threadId]: "" })),
+                          }
+                        );
+                      }}
+                    >
+                      <Textarea
+                        placeholder="Ask a follow-up..."
+                        value={threadFollowUp}
+                        onChange={(e) =>
+                          setFollowUpText((prev) => ({
+                            ...prev,
+                            [thread.threadId]: e.target.value,
+                          }))
+                        }
+                        disabled={followUpAdvice.isPending}
+                        className="min-h-[40px] resize-none"
+                        maxLength={500}
+                      />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={
+                          threadFollowUp.trim().length < 5 || followUpAdvice.isPending
+                        }
+                      >
+                        {followUpAdvice.isPending ? (
+                          <RefreshCw className="size-4 animate-spin" />
+                        ) : (
+                          <Send className="size-4" />
+                        )}
+                      </Button>
+                    </form>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       ) : null}
     </div>
