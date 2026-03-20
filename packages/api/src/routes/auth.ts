@@ -52,11 +52,11 @@ router.post("/signup", validate(signupSchema), async (req: Request, res: Respons
       .eq("id", dbCodeId);
   }
 
-  // Grant admin privileges when signing up with the admin invite code
+  // Grant admin privileges and Pro plan when signing up with the admin invite code
   if (invite_code === ADMIN_INVITE_CODE) {
     await supabaseAdmin
       .from("profiles")
-      .update({ is_admin: true })
+      .update({ is_admin: true, subscription_tier: "pro" })
       .eq("id", data.user.id);
   }
 
