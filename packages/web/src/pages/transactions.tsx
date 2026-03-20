@@ -8,6 +8,7 @@ import {
 import { useTimePeriod } from "@/hooks/use-time-period";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,15 +16,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { TransactionTable } from "@/components/transactions/transaction-table";
 import { useAllTransactions, useUpdateTransactionCategory } from "@/hooks/use-transactions";
 import { useCategories } from "@/hooks/use-categories";
+import { useDebts, useLinkTransactionToDebt } from "@/hooks/use-debts";
 
 export function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState<TransactionType | "all">("all");
   const [search, setSearch] = useState("");
   const { timePeriod, setTimePeriod } = useTimePeriod();
+
+  // Balance update dialog state
+  const [balanceDialog, setBalanceDialog] = useState<{
+    transactionId: string;
+    debtId: string;
+    debtName: string;
+    currentBalance: number;
+  } | null>(null);
+  const [updateBalance, setUpdateBalance] = useState(false);
+  const [newBalance, setNewBalance] = useState("");
 
   const dateRange = useMemo(() => getDateRange(timePeriod), [timePeriod]);
   const filters = useMemo(() => ({
@@ -35,7 +55,9 @@ export function TransactionsPage() {
     Object.keys(filters).length > 0 ? filters : undefined
   );
   const { data: categories } = useCategories();
+  const { data: debts } = useDebts("user");
   const updateCategory = useUpdateTransactionCategory();
+  const linkTransaction = useLinkTransactionToDebt();
 
   const filtered = (transactions ?? []).filter((txn) =>
     search
@@ -45,6 +67,43 @@ export function TransactionsPage() {
 
   function handleCategoryChange(transactionId: string, category: string | null) {
     updateCategory.mutate({ transactionId, ai_category: category });
+  }
+
+  function handleDebtLink(transactionId: string, debtId: string | null) {
+    if (!debtId) {
+      // Unlinking — just do it directly
+      linkTransaction.mutate({
+        transaction_id: transactionId,
+        debt_id: null,
+      });
+      return;
+    }
+
+    // Linking — show dialog to optionally update balance
+    const debt = debts?.find((d) => d.id === debtId);
+    if (debt) {
+      setBalanceDialog({
+        transactionId,
+        debtId,
+        debtName: debt.name,
+        currentBalance: debt.current_balance,
+      });
+      setUpdateBalance(false);
+      setNewBalance(debt.current_balance.toString());
+    }
+  }
+
+  function handleBalanceDialogConfirm() {
+    if (!balanceDialog) return;
+    linkTransaction.mutate(
+      {
+        transaction_id: balanceDialog.transactionId,
+        debt_id: balanceDialog.debtId,
+        update_balance: updateBalance,
+        new_balance: updateBalance ? parseFloat(newBalance) : undefined,
+      },
+      { onSuccess: () => setBalanceDialog(null) }
+    );
   }
 
   return (
@@ -114,10 +173,80 @@ export function TransactionsPage() {
               transactions={filtered}
               categories={categories ?? []}
               onCategoryChange={handleCategoryChange}
+              debts={debts}
+              onDebtLink={handleDebtLink}
             />
           )}
         </CardContent>
       </Card>
+
+      {/* Balance Update Dialog */}
+      <Dialog
+        open={!!balanceDialog}
+        onOpenChange={(open) => {
+          if (!open) setBalanceDialog(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Link to {balanceDialog?.debtName}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This transaction will be linked as a payment for{" "}
+            <strong>{balanceDialog?.debtName}</strong>.
+          </p>
+
+          <div className="flex items-center gap-3 rounded-md border p-3">
+            <Switch
+              id="update_balance"
+              checked={updateBalance}
+              onCheckedChange={setUpdateBalance}
+            />
+            <Label htmlFor="update_balance" className="cursor-pointer text-sm">
+              Update current balance
+            </Label>
+          </div>
+
+          {updateBalance && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="new_balance">
+                New balance (currently{" "}
+                {new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                }).format(balanceDialog?.currentBalance ?? 0)}
+                )
+              </Label>
+              <Input
+                id="new_balance"
+                type="number"
+                step="0.01"
+                min="0"
+                value={newBalance}
+                onChange={(e) => setNewBalance(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBalanceDialog(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBalanceDialogConfirm}
+              disabled={linkTransaction.isPending}
+            >
+              {linkTransaction.isPending ? "Linking..." : "Link Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

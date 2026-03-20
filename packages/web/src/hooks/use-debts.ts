@@ -6,6 +6,8 @@ import type {
   UpdateDebtInput,
   DebtProjection,
   DebtPayoffStrategy,
+  DebtPayment,
+  LinkTransactionToDebtInput,
 } from "@spendoza/shared";
 
 export interface DebtProjectionsResponse {
@@ -66,6 +68,29 @@ export function useDeleteDebt() {
       apiClient(`/debts/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["debts"] });
+    },
+  });
+}
+
+export function useDebtPayments(debtId: string, enabled = true) {
+  return useQuery<DebtPayment[]>({
+    queryKey: ["debts", "payments", debtId],
+    queryFn: () => apiClient(`/debts/${debtId}/payments`),
+    enabled,
+  });
+}
+
+export function useLinkTransactionToDebt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: LinkTransactionToDebtInput) =>
+      apiClient("/debts/link-transaction", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["debts"] });
+      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
 }
