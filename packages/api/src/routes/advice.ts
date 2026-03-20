@@ -1,5 +1,5 @@
 import { Router, type Response } from "express";
-import { askAdviceSchema, ADVICE_DAILY_LIMITS } from "@spendoza/shared";
+import { askAdviceSchema, followUpAdviceSchema, ADVICE_DAILY_LIMITS, MAX_THREAD_MESSAGES } from "@spendoza/shared";
 import type { SubscriptionTier } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
@@ -146,10 +146,10 @@ router.get("/history", async (req, res: Response) => {
 
   const { data, error } = await db
     .from("advice_questions")
-    .select("id, question, answer, created_at")
+    .select("id, question, answer, thread_id, message_index, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(100);
 
   if (error) {
     return res.status(400).json({ error: error.message });
@@ -216,17 +216,115 @@ router.post(
         user_id: user.id,
         question,
         answer,
+        message_index: 0,
       })
-      .select("id, question, answer, created_at")
+      .select("id, question, answer, thread_id, message_index, created_at")
       .single();
 
     if (insertError) {
       console.error("[advice] Failed to save question:", insertError.message);
-      // Still return the answer even if save fails
       return res.status(200).json({
         id: null,
         question,
         answer,
+        thread_id: null,
+        message_index: 0,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    // Set thread_id = own id for new threads
+    if (saved && !saved.thread_id) {
+      await supabaseAdmin
+        .from("advice_questions")
+        .update({ thread_id: saved.id })
+        .eq("id", saved.id);
+      saved.thread_id = saved.id;
+    }
+
+    return res.status(201).json(saved);
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /advice/:threadId/follow-up — follow up on a thread
+// ---------------------------------------------------------------------------
+router.post(
+  "/:threadId/follow-up",
+  validate(followUpAdviceSchema),
+  async (req, res: Response) => {
+    const { user, supabase: db } = req as AuthenticatedRequest;
+    const { threadId } = req.params;
+    const { question } = req.body;
+
+    // 1. Fetch existing thread messages
+    const { data: threadMessages, error: threadError } = await supabaseAdmin
+      .from("advice_questions")
+      .select("id, question, answer, thread_id, message_index, created_at")
+      .eq("thread_id", threadId)
+      .eq("user_id", user.id)
+      .order("message_index", { ascending: true });
+
+    if (threadError || !threadMessages || threadMessages.length === 0) {
+      return res.status(404).json({ error: "Thread not found" });
+    }
+
+    // 2. Check message limit
+    if (threadMessages.length >= MAX_THREAD_MESSAGES) {
+      return res.status(429).json({
+        error: `This conversation has reached the maximum of ${MAX_THREAD_MESSAGES} messages.`,
+        message_count: threadMessages.length,
+        max_messages: MAX_THREAD_MESSAGES,
+      });
+    }
+
+    // 3. Build conversation history
+    const conversationHistory = threadMessages.flatMap((msg) => [
+      { role: "user" as const, content: msg.question },
+      { role: "assistant" as const, content: msg.answer },
+    ]);
+
+    // 4. Gather financial context
+    const context = await fetchFinancialContext(user.id, db);
+
+    // 5. Generate advice with conversation history
+    let answer: string;
+    try {
+      answer = await generateFinancialAdvice(
+        question,
+        context,
+        user.id,
+        conversationHistory
+      );
+    } catch (err) {
+      console.error("[advice] Follow-up LLM call failed:", err);
+      return res.status(500).json({
+        error: "Failed to generate advice. Please try again.",
+      });
+    }
+
+    // 6. Store the follow-up
+    const nextIndex = threadMessages.length;
+    const { data: saved, error: insertError } = await supabaseAdmin
+      .from("advice_questions")
+      .insert({
+        user_id: user.id,
+        question,
+        answer,
+        thread_id: threadId,
+        message_index: nextIndex,
+      })
+      .select("id, question, answer, thread_id, message_index, created_at")
+      .single();
+
+    if (insertError) {
+      console.error("[advice] Failed to save follow-up:", insertError.message);
+      return res.status(200).json({
+        id: null,
+        question,
+        answer,
+        thread_id: threadId,
+        message_index: nextIndex,
         created_at: new Date().toISOString(),
       });
     }
