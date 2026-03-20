@@ -26,6 +26,7 @@ import { PublicLayout } from "@/components/layout/public-layout";
 import { AboutPage } from "@/pages/about";
 import { GettingStartedPage } from "@/pages/getting-started";
 import { Toaster } from "@/components/ui/sonner";
+import { Analytics } from "@vercel/analytics/react";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,7 @@ function App() {
           </Routes>
         </BrowserRouter>
         <Toaster />
+        <Analytics />
       </AuthProvider>
     </QueryClientProvider>
   );
