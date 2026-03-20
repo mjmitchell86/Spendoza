@@ -1,5 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { logLlmUsage } from "./llm-usage-logger";
 import type { ReportData } from "./report-insights";
 
@@ -129,7 +129,8 @@ function buildContextString(ctx: FinancialContext): string {
 export async function generateFinancialAdvice(
   question: string,
   context: FinancialContext,
-  userId: string
+  userId: string,
+  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>
 ): Promise<string> {
   console.log(
     `[financial-advisor] Generating advice for user ${userId}: "${question.slice(0, 80)}..."`
@@ -142,17 +143,38 @@ export async function generateFinancialAdvice(
 
   const contextStr = buildContextString(context);
 
-  const userPrompt = `Here is my complete financial context:
+  let messages: Array<SystemMessage | HumanMessage | AIMessage>;
 
-${contextStr}
+  if (conversationHistory && conversationHistory.length > 0) {
+    messages = [new SystemMessage(SYSTEM_PROMPT)];
 
-My question: ${question}`;
+    // First message includes financial context
+    messages.push(
+      new HumanMessage(
+        `Here is my complete financial context:\n\n${contextStr}\n\nMy question: ${conversationHistory[0].content}`
+      )
+    );
+
+    // Add remaining conversation history
+    for (let i = 1; i < conversationHistory.length; i++) {
+      const msg = conversationHistory[i];
+      if (msg.role === "assistant") {
+        messages.push(new AIMessage(msg.content));
+      } else {
+        messages.push(new HumanMessage(msg.content));
+      }
+    }
+
+    // Add the new follow-up question
+    messages.push(new HumanMessage(question));
+  } else {
+    // Original single-message behavior
+    const userPrompt = `Here is my complete financial context:\n\n${contextStr}\n\nMy question: ${question}`;
+    messages = [new SystemMessage(SYSTEM_PROMPT), new HumanMessage(userPrompt)];
+  }
 
   const startTime = Date.now();
-  const response = await model.invoke([
-    new SystemMessage(SYSTEM_PROMPT),
-    new HumanMessage(userPrompt),
-  ]);
+  const response = await model.invoke(messages);
   const elapsed = Date.now() - startTime;
 
   const content =
