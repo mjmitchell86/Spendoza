@@ -1,10 +1,13 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Pencil, Trash2, ChevronDown, ChevronUp, CreditCard } from "lucide-react";
 import type { Debt, DebtType } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import { formatCurrency } from "@/components/goals/goal-card";
+import { useDebtPayments } from "@/hooks/use-debts";
 
 const DEBT_TYPE_LABELS: Record<DebtType, string> = {
   credit_card: "Credit Card",
@@ -25,6 +28,12 @@ export function DebtCard({
   onEdit: (debt: Debt) => void;
   onDelete: (id: string) => void;
 }) {
+  const [showPayments, setShowPayments] = useState(false);
+  const { data: payments } = useDebtPayments(
+    debt.id,
+    showPayments && debt.debt_type === "credit_card"
+  );
+
   const paidOff =
     debt.original_balance > 0
       ? ((debt.original_balance - debt.current_balance) /
@@ -32,6 +41,8 @@ export function DebtCard({
         100
       : 0;
   const paidPct = Math.min(Math.max(paidOff, 0), 100);
+
+  const isCreditCard = debt.debt_type === "credit_card";
 
   return (
     <Card>
@@ -80,6 +91,59 @@ export function DebtCard({
             className="h-2.5 [&>[data-slot=progress-indicator]]:bg-green-500"
           />
         </div>
+
+        {/* Payment History for Credit Cards */}
+        {isCreditCard && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setShowPayments(!showPayments)}
+              className="flex w-full items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <CreditCard className="size-3.5" />
+              Linked Payments
+              {showPayments ? (
+                <ChevronUp className="ml-auto size-3.5" />
+              ) : (
+                <ChevronDown className="ml-auto size-3.5" />
+              )}
+            </button>
+
+            {showPayments && (
+              <div className="mt-2">
+                <Separator className="mb-2" />
+                {!payments || payments.length === 0 ? (
+                  <p className="py-2 text-xs text-muted-foreground">
+                    No payments linked yet. Payments from bank statements will be
+                    automatically linked.
+                  </p>
+                ) : (
+                  <div className="max-h-48 space-y-1.5 overflow-y-auto">
+                    {payments.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between rounded-md bg-muted/50 px-2.5 py-1.5 text-xs"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{p.description}</p>
+                          <p className="text-muted-foreground">
+                            {new Date(p.date + "T00:00:00").toLocaleDateString(
+                              "en-US",
+                              { month: "short", day: "numeric", year: "numeric" }
+                            )}
+                          </p>
+                        </div>
+                        <span className="ml-2 shrink-0 font-mono text-green-600">
+                          -{formatCurrency(p.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -15,6 +15,7 @@ export interface AllocationBreakdown {
 
 export interface DebtSummary {
   total_balance: number;
+  credit_card_balance: number;
   total_minimum_payments: number;
   monthly_interest_cost: number;
   highest_rate_debt: { name: string; rate: number; balance: number } | null;
@@ -70,7 +71,7 @@ Respond ONLY with the bullet points, no introduction or conclusion.
 
 If spending allocation data is provided, comment on how the user's needs/wants/savings split compares to the 50/30/20 guideline. Highlight any category that significantly exceeds its benchmark.
 
-If debt information is provided, comment on the debt-to-income ratio and suggest prioritizing high-interest debt payoff if applicable.
+If debt information is provided, comment on the debt-to-income ratio and suggest prioritizing high-interest debt payoff if applicable. Pay special attention to credit card debt as it typically carries the highest interest rates.
 
 If a financial health score is provided, acknowledge the score and highlight the weakest factor as a priority area for improvement. Frame suggestions positively and encouragingly.`;
 
@@ -91,7 +92,7 @@ Maintain a warm, celebratory New Year's tone — acknowledge progress, highlight
 
 If spending allocation data is provided, comment on how the user's needs/wants/savings split compares to the 50/30/20 guideline. Highlight any category that significantly exceeds its benchmark.
 
-If debt information is provided, comment on the debt-to-income ratio and suggest prioritizing high-interest debt payoff if applicable.
+If debt information is provided, comment on the debt-to-income ratio and suggest prioritizing high-interest debt payoff if applicable. Pay special attention to credit card debt as it typically carries the highest interest rates.
 
 If a financial health score is provided, acknowledge the score and highlight the weakest factor as a priority area for improvement. Frame suggestions positively and encouragingly.`;
 
@@ -109,7 +110,7 @@ Respond ONLY with the bullet points, no introduction or conclusion.
 
 If spending allocation data is provided, comment on how the user's needs/wants/savings split compares to the 50/30/20 guideline. Highlight any category that significantly exceeds its benchmark.
 
-If debt information is provided, comment on the debt-to-income ratio and suggest prioritizing high-interest debt payoff if applicable.
+If debt information is provided, comment on the debt-to-income ratio and suggest prioritizing high-interest debt payoff if applicable. Pay special attention to credit card debt as it typically carries the highest interest rates.
 
 If a financial health score is provided, acknowledge the score and highlight the weakest factor as a priority area for improvement. Frame suggestions positively and encouragingly.`;
 
@@ -159,6 +160,7 @@ export async function generateInsights(
   const debtSection = reportData.debt_summary
     ? `\nDebt Summary:
   - Total debt balance: $${reportData.debt_summary.total_balance.toFixed(2)}
+  - Credit card debt: $${reportData.debt_summary.credit_card_balance.toFixed(2)}
   - Monthly minimum payments: $${reportData.debt_summary.total_minimum_payments.toFixed(2)}
   - Monthly interest cost: $${reportData.debt_summary.monthly_interest_cost.toFixed(2)}
   - Debt-to-income ratio: ${(reportData.debt_summary.debt_to_income_ratio * 100).toFixed(1)}%
@@ -270,6 +272,7 @@ export async function generateQuarterlyInsights(
   const debtSection = reportData.debt_summary
     ? `\nDebt Summary:
   - Total debt balance: $${reportData.debt_summary.total_balance.toFixed(2)}
+  - Credit card debt: $${reportData.debt_summary.credit_card_balance.toFixed(2)}
   - Monthly minimum payments: $${reportData.debt_summary.total_minimum_payments.toFixed(2)}
   - Monthly interest cost: $${reportData.debt_summary.monthly_interest_cost.toFixed(2)}
   - Debt-to-income ratio: ${(reportData.debt_summary.debt_to_income_ratio * 100).toFixed(1)}%
@@ -386,6 +389,7 @@ export async function generateAnnualInsights(
   const debtSection = reportData.debt_summary
     ? `\nDebt Summary:
   - Total debt balance: $${reportData.debt_summary.total_balance.toFixed(2)}
+  - Credit card debt: $${reportData.debt_summary.credit_card_balance.toFixed(2)}
   - Monthly minimum payments: $${reportData.debt_summary.total_minimum_payments.toFixed(2)}
   - Monthly interest cost: $${reportData.debt_summary.monthly_interest_cost.toFixed(2)}
   - Debt-to-income ratio: ${(reportData.debt_summary.debt_to_income_ratio * 100).toFixed(1)}%

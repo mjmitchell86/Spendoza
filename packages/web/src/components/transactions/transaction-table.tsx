@@ -1,4 +1,4 @@
-import type { Transaction, Category } from "@spendoza/shared";
+import type { Transaction, Category, Debt } from "@spendoza/shared";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -36,6 +36,8 @@ interface TransactionTableProps {
   categories: Category[];
   onCategoryChange: (transactionId: string, category: string | null) => void;
   showTypeColumn?: boolean;
+  debts?: Debt[];
+  onDebtLink?: (transactionId: string, debtId: string | null) => void;
 }
 
 export function TransactionTable({
@@ -43,7 +45,10 @@ export function TransactionTable({
   categories,
   onCategoryChange,
   showTypeColumn = true,
+  debts,
+  onDebtLink,
 }: TransactionTableProps) {
+  const creditCardDebts = debts?.filter((d) => d.debt_type === "credit_card") ?? [];
   if (transactions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -60,6 +65,7 @@ export function TransactionTable({
           <TableHead>Description</TableHead>
           <TableHead>Amount</TableHead>
           <TableHead>Category</TableHead>
+          {creditCardDebts.length > 0 && <TableHead>Debt</TableHead>}
           {showTypeColumn && <TableHead>Type</TableHead>}
         </TableRow>
       </TableHeader>
@@ -103,6 +109,39 @@ export function TransactionTable({
                 </SelectContent>
               </Select>
             </TableCell>
+            {creditCardDebts.length > 0 && (
+              <TableCell>
+                {txn.type === "debit" && onDebtLink ? (
+                  <Select
+                    value={txn.matched_debt_id ?? "__none__"}
+                    onValueChange={(value) =>
+                      onDebtLink(
+                        txn.id,
+                        value === "__none__" ? null : value
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[120px] sm:w-[140px]">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {creditCardDebts.map((debt) => (
+                        <SelectItem key={debt.id} value={debt.id}>
+                          {debt.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : txn.matched_debt_id ? (
+                  <Badge variant="outline">
+                    {creditCardDebts.find(
+                      (d) => d.id === txn.matched_debt_id
+                    )?.name ?? "Linked"}
+                  </Badge>
+                ) : null}
+              </TableCell>
+            )}
             {showTypeColumn && (
               <TableCell>
                 <Badge
