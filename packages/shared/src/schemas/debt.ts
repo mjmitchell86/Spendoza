@@ -59,6 +59,28 @@ export interface DebtProjection {
   payoff_date: string;
 }
 
+// ---------------------------------------------------------------------------
+// Link transaction to debt
+// ---------------------------------------------------------------------------
+export const linkTransactionToDebtSchema = z.object({
+  transaction_id: z.string().uuid(),
+  debt_id: z.string().uuid().nullable(),
+  update_balance: z.boolean().optional().default(false),
+  new_balance: z.number().min(0).optional(),
+});
+export type LinkTransactionToDebtInput = z.infer<typeof linkTransactionToDebtSchema>;
+
+// ---------------------------------------------------------------------------
+// Debt payment (returned from API)
+// ---------------------------------------------------------------------------
+export interface DebtPayment {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  bank_statement_id: string;
+}
+
 export interface DebtPayoffStrategy {
   strategy: "avalanche" | "snowball";
   debts: DebtProjection[];

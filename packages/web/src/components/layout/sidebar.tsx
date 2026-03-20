@@ -10,6 +10,7 @@ import {
   Target,
   CreditCard,
   Landmark,
+  MessageCircle,
   ShieldAlert,
   Info,
 } from "lucide-react";
@@ -38,6 +39,7 @@ const navSections = [
     items: [
       { to: "/goals", label: "Goals", icon: Target },
       { to: "/debts", label: "Debts", icon: Landmark },
+      { to: "/advice", label: "Advisor", icon: MessageCircle },
     ],
   },
   {

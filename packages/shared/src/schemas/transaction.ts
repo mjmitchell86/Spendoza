@@ -13,6 +13,7 @@ export const updateTransactionSchema = z.object({
   ai_category: z.string().nullable().optional(),
   matched_expense_id: z.string().uuid().nullable().optional(),
   matched_income_id: z.string().uuid().nullable().optional(),
+  matched_debt_id: z.string().uuid().nullable().optional(),
 });
 
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
@@ -59,5 +60,6 @@ export interface Transaction {
   ai_category: string | null;
   matched_expense_id: string | null;
   matched_income_id: string | null;
+  matched_debt_id: string | null;
   created_at: string;
 }
