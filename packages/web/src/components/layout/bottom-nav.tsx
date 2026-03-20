@@ -12,6 +12,7 @@ import {
   ArrowLeftRight,
   CreditCard,
   Landmark,
+  MessageCircle,
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ const moreItems = [
   { to: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { to: "/bank-statements", label: "Bank Statements", icon: FileText },
   { to: "/debts", label: "Debts", icon: Landmark },
+  { to: "/advice", label: "Advisor", icon: MessageCircle },
   { to: "/household", label: "Household", icon: Users },
   { to: "/billing", label: "Billing", icon: CreditCard },
   { to: "/about", label: "About", icon: Info },

@@ -17,6 +17,7 @@ export const TIER_LIMITS = {
     goals: false,
     plaid: false,
     household: false,
+    advice_questions_per_day: 0,
   },
   starter: {
     statements_per_month: Infinity,
@@ -25,6 +26,7 @@ export const TIER_LIMITS = {
     goals: true,
     plaid: false,
     household: false,
+    advice_questions_per_day: 2,
   },
   pro: {
     statements_per_month: Infinity,
@@ -33,6 +35,7 @@ export const TIER_LIMITS = {
     goals: true,
     plaid: true,
     household: true,
+    advice_questions_per_day: 5,
   },
 } as const;
 
