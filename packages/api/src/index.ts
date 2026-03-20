@@ -20,6 +20,7 @@ import emailsRouter from "./routes/emails";
 import webhooksRouter from "./routes/webhooks";
 import billingRouter from "./routes/billing";
 import adminRouter from "./routes/admin";
+import adviceRouter from "./routes/advice";
 import { requireAuth } from "./middleware/auth";
 import { requireTier } from "./middleware/require-tier";
 import { errorHandler } from "./middleware/error-handler";
@@ -84,6 +85,7 @@ app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/goals", requireAuth, requireTier("starter"), goalsRouter);
 app.use("/api/debts", requireAuth, requireTier("starter"), debtsRouter);
 app.use("/api/emails", emailsRouter);
+app.use("/api/advice", requireAuth, adviceRouter);
 app.use("/api/admin", adminRouter);
 
 // Catch-all for unmatched routes

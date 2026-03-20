@@ -25,6 +25,7 @@ import { AdminUsersPage } from "@/pages/admin-users";
 import { PublicLayout } from "@/components/layout/public-layout";
 import { AboutPage } from "@/pages/about";
 import { GettingStartedPage } from "@/pages/getting-started";
+import { AdvicePage } from "@/pages/advice";
 import { Toaster } from "@/components/ui/sonner";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -59,6 +60,7 @@ function App() {
                 />
                 <Route path="/goals" element={<GoalsPage />} />
                 <Route path="/debts" element={<DebtsPage />} />
+                <Route path="/advice" element={<AdvicePage />} />
                 <Route path="/household" element={<HouseholdPage />} />
                 <Route
                   path="/household-dashboard"

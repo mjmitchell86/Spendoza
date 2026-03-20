@@ -11,3 +11,4 @@ export * from "./goal";
 export * from "./debt";
 export * from "./subscription";
 export * from "./admin";
+export * from "./advice";
