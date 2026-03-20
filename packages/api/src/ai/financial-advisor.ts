@@ -32,6 +32,8 @@ Your role:
 - Be encouraging but honest about areas that need improvement
 - Keep responses concise (3-6 paragraphs max)
 - Use the 50/30/20 budgeting guideline as a reference when relevant
+- Pay special attention to credit card debt — it typically carries the highest interest rates and should be prioritized
+- When credit card balances are provided, discuss their impact on overall financial health
 - Never recommend specific investment products, stocks, or securities
 - Remind the user that you provide general financial guidance, not professional financial advice
 
@@ -60,7 +62,11 @@ function buildContextString(ctx: FinancialContext): string {
 
       if (d.debt_summary) {
         const ds = d.debt_summary;
-        line += `\n    Debt: $${ds.total_balance.toFixed(2)} total, ${(ds.debt_to_income_ratio * 100).toFixed(1)}% DTI, ~${ds.estimated_payoff_months} months to payoff`;
+        line += `\n    Debt: $${ds.total_balance.toFixed(2)} total`;
+        if (ds.credit_card_balance > 0) {
+          line += ` (Credit Card: $${ds.credit_card_balance.toFixed(2)})`;
+        }
+        line += `, ${(ds.debt_to_income_ratio * 100).toFixed(1)}% DTI, ~${ds.estimated_payoff_months} months to payoff`;
       }
 
       if (d.by_category.length > 0) {

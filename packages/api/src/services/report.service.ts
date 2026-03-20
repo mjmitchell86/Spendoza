@@ -80,6 +80,9 @@ async function computeDebtSummary(
   if (!debts || debts.length === 0) return undefined;
 
   const totalBalance = debts.reduce((s, d) => s + Number(d.current_balance), 0);
+  const creditCardBalance = debts
+    .filter((d: any) => d.debt_type === "credit_card")
+    .reduce((s, d) => s + Number(d.current_balance), 0);
   const totalMinPayments = debts.reduce((s, d) => s + Number(d.minimum_payment), 0);
   const monthlyInterest = debts.reduce(
     (s, d) => s + (Number(d.current_balance) * Number(d.interest_rate)) / 100 / 12,
@@ -97,6 +100,7 @@ async function computeDebtSummary(
 
   return {
     total_balance: totalBalance,
+    credit_card_balance: creditCardBalance,
     total_minimum_payments: totalMinPayments,
     monthly_interest_cost: Math.round(monthlyInterest * 100) / 100,
     highest_rate_debt: {

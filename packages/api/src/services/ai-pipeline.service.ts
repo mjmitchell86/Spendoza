@@ -7,6 +7,7 @@ import {
 import { matchTransactions } from "../ai/expense-matcher";
 import { detectRecurringBills } from "./bill-detection.service";
 import { detectRecurringIncome } from "./income-detection.service";
+import { linkPaymentsToDebts } from "./debt-payment-linker.service";
 import { generateUserReport, generateHouseholdReport } from "./report.service";
 import { splitCsvByMonth } from "./csv-splitter";
 
@@ -693,6 +694,13 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     await detectRecurringIncome(user_id);
   } catch (err) {
     console.error(`[ai-pipeline] [${statementId}] income detection failed:`, err);
+  }
+
+  // Auto-link credit card payments to debts (non-fatal)
+  try {
+    await linkPaymentsToDebts(user_id);
+  } catch (err) {
+    console.error(`[ai-pipeline] [${statementId}] debt payment linking failed:`, err);
   }
 
   // Auto-generate reports for every month that had transactions inserted (non-fatal)
