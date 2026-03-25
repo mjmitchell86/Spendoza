@@ -3,7 +3,8 @@ import multer from "multer";
 import { uploadBankStatementSchema } from "@spendoza/shared";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
-import { computeFileHash } from "../services/bank-statement.service";
+import { computeFileHash, listBankStatements, getBankStatement } from "../services/bank-statement.service";
+import { toServiceContext } from "../services/context";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -111,13 +112,9 @@ router.post(
 // GET / — list user's bank statements
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  const { data, error } = await db
-    .from("bank_statements")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+  const { data, error } = await listBankStatements(
+    toServiceContext(req as AuthenticatedRequest)
+  );
 
   if (error) {
     return res.status(400).json({ error: error.message });
@@ -130,25 +127,16 @@ router.get("/", async (req, res: Response) => {
 // GET /:id — get statement with parsed transactions
 // ---------------------------------------------------------------------------
 router.get("/:id", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  const { data: statement, error } = await db
-    .from("bank_statements")
-    .select("*")
-    .eq("id", req.params.id)
-    .eq("user_id", user.id)
-    .single();
+  const { statement, transactions, error } = await getBankStatement(
+    toServiceContext(req as AuthenticatedRequest),
+    req.params.id
+  );
 
   if (error || !statement) {
     return res.status(404).json({ error: "Statement not found" });
   }
 
-  const { data: transactions } = await db
-    .from("transactions")
-    .select("*")
-    .eq("bank_statement_id", statement.id);
-
-  return res.status(200).json({ statement, transactions: transactions ?? [] });
+  return res.status(200).json({ statement, transactions });
 });
 
 // ---------------------------------------------------------------------------
