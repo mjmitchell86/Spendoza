@@ -96,8 +96,16 @@ export default async function handler(
 
   const userTier = await getUserTier(userId);
 
+  // ---- Build ServiceContext for tool handlers ----
+  const serviceCtx = await createSessionFromToken(authInfo.token);
+  if (!serviceCtx) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Unauthorized — could not create service context" }));
+    return;
+  }
+
   // ---- MCP server + transport ----
-  const { server } = createMcpServer(userTier);
+  const { server } = createMcpServer(userTier, serviceCtx);
 
   const transport = new StreamableHTTPServerTransport({
     // Stateless: no session ID tracking (serverless-friendly)
