@@ -6,6 +6,8 @@ import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { generateUserReport, generateHouseholdReport } from "../services/report.service";
+import { getProfile, updateProfile } from "../services/profile.service";
+import { toServiceContext } from "../services/context";
 
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
@@ -18,13 +20,7 @@ const router = Router();
 // GET / — get authenticated user's profile
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  const { data, error } = await db
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const { data, error } = await getProfile(toServiceContext(req as AuthenticatedRequest));
 
   if (error || !data) {
     return res.status(404).json({ error: "Profile not found" });
@@ -37,14 +33,10 @@ router.get("/", async (req, res: Response) => {
 // PUT / — update profile fields
 // ---------------------------------------------------------------------------
 router.put("/", validate(updateProfileSchema), async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  const { data, error } = await db
-    .from("profiles")
-    .update(req.body)
-    .eq("id", user.id)
-    .select()
-    .single();
+  const { data, error } = await updateProfile(
+    toServiceContext(req as AuthenticatedRequest),
+    req.body
+  );
 
   if (error) {
     return res.status(400).json({ error: error.message });
