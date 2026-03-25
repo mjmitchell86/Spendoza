@@ -7,6 +7,8 @@ import {
 } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { listTransactions, updateTransaction } from "../services/transaction.service";
+import { toServiceContext } from "../services/context";
 
 const router = Router();
 
@@ -14,33 +16,17 @@ const router = Router();
 // GET / — list transactions (filterable)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  let query = db
-    .from("transactions")
-    .select("*")
-    .eq("user_id", user.id);
-
-  // Optional filters
   const { bank_statement_id, from_date, to_date, type } = req.query;
 
-  if (bank_statement_id) {
-    query = query.eq("bank_statement_id", bank_statement_id as string);
-  }
-
-  if (from_date) {
-    query = query.gte("date", from_date as string);
-  }
-
-  if (to_date) {
-    query = query.lte("date", to_date as string);
-  }
-
-  if (type) {
-    query = query.eq("type", type as string);
-  }
-
-  const { data, error } = await query.order("date", { ascending: false });
+  const { data, error } = await listTransactions(
+    toServiceContext(req as AuthenticatedRequest),
+    {
+      bank_statement_id: bank_statement_id as string | undefined,
+      from_date: from_date as string | undefined,
+      to_date: to_date as string | undefined,
+      type: type as string | undefined,
+    }
+  );
 
   if (error) {
     return res.status(400).json({ error: error.message });
@@ -56,15 +42,11 @@ router.put(
   "/:id",
   validate(updateTransactionSchema),
   async (req, res: Response) => {
-    const { user, supabase: db } = req as AuthenticatedRequest;
-
-    const { data, error } = await db
-      .from("transactions")
-      .update(req.body)
-      .eq("id", req.params.id)
-      .eq("user_id", user.id)
-      .select()
-      .single();
+    const { data, error } = await updateTransaction(
+      toServiceContext(req as AuthenticatedRequest),
+      req.params.id,
+      req.body
+    );
 
     if (error || !data) {
       return res.status(404).json({ error: "Transaction not found" });
