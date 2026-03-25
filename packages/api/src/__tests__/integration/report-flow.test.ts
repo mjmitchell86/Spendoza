@@ -213,11 +213,15 @@ const mockGenerateHouseholdReport = mock(() =>
   })
 );
 const mockGenerateAllReports = mock(() => Promise.resolve());
+const mockGetReport = mock((_ctx: any, _entityType: string, _entityId: string, _month: string) =>
+  Promise.resolve({ data: sampleReport, error: null })
+);
 
 mock.module("../../services/report.service", () => ({
   generateUserReport: mockGenerateUserReport,
   generateHouseholdReport: mockGenerateHouseholdReport,
   generateAllReports: mockGenerateAllReports,
+  getReport: mockGetReport,
 }));
 
 // ---------------------------------------------------------------------------
@@ -264,6 +268,7 @@ function resetMocks() {
   mockGenerateUserReport.mockClear();
   mockGenerateHouseholdReport.mockClear();
   mockGenerateAllReports.mockClear();
+  mockGetReport.mockClear();
 
   mockGetUser.mockImplementation(() =>
     Promise.resolve({
@@ -281,6 +286,9 @@ function resetMocks() {
     Promise.resolve(sampleReport)
   );
   mockGenerateAllReports.mockImplementation(() => Promise.resolve());
+  mockGetReport.mockImplementation((_ctx: any, _entityType: string, _entityId: string, _month: string) =>
+    Promise.resolve({ data: sampleReport, error: null })
+  );
 }
 
 // ===========================================================================
@@ -447,12 +455,9 @@ describe("Report Flow: Generate -> Verify -> Rate Limit -> Cache", () => {
   it("Step 6: Returns 404 when no report exists for a month", async () => {
     resetMocks();
 
-    adminResults = {
-      reports: {
-        selectSingle: { data: null, error: null },
-        selectMaybeSingle: { data: null, error: null },
-      },
-    };
+    mockGetReport.mockImplementation(() =>
+      Promise.resolve({ data: null, error: null })
+    );
 
     const res = await fetch(`${baseUrl}/api/reports/personal?month=2025-06-01`, {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },

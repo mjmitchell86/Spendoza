@@ -226,11 +226,15 @@ const mockGenerateHouseholdReport = mock(() =>
   Promise.resolve(sampleHouseholdReport)
 );
 const mockGenerateAllReports = mock(() => Promise.resolve());
+const mockGetReport = mock((_ctx: any, _entityType: string, _entityId: string, _month: string) =>
+  Promise.resolve({ data: sampleReport, error: null })
+);
 
 mock.module("../../services/report.service", () => ({
   generateUserReport: mockGenerateUserReport,
   generateHouseholdReport: mockGenerateHouseholdReport,
   generateAllReports: mockGenerateAllReports,
+  getReport: mockGetReport,
 }));
 
 // ---------------------------------------------------------------------------
@@ -285,6 +289,7 @@ beforeEach(() => {
   mockGenerateUserReport.mockClear();
   mockGenerateHouseholdReport.mockClear();
   mockGenerateAllReports.mockClear();
+  mockGetReport.mockClear();
 
   mockGetUser.mockImplementation(() =>
     Promise.resolve({
@@ -305,6 +310,9 @@ beforeEach(() => {
     Promise.resolve(sampleHouseholdReport)
   );
   mockGenerateAllReports.mockImplementation(() => Promise.resolve());
+  mockGetReport.mockImplementation((_ctx: any, _entityType: string, _entityId: string, _month: string) =>
+    Promise.resolve({ data: sampleReport, error: null })
+  );
 
   adminResults = {
     reports: {
@@ -365,9 +373,9 @@ describe("GET /api/reports/personal", () => {
   });
 
   it("returns 404 when no report exists", async () => {
-    // Route uses req.supabase (RLS client)
-    rlsResults.reports.selectSingle = { data: null, error: null };
-    rlsResults.reports.selectMaybeSingle = { data: null, error: null };
+    mockGetReport.mockImplementation(() =>
+      Promise.resolve({ data: null, error: null })
+    );
 
     const res = await fetch(url("2026-01-01"), {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
@@ -395,15 +403,9 @@ describe("GET /api/reports/household", () => {
   };
 
   it("returns 200 with household report", async () => {
-    // Route uses req.supabase (RLS client) for profiles + reports queries
-    rlsResults.reports.selectSingle = {
-      data: sampleHouseholdReport,
-      error: null,
-    };
-    rlsResults.reports.selectMaybeSingle = {
-      data: sampleHouseholdReport,
-      error: null,
-    };
+    mockGetReport.mockImplementation(() =>
+      Promise.resolve({ data: sampleHouseholdReport, error: null })
+    );
 
     const res = await fetch(url("2026-01-01"), {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },

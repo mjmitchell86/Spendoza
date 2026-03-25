@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../lib/supabase";
 import { generateInsights, type ReportData } from "../ai/report-insights";
 import type { AllocationBreakdown, DebtSummary } from "../ai/report-insights";
 import { calculateHealthScore } from "./health-score.service";
+import type { ServiceContext } from "./context";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -568,4 +569,24 @@ export async function generateAllReports(month: Date): Promise<void> {
       );
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// getReport — fetch a single report by entity type, entity ID, and month
+// ---------------------------------------------------------------------------
+export async function getReport(
+  ctx: ServiceContext,
+  entityType: "user" | "household",
+  entityId: string,
+  month: string
+) {
+  return ctx.supabase
+    .from("reports")
+    .select("*")
+    .eq("entity_type", entityType)
+    .eq("entity_id", entityId)
+    .eq("report_month", month)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .single();
 }

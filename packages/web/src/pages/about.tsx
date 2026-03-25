@@ -6,6 +6,7 @@ import {
   Mail,
   Users,
   Check,
+  Cpu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -57,6 +58,18 @@ const features = [
       "AI-generated financial insights",
       "Weekly email summaries",
       "Export and share anytime",
+    ],
+  },
+  {
+    icon: Cpu,
+    title: "MCP Server",
+    description:
+      "Connect Spendoza to AI assistants like Claude Desktop using the Model Context Protocol. Ask questions about your finances, create goals, and manage expenses — all through natural conversation.",
+    bullets: [
+      "Works with any MCP-compatible AI client",
+      "Secure browser-based authentication",
+      "Available on all plans — features match your tier",
+      "Read and manage your financial data conversationally",
     ],
   },
   {

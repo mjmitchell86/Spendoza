@@ -5,7 +5,9 @@ import {
   generateUserReport,
   generateHouseholdReport,
   generateAllReports,
+  getReport,
 } from "../services/report.service";
+import { toServiceContext } from "../services/context";
 import {
   generatePersonalPdfForUser,
   generateHouseholdPdfForHousehold,
@@ -33,16 +35,11 @@ function parseMonth(monthParam?: string): string {
 // GET /personal — get latest personal report
 // ---------------------------------------------------------------------------
 router.get("/personal", requireAuth, async (req: Request, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const authReq = req as AuthenticatedRequest;
   const month = parseMonth(req.query.month as string | undefined);
+  const ctx = toServiceContext(authReq);
 
-  const { data: report } = await db
-    .from("reports")
-    .select("*")
-    .eq("entity_type", "user")
-    .eq("entity_id", user.id)
-    .eq("report_month", month)
-    .maybeSingle();
+  const { data: report } = await getReport(ctx, "user", authReq.user.id, month);
 
   if (!report) {
     return res.status(404).json({ error: "Report not found for this month" });
@@ -55,14 +52,15 @@ router.get("/personal", requireAuth, async (req: Request, res: Response) => {
 // GET /household — get latest household report
 // ---------------------------------------------------------------------------
 router.get("/household", requireAuth, async (req: Request, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const authReq = req as AuthenticatedRequest;
   const month = parseMonth(req.query.month as string | undefined);
+  const ctx = toServiceContext(authReq);
 
   // Look up user's household
-  const { data: profile } = await db
+  const { data: profile } = await authReq.supabase
     .from("profiles")
     .select("household_id")
-    .eq("id", user.id)
+    .eq("id", authReq.user.id)
     .single();
 
   if (!profile?.household_id) {
@@ -71,13 +69,7 @@ router.get("/household", requireAuth, async (req: Request, res: Response) => {
       .json({ error: "You are not a member of a household" });
   }
 
-  const { data: report } = await db
-    .from("reports")
-    .select("*")
-    .eq("entity_type", "household")
-    .eq("entity_id", profile.household_id)
-    .eq("report_month", month)
-    .maybeSingle();
+  const { data: report } = await getReport(ctx, "household", profile.household_id, month);
 
   if (!report) {
     return res.status(404).json({ error: "Report not found for this month" });
