@@ -26,6 +26,7 @@ import { PublicLayout } from "@/components/layout/public-layout";
 import { AboutPage } from "@/pages/about";
 import { GettingStartedPage } from "@/pages/getting-started";
 import { AdvicePage } from "@/pages/advice";
+import { McpPage } from "@/pages/mcp";
 import { Toaster } from "@/components/ui/sonner";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -66,6 +67,7 @@ function App() {
                   path="/household-dashboard"
                   element={<Navigate to="/household" replace />}
                 />
+                <Route path="/mcp" element={<McpPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/billing" element={<BillingPage />} />
                 <Route element={<AdminGuard />}>

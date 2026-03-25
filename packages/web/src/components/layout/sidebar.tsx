@@ -13,6 +13,7 @@ import {
   MessageCircle,
   ShieldAlert,
   Info,
+  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProfile } from "@/hooks/use-profile";
@@ -47,6 +48,7 @@ const navSections = [
     items: [
       { to: "/household", label: "Household", icon: Users },
       { to: "/billing", label: "Billing", icon: CreditCard },
+      { to: "/mcp", label: "MCP", icon: Cpu },
       { to: "/about", label: "About", icon: Info },
     ],
   },

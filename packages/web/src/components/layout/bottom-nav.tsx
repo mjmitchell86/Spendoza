@@ -13,6 +13,7 @@ import {
   CreditCard,
   Landmark,
   MessageCircle,
+  Cpu,
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ const moreItems = [
   { to: "/advice", label: "Advisor", icon: MessageCircle },
   { to: "/household", label: "Household", icon: Users },
   { to: "/billing", label: "Billing", icon: CreditCard },
+  { to: "/mcp", label: "MCP", icon: Cpu },
   { to: "/about", label: "About", icon: Info },
 ];
 
