@@ -2,6 +2,13 @@ import { Router, type Response } from "express";
 import { createCategorySchema, updateCategorySchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { toServiceContext } from "../services/context";
+import {
+  listCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+} from "../services/category.service";
 
 const router = Router();
 
@@ -9,18 +16,9 @@ const router = Router();
 // GET / — list user's categories (system defaults + custom)
 // ---------------------------------------------------------------------------
 router.get("/", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  const { data, error } = await db
-    .from("categories")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("name");
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
+  const ctx = toServiceContext(req as AuthenticatedRequest);
+  const { data, error } = await listCategories(ctx);
+  if (error) return res.status(400).json({ error: error.message });
   return res.status(200).json(data);
 });
 
@@ -28,18 +26,9 @@ router.get("/", async (req, res: Response) => {
 // POST / — create custom category
 // ---------------------------------------------------------------------------
 router.post("/", validate(createCategorySchema), async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  const { data, error } = await db
-    .from("categories")
-    .insert({ ...req.body, user_id: user.id })
-    .select()
-    .single();
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
-
+  const ctx = toServiceContext(req as AuthenticatedRequest);
+  const { data, error } = await createCategory(ctx, req.body);
+  if (error) return res.status(400).json({ error: error.message });
   return res.status(201).json(data);
 });
 
@@ -47,20 +36,9 @@ router.post("/", validate(createCategorySchema), async (req, res: Response) => {
 // PUT /:id — update category (name, icon, is_shared_with_household)
 // ---------------------------------------------------------------------------
 router.put("/:id", validate(updateCategorySchema), async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  const { data, error } = await db
-    .from("categories")
-    .update(req.body)
-    .eq("id", req.params.id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
-
-  if (error || !data) {
-    return res.status(404).json({ error: "Category not found" });
-  }
-
+  const ctx = toServiceContext(req as AuthenticatedRequest);
+  const { data, error } = await updateCategory(ctx, req.params.id, req.body);
+  if (error || !data) return res.status(404).json({ error: "Category not found" });
   return res.status(200).json(data);
 });
 
@@ -68,35 +46,12 @@ router.put("/:id", validate(updateCategorySchema), async (req, res: Response) =>
 // DELETE /:id — delete (only custom, not system defaults)
 // ---------------------------------------------------------------------------
 router.delete("/:id", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
-
-  // First, look up the category to check if it's a system default
-  const { data: category, error: lookupError } = await db
-    .from("categories")
-    .select("*")
-    .eq("id", req.params.id)
-    .eq("user_id", user.id)
-    .single();
-
-  if (lookupError || !category) {
-    return res.status(404).json({ error: "Category not found" });
-  }
-
-  if (category.is_system_default) {
-    return res.status(403).json({ error: "Cannot delete system default categories" });
-  }
-
-  const { error: deleteError } = await db
-    .from("categories")
-    .delete()
-    .eq("id", req.params.id)
-    .eq("user_id", user.id);
-
-  if (deleteError) {
-    return res.status(400).json({ error: deleteError.message });
-  }
-
-  return res.status(204).send();
+  const ctx = toServiceContext(req as AuthenticatedRequest);
+  const { error } = await deleteCategory(ctx, req.params.id);
+  if (!error) return res.status(204).send();
+  if ((error as any).status === 403) return res.status(403).json({ error: error.message });
+  if (error.message === "Category not found") return res.status(404).json({ error: error.message });
+  return res.status(400).json({ error: error.message });
 });
 
 export default router;
