@@ -162,10 +162,15 @@ mock.module("../../ai/report-insights", () => ({
   generateQuarterlyInsights: mock(() => Promise.resolve("quarterly test insights")),
   generateAnnualInsights: mock(() => Promise.resolve("annual test insights")),
 }));
+const mockGetReport = mock((_ctx: any, _entityType: string, _entityId: string, _month: string) =>
+  Promise.resolve({ data: { id: "r1", entity_type: _entityType, entity_id: _entityId, report_month: _month, report_data: { total_income: 5000, total_expenses: 2000, savings_rate: 60, by_category: [], top_categories: [] }, ai_insights: "test" }, error: null })
+);
+
 mock.module("../../services/report.service", () => ({
   generateUserReport: mock(() => Promise.resolve({ id: "r1", report_data: { total_income: 5000, total_expenses: 2000, savings_rate: 60, by_category: [], top_categories: [] }, ai_insights: "test" })),
   generateHouseholdReport: mock(() => Promise.resolve({ id: "r2", entity_type: "household", report_data: { total_income: 10000, total_expenses: 4000, savings_rate: 60, by_category: [], top_categories: [] }, ai_insights: "test" })),
   generateAllReports: mock(() => Promise.resolve()),
+  getReport: mockGetReport,
 }));
 mock.module("../../services/pdf-export.service", () => ({
   generatePersonalPdfForUser: mock(() => Promise.resolve({ pdfBuffer: Buffer.from("fake-pdf"), reportData: {}, aiInsights: null })),
@@ -244,11 +249,15 @@ function resetMocks() {
   mockRlsFrom.mockClear();
   mockAdminFrom.mockClear();
   mockGetUser.mockClear();
+  mockGetReport.mockClear();
   mockGetUser.mockImplementation(() =>
     Promise.resolve({
       data: { user: { id: TEST_USER_ID, email: TEST_EMAIL } },
       error: null,
     })
+  );
+  mockGetReport.mockImplementation((_ctx: any, _entityType: string, _entityId: string, _month: string) =>
+    Promise.resolve({ data: { id: "r1", entity_type: _entityType, entity_id: _entityId, report_month: _month, report_data: { total_income: 5000, total_expenses: 2000, savings_rate: 60, by_category: [], top_categories: [] }, ai_insights: "test" }, error: null })
   );
 }
 
@@ -625,41 +634,18 @@ describe("Household join uses admin client", () => {
 describe("Report endpoints use RLS client", () => {
   beforeEach(resetMocks);
 
-  it("GET /api/reports/personal uses RLS client", async () => {
-    rlsResults = {
-      reports: {
-        selectMaybeSingle: {
-          data: {
-            id: "r1",
-            entity_type: "user",
-            entity_id: TEST_USER_ID,
-            report_month: "2026-02-01",
-            report_data: { total_income: 5000, total_expenses: 2000, savings_rate: 60, by_category: [], top_categories: [] },
-            ai_insights: "test",
-          },
-          error: null,
-        },
-        selectSingle: {
-          data: {
-            id: "r1",
-            entity_type: "user",
-            entity_id: TEST_USER_ID,
-            report_month: "2026-02-01",
-            report_data: { total_income: 5000, total_expenses: 2000, savings_rate: 60, by_category: [], top_categories: [] },
-            ai_insights: "test",
-          },
-          error: null,
-        },
-      },
-    };
-
+  it("GET /api/reports/personal uses service layer with user-scoped context", async () => {
     const res = await fetch(`${baseUrl}/api/reports/personal?month=2026-02-01`, {
       headers: authHeaders(),
     });
 
     expect(res.status).toBe(200);
-    const rlsReportCalls = rlsCalls.filter((c) => c.table === "reports");
-    expect(rlsReportCalls.length).toBeGreaterThan(0);
+    // Verify getReport was called with the user's entity type and ID (not admin-scoped)
+    expect(mockGetReport).toHaveBeenCalledTimes(1);
+    const [_ctx, entityType, entityId] = mockGetReport.mock.calls[0];
+    expect(entityType).toBe("user");
+    expect(entityId).toBe(TEST_USER_ID);
+    // Verify no direct admin DB calls were made for the reports table
     const adminReportCalls = adminCalls.filter((c) => c.table === "reports");
     expect(adminReportCalls.length).toBe(0);
   });
