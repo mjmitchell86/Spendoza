@@ -16,6 +16,24 @@ export const createHouseholdSchema = z.object({
 export type CreateHouseholdInput = z.infer<typeof createHouseholdSchema>;
 
 // ---------------------------------------------------------------------------
+// Rename household
+// ---------------------------------------------------------------------------
+export const renameHouseholdSchema = z.object({
+  name: z.string().min(1).max(100),
+});
+
+export type RenameHouseholdInput = z.infer<typeof renameHouseholdSchema>;
+
+// ---------------------------------------------------------------------------
+// Delete household (the head types the household name to confirm)
+// ---------------------------------------------------------------------------
+export const deleteHouseholdSchema = z.object({
+  confirm_name: z.string(),
+});
+
+export type DeleteHouseholdInput = z.infer<typeof deleteHouseholdSchema>;
+
+// ---------------------------------------------------------------------------
 // Invite member
 // ---------------------------------------------------------------------------
 export const inviteToHouseholdSchema = z.object({
@@ -32,6 +50,15 @@ export const joinHouseholdSchema = z.object({
 });
 
 export type JoinHouseholdInput = z.infer<typeof joinHouseholdSchema>;
+
+// ---------------------------------------------------------------------------
+// Accept or decline an invitation (the code from the invitation email)
+// ---------------------------------------------------------------------------
+export const invitationCodeSchema = z.object({
+  code: z.string().min(1).max(64),
+});
+
+export type InvitationCodeInput = z.infer<typeof invitationCodeSchema>;
 
 // ---------------------------------------------------------------------------
 // Update sharing preferences
@@ -60,7 +87,9 @@ export interface Household {
   id: string;
   name: string;
   head_of_household_id: string;
-  invite_code: string;
+  // Sent to the head only (it lives in the head-only household_invite_codes
+  // table), and absent when the household has no code row yet.
+  invite_code?: string;
   created_at: string;
 }
 

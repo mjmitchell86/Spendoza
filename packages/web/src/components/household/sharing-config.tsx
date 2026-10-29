@@ -3,6 +3,7 @@ import type { IncomeSharingMode, ExpenseSharingMode } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ActionError } from "@/components/plan-error";
 import { useUpdateSharing } from "@/hooks/use-household";
 
 interface SharingConfigProps {
@@ -25,7 +26,7 @@ export function SharingConfig({
   );
   const [expenseMode, setExpenseMode] =
     useState<ExpenseSharingMode>(currentExpenseMode);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -41,19 +42,13 @@ export function SharingConfig({
       });
       setSuccess(true);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to update sharing"
-      );
+      setError(err);
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <ActionError error={error} fallback="Failed to update sharing" />
       {success && (
         <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           Sharing preferences updated.

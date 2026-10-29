@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+// Only same-origin relative paths: "/x" but not "//host" or "/\\host".
+function safeReturnTo(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return null;
+  return value;
+}
+
 export function LoginPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +38,12 @@ export function LoginPage() {
 
     try {
       await signIn(email, password);
-      navigate("/dashboard", { replace: true });
+      const from = location.state?.from as { pathname?: string; search?: string } | undefined;
+      const target =
+        safeReturnTo(from?.pathname ? from.pathname + (from.search ?? "") : null) ??
+        safeReturnTo(searchParams.get("next")) ??
+        "/dashboard";
+      navigate(target, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to sign in");
     } finally {

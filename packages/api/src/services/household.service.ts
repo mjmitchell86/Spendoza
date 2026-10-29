@@ -1,8 +1,22 @@
 import crypto from "crypto";
+import {
+  HOUSEHOLD_CODE_ALPHABET,
+  HOUSEHOLD_CODE_LENGTH,
+} from "@spendoza/shared";
 import type { ServiceContext } from "./context";
 
 export function generateInviteCode(): string {
   return crypto.randomBytes(4).toString("hex"); // 8-character hex string
+}
+
+/** 10-character Crockford base-32 household invite code (lowercase). */
+export function generateHouseholdCode(): string {
+  let code = "";
+  for (let i = 0; i < HOUSEHOLD_CODE_LENGTH; i++) {
+    code +=
+      HOUSEHOLD_CODE_ALPHABET[crypto.randomInt(HOUSEHOLD_CODE_ALPHABET.length)];
+  }
+  return code;
 }
 
 export async function resolveEntity(
@@ -43,6 +57,64 @@ export async function resolveEntity(
     data: null,
     error: { message: "Invalid entity_type" },
   };
+}
+
+const HOUSEHOLD_OWNED_TABLES = [
+  "reports",
+  "goals",
+  "debts",
+  "email_jobs",
+  "email_report_log",
+] as const;
+
+/**
+ * Delete a household and everything it owns. Only rows with
+ * entity_type = 'household' for this household are removed; members keep all
+ * of their personal data. Retry-safe order: the join code first, then owned
+ * rows, then the household itself. profiles.household_id is ON DELETE SET
+ * NULL, so the last step detaches every member atomically; a failure before
+ * it leaves the household, its head and its members intact.
+ */
+export async function deleteHousehold(householdId: string): Promise<void> {
+  // Loaded lazily: this module is imported by services that otherwise never
+  // touch the admin client (and by their tests, which have no Supabase env).
+  const { supabaseAdmin } = await import("../lib/supabase");
+  const check = (error: { message: string } | null) => {
+    if (error) throw new Error(error.message);
+  };
+
+  // Nobody can join mid-delete
+  check(
+    (
+      await supabaseAdmin
+        .from("household_invite_codes")
+        .delete()
+        .eq("household_id", householdId)
+    ).error
+  );
+  check(
+    (
+      await supabaseAdmin
+        .from("household_invitations")
+        .delete()
+        .eq("household_id", householdId)
+    ).error
+  );
+  for (const table of HOUSEHOLD_OWNED_TABLES) {
+    check(
+      (
+        await supabaseAdmin
+          .from(table)
+          .delete()
+          .eq("entity_type", "household")
+          .eq("entity_id", householdId)
+      ).error
+    );
+  }
+  check(
+    (await supabaseAdmin.from("households").delete().eq("id", householdId))
+      .error
+  );
 }
 
 export async function validateHouseholdMembership(

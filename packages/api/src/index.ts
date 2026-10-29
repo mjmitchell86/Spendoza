@@ -86,8 +86,9 @@ app.use("/api/income", requireAuth, incomeRouter);
 app.use("/api/expenses", requireAuth, expensesRouter);
 app.use("/api/bank-statements", requireAuth, bankStatementsRouter);
 app.use("/api/transactions", requireAuth, transactionsRouter);
-app.use("/api/households", requireAuth, requireTier("pro"), householdsRouter);
-app.use("/api/household", requireAuth, requireTier("pro"), householdsRouter);
+// Household plan checks are per route (middleware/require-household-plan.ts)
+app.use("/api/households", requireAuth, householdsRouter);
+app.use("/api/household", requireAuth, householdsRouter);
 app.use("/api/invite-codes", requireAuth, inviteCodesRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/internal", internalRouter);

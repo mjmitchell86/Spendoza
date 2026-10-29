@@ -597,9 +597,9 @@ describe("Household join uses admin client", () => {
 
   it("POST /api/households/:id/join uses admin for household lookup", async () => {
     adminResults = {
-      households: {
+      household_invite_codes: {
         selectSingle: {
-          data: { id: TEST_HOUSEHOLD_ID, invite_code: "ABC123", head_of_household_id: "other-user" },
+          data: { household_id: TEST_HOUSEHOLD_ID, code: "abc123" },
           error: null,
         },
       },
@@ -622,8 +622,10 @@ describe("Household join uses admin client", () => {
     });
 
     expect(res.status).toBe(200);
-    // Join handler uses admin for household + profile reads
-    const adminHouseholdCalls = adminCalls.filter((c) => c.table === "households");
+    // Join handler uses admin for invite-code + profile reads
+    const adminHouseholdCalls = adminCalls.filter(
+      (c) => c.table === "household_invite_codes"
+    );
     expect(adminHouseholdCalls.length).toBeGreaterThan(0);
   });
 });
