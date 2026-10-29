@@ -354,14 +354,15 @@ describe("POST /api/households", () => {
   const url = () => `${baseUrl}/api/households`;
 
   beforeEach(() => {
-    rlsResults.profiles.selectSingle = {
+    // Creating requires that the caller is not in a household yet
+    adminResults.profiles.selectSingle = {
       data: { ...memberProfile, household_id: null },
       error: null,
     };
   });
 
   it("returns 400 when the caller already belongs to a household", async () => {
-    rlsResults.profiles.selectSingle = {
+    adminResults.profiles.selectSingle = {
       data: { ...memberProfile, household_id: "other-household" },
       error: null,
     };
@@ -421,6 +422,56 @@ describe("POST /api/households", () => {
       code: NEW_HOUSEHOLD_CODE,
     });
     expect(NEW_HOUSEHOLD_CODE).toHaveLength(10);
+  });
+
+  // Clients can no longer insert households or set profiles.household_id
+  // themselves (column grants), so every write goes through the service role.
+  it("inserts the household and sets the caller's household_id with the service role", async () => {
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "Test Household" }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(adminCalls).toContainEqual({
+      table: "households",
+      op: "insert",
+      args: {
+        name: "Test Household",
+        head_of_household_id: TEST_USER_ID,
+      },
+    });
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "update",
+      args: { household_id: HOUSEHOLD_ID },
+    });
+    expect(rlsCalls.some((c) => c.op === "insert" || c.op === "update")).toBe(false);
+  });
+
+  it("deletes the household and answers 500 when setting household_id fails", async () => {
+    adminResults.profiles.updateResult = {
+      data: null,
+      error: { message: "update failed" },
+    };
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "Test Household" }),
+    });
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("Failed to create household");
+    expect(
+      adminCalls.some((c) => c.table === "households" && c.op === "delete")
+    ).toBe(true);
   });
 
   it("returns 400 with invalid data", async () => {
@@ -1261,6 +1312,90 @@ describe("POST /api/households/leave (sole member)", () => {
     });
 
     expect(res.status).toBe(200);
+    expect((await res.json()).message).toBe(
+      "Left and deleted household successfully"
+    );
+    // deleteHousehold (service role) detaches the member via ON DELETE SET NULL
     expect(mockDeleteHousehold).toHaveBeenCalledWith(HOUSEHOLD_ID);
+    expect(rlsCalls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("answers 500 when deleting the household fails", async () => {
+    adminResults.profiles.selectList = {
+      data: [{ id: TEST_USER_ID }],
+      error: null,
+    };
+    mockDeleteHousehold.mockImplementationOnce(() =>
+      Promise.reject(new Error("boom"))
+    );
+
+    const res = await fetch(`${baseUrl}/api/households/leave`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("Failed to leave the household");
+  });
+});
+
+// ===========================================================================
+// POST /api/households/leave — a member leaving
+// profiles.household_id is not client-writable, so leaving clears it with the
+// service role.
+// ===========================================================================
+describe("POST /api/households/leave", () => {
+  const url = () => `${baseUrl}/api/households/leave`;
+
+  it("clears a member's household_id with the service role", async () => {
+    adminResults.households.selectSingle = {
+      data: { head_of_household_id: "someone-else" },
+      error: null,
+    };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.message).toBe("Left household successfully");
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "update",
+      args: { household_id: null },
+    });
+    expect(rlsCalls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("answers 500 when clearing household_id fails", async () => {
+    adminResults.households.selectSingle = {
+      data: { head_of_household_id: "someone-else" },
+      error: null,
+    };
+    adminResults.profiles.updateResult = {
+      data: null,
+      error: { message: "update failed" },
+    };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("Failed to leave the household");
+  });
+
+  it("returns 400 for a head with other members", async () => {
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(400);
+    expect(adminCalls.some((c) => c.op === "update")).toBe(false);
+    expect(mockDeleteHousehold).not.toHaveBeenCalled();
   });
 });

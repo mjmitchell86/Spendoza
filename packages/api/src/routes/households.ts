@@ -637,7 +637,7 @@ async function updateSharingHandler(req: Request, res: Response) {
 }
 
 async function leaveHandler(req: Request, res: Response) {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { user } = req as AuthenticatedRequest;
   const householdId = req.params.id;
 
   // Check if user is head of household
@@ -661,11 +661,12 @@ async function leaveHandler(req: Request, res: Response) {
     }
 
     // Sole member — deleting the household also clears their household_id
+    // (ON DELETE SET NULL; deleteHousehold uses the service role)
     try {
       await deleteHousehold(householdId);
     } catch (err) {
       console.error("[households] delete on leave failed:", err);
-      return res.status(500).json({ error: "Failed to leave household" });
+      return res.status(500).json({ error: "Failed to leave the household" });
     }
 
     return res
@@ -673,7 +674,17 @@ async function leaveHandler(req: Request, res: Response) {
       .json({ message: "Left and deleted household successfully" });
   }
 
-  await db.from("profiles").update({ household_id: null }).eq("id", user.id);
+  // profiles.household_id is not client-writable, hence the service role
+  const { error: leaveError } = await supabaseAdmin
+    .from("profiles")
+    .update({ household_id: null })
+    .eq("id", user.id)
+    .eq("household_id", householdId);
+
+  if (leaveError) {
+    console.error("[households] leave failed:", leaveError);
+    return res.status(500).json({ error: "Failed to leave the household" });
+  }
 
   return res.status(200).json({ message: "Left household successfully" });
 }
@@ -835,15 +846,19 @@ router.post(
   caller,
   validate(createHouseholdSchema),
   async (req, res: Response) => {
-    const { user, supabase: db } = req as AuthenticatedRequest;
+    const { user } = req as AuthenticatedRequest;
 
-    const { data: existing } = await db
+    // One household per user
+    const { data: existing, error: profileError } = await supabaseAdmin
       .from("profiles")
       .select("household_id")
       .eq("id", user.id)
       .single();
 
-    if (existing?.household_id) {
+    if (profileError || !existing) {
+      return res.status(500).json({ error: "Failed to create household" });
+    }
+    if (existing.household_id) {
       return res
         .status(400)
         .json({ error: "Leave your household before creating a new one" });
@@ -851,7 +866,10 @@ router.post(
 
     const invite_code = generateHouseholdCode();
 
-    const { data: household, error } = await db
+    // Clients cannot insert households or set profiles.household_id
+    // themselves (migration *_lock_profiles_columns.sql), so every write here
+    // uses the service role after the checks above (plan: `caller`).
+    const { data: household, error } = await supabaseAdmin
       .from("households")
       .insert({
         name: req.body.name,
@@ -876,10 +894,16 @@ router.post(
     }
 
     // Update the user's profile to set household_id
-    await db
+    const { error: joinError } = await supabaseAdmin
       .from("profiles")
       .update({ household_id: household.id })
       .eq("id", user.id);
+
+    if (joinError) {
+      // Don't leave a household without its head in it (the code row cascades)
+      await supabaseAdmin.from("households").delete().eq("id", household.id);
+      return res.status(500).json({ error: "Failed to create household" });
+    }
 
     return res.status(201).json({ ...household, invite_code });
   }
