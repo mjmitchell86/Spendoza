@@ -2,7 +2,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { ParsedTransaction } from "./pdf-parser";
 import { logLlmUsage } from "./llm-usage-logger";
-import { OPENAI_MODEL } from "./model";
+import { OPENAI_FAST_MODEL } from "./model";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,7 +58,7 @@ export async function classifyTransactions(
   );
 
   const model = new ChatOpenAI({
-    modelName: OPENAI_MODEL,
+    modelName: OPENAI_FAST_MODEL,
     timeout: 120_000,
   });
 
@@ -108,7 +108,7 @@ ${transactionList}`;
         void logLlmUsage({
           user_id: null,
           call_type: "categorization",
-          model: OPENAI_MODEL,
+          model: OPENAI_FAST_MODEL,
           input_tokens: usage.input_tokens ?? 0,
           output_tokens: usage.output_tokens ?? 0,
           total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
