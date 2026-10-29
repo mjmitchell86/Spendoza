@@ -39,6 +39,17 @@ export const updateProfileSchema = z.object({
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 // ---------------------------------------------------------------------------
+// Delete account (API input) — the user must type DELETE to confirm
+// ---------------------------------------------------------------------------
+export const DELETE_ACCOUNT_CONFIRMATION = "DELETE";
+
+export const deleteAccountSchema = z.object({
+  confirm: z.literal(DELETE_ACCOUNT_CONFIRMATION),
+});
+
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
+
+// ---------------------------------------------------------------------------
 // Full profile row
 // ---------------------------------------------------------------------------
 export interface Profile {

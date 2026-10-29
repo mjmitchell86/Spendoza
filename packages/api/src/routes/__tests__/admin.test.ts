@@ -9,6 +9,21 @@ let currentUserId = TEST_ADMIN_ID;
 let adminResults: Record<string, any> = {};
 let mockServiceCalls: Record<string, any[]> = {};
 
+class MockAccountDeletionError extends Error {
+  constructor(public code: string, message: string) {
+    super(message);
+  }
+}
+let deleteAccountImpl: (userId: string) => Promise<void> = () => Promise.resolve();
+
+mock.module("../../services/account.service", () => ({
+  deleteAccount: (...args: any[]) => {
+    mockServiceCalls.deleteAccount = args;
+    return deleteAccountImpl(args[0]);
+  },
+  AccountDeletionError: MockAccountDeletionError,
+}));
+
 mock.module("../../services/report.service", () => ({
   generateUserReport: (...args: any[]) => {
     mockServiceCalls.generateUserReport = args;
@@ -318,6 +333,52 @@ describe("DELETE /api/admin/users/:id", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("Cannot delete your own account");
+    expect(mockServiceCalls.deleteAccount).toBeUndefined();
+  });
+
+  it("deletes the user through the account service (same cleanup as self-service)", async () => {
+    deleteAccountImpl = () => Promise.resolve();
+    const res = await fetch(`http://localhost:${port}/api/admin/users/${TEST_USER_ID}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: true });
+    expect(mockServiceCalls.deleteAccount).toEqual([TEST_USER_ID]);
+  });
+
+  it("returns 404 when the user does not exist", async () => {
+    deleteAccountImpl = () =>
+      Promise.reject(new MockAccountDeletionError("NOT_FOUND", "User not found"));
+    const res = await fetch(`http://localhost:${port}/api/admin/users/missing-user`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 409 when the user heads a household with other members", async () => {
+    deleteAccountImpl = () =>
+      Promise.reject(
+        new MockAccountDeletionError("HOUSEHOLD_HEAD_HAS_MEMBERS", "Transfer ownership first.")
+      );
+    const res = await fetch(`http://localhost:${port}/api/admin/users/${TEST_USER_ID}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe("Transfer ownership first.");
+  });
+
+  it("returns 500 when deletion fails", async () => {
+    deleteAccountImpl = () =>
+      Promise.reject(new MockAccountDeletionError("FAILED", "Account deletion failed."));
+    const res = await fetch(`http://localhost:${port}/api/admin/users/${TEST_USER_ID}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(res.status).toBe(500);
   });
 });
 
