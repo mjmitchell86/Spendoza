@@ -231,6 +231,28 @@ struct CheckupRefreshTests {
         #expect(request.earliestBeginDate == Self.date(2026, 11, 3, 10))
     }
 
+    /// R42: an all-zero report (left by onboarding before the server fix) is no check-up: no "55 Fair" widget,
+    /// no notification.
+    @Test func anEmptyReportIsNoCheckup() async {
+        let stub = StubAPI()
+        stub.reports = [oct: StubAPI.emptyReport(oct), sep: StubAPI.emptyReport(sep)]
+        let h = harness(stub)
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
+        #expect(await h.refresh.run(api: stub, now: Self.date(2026, 11, 2)) == nil)
+        #expect(h.snapshots.load() == nil)
+        #expect(h.notifier.posted.isEmpty)
+        #expect(h.defaults.string(forKey: CheckupRefresh.lastNotifiedKey) == nil)
+    }
+
+    @Test func anEmptyMonthIsSkippedForTheRealOneBeforeIt() async {
+        let stub = api()
+        stub.reports[oct] = StubAPI.emptyReport(oct)
+        let h = harness(stub)
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
+        #expect(await h.refresh.run(api: stub, now: Self.date(2026, 11, 2)) == "Your September check-up is ready")
+        #expect(h.snapshots.load()?.month == sep)
+    }
+
     // MARK: The background task
 
     /// 11.55: a signed-out phone stops asking for daily runs.

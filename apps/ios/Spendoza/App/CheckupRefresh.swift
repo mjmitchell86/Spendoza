@@ -170,13 +170,14 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
         defaults.removeObject(forKey: lastNotifiedKey)
     }
 
-    /// Walks back from last month until a report answers; any error ends the search quietly.
+    /// Walks back from last month until a report with data answers (an all-zero report is no check-up, R42);
+    /// any error ends the search quietly.
     private func latestReport(api: any SpendozaAPI, now: Date) async -> Report? {
         var month = Month(date: now, calendar: calendar).previous
         for _ in 0..<Self.lookback {
             if Task.isCancelled { return nil }
             do {
-                if let report = try await api.personalReport(month) { return report }
+                if let report = try await api.personalReport(month), !report.data.hasNoData { return report }
             } catch {
                 return nil
             }
