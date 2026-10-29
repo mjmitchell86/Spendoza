@@ -27,6 +27,13 @@ final class AccessibilityAuditUITests: XCTestCase {
         // One audit from the top of the page covers the whole page: it reports off-screen elements too (it scrolls to
         // them). Auditing from a scrolled position gave false contrast findings for text the audit itself scrolled
         // under the top edge, so the page is audited only from the top.
+        // Positive control (12.66): the page's last element is below the fold and already in the hierarchy the audit
+        // reads, so the audit can reach it (nothing on these pages is built lazily).
+        let last = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", screen.lastElementPrefix)).firstMatch
+        XCTAssertTrue(last.exists, "\(screen.rawValue): '\(screen.lastElementPrefix)' isn't in the hierarchy")
+        XCTAssertGreaterThan(last.frame.minY, app.windows.firstMatch.frame.maxY,
+                             "\(screen.rawValue): '\(screen.lastElementPrefix)' is on screen, so it proves nothing")
         try app.performAccessibilityAudit()
 
         // Then walk the page a half-screen at a time to the end, for the screenshots (reviewed by eye for clipping)

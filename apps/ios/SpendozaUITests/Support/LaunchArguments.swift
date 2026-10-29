@@ -38,9 +38,44 @@ enum Launch {
     }
 }
 
+/// A text on the page and where its top edge is.
+struct ScrollMark: Equatable {
+    let label: String
+    let y: CGFloat
+}
+
+extension Launch {
+    /// Brightness (0 dark ... 1 light) of one pixel (x from the left, y from the top). The pixel is drawn into a
+    /// known RGBA layout first, so a screenshot's byte order (often BGRA) can't swap red and blue (12.65).
+    static func brightness(of image: CGImage, x: Int, y: Int) -> Double? {
+        var pixel = [UInt8](repeating: 0, count: 4)
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+        else { return nil }
+        context.draw(image, in: CGRect(x: -x, y: -(image.height - 1 - y), width: image.width, height: image.height))
+        return (0.299 * Double(pixel[0]) + 0.587 * Double(pixel[1]) + 0.114 * Double(pixel[2])) / 255
+    }
+
+    /// The probe's mark when it's in `texts` (tree order), else the first labelled text's; nil when there is none.
+    static func scrollMark(probe: String, texts: [(label: String, minY: CGFloat)]) -> ScrollMark? {
+        if let hit = texts.first(where: { $0.label == probe }) { return ScrollMark(label: probe, y: hit.minY) }
+        return texts.first { !$0.label.isEmpty }.map { ScrollMark(label: $0.label, y: $0.minY) }
+    }
+}
+
 /// The three screens of the Health flow.
 enum Screen: String, CaseIterable {
     case health = "Health", wants = "Wants", diningOut = "Dining out"
+
+    /// How the last element on the page (with the stub's data) starts.
+    var lastElementPrefix: String {
+        switch self {
+        case .health: "Dining out is up $310 since September"
+        case .wants: "Set a $150 budget for Dining out"
+        case .diningOut: "Panera Bread"
+        }
+    }
 }
 
 extension XCUIApplication {
@@ -67,25 +102,31 @@ extension XCUIApplication {
     /// Brightness (0 dark ... 1 light) of the page background, read from a screenshot pixel beside the content.
     @MainActor
     func backgroundBrightness() -> Double {
-        guard let cg = screenshot().image.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data)
-        else { return -1 }
-        let bytesPerPixel = cg.bitsPerPixel / 8
-        let x = 4, y = cg.height / 2
-        let offset = y * cg.bytesPerRow + x * bytesPerPixel
-        let r = Double(bytes[offset]), g = Double(bytes[offset + 1]), b = Double(bytes[offset + 2])
-        return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        guard let cg = screenshot().image.cgImage else { return -1 }
+        return Launch.brightness(of: cg, x: 4, y: cg.height / 2) ?? -1
     }
 
-    /// Where the page is scrolled to: the top edge of the screen's heading, read from the accessibility tree (not
-    /// from pixels, so the clock or a fading scroll indicator can't affect it).
+    /// Where the page is scrolled to, read from the accessibility tree (not from pixels, so the clock or a fading
+    /// scroll indicator can't affect it): the top edge of the screen's heading, or of the first text on the page
+    /// once the heading has scrolled out of the tree. Never NaN (12.67).
     @MainActor
-    func scrollPosition(_ screen: Screen) -> CGFloat {
+    func scrollPosition(_ screen: Screen) -> ScrollMark? {
         let probe = switch screen {
         case .health: "Your money's health"
         case .wants: "What moved it"
         case .diningOut: "Transactions"
         }
-        return (try? staticTexts[probe].snapshot().frame.minY) ?? .nan
+        if let frame = try? staticTexts[probe].snapshot().frame {
+            return ScrollMark(label: probe, y: frame.minY)
+        }
+        guard let root = try? snapshot() else { return nil }
+        var texts: [(label: String, minY: CGFloat)] = []
+        func walk(_ node: XCUIElementSnapshot) {
+            if node.elementType == .staticText { texts.append((node.label, node.frame.minY)) }
+            node.children.forEach(walk)
+        }
+        walk(root)
+        return Launch.scrollMark(probe: probe, texts: texts)
     }
 
     /// Waits until the page stops moving (the same position twice in a row).
