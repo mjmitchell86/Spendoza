@@ -9,4 +9,4 @@ SIM="$(scripts/sim-name.sh)"
 rm -rf build/TestResults.xcresult
 xcodebuild test -project Spendoza.xcodeproj -scheme Spendoza \
   -destination "platform=iOS Simulator,name=$SIM" -derivedDataPath build \
-  -resultBundlePath build/TestResults.xcresult -quiet
+  -resultBundlePath build/TestResults.xcresult -collect-test-diagnostics never -quiet
