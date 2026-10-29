@@ -4,6 +4,7 @@ import { z } from "zod";
 import { logLlmUsage } from "./llm-usage-logger";
 import { goalSuggestionSchema, type GoalSuggestion } from "@spendoza/shared";
 import type { ReportData } from "./report-insights";
+import { OPENAI_MODEL } from "./model";
 
 const SYSTEM_PROMPT = `You are a certified financial planner. Given a monthly financial summary, spending allocation analysis, debt information, and existing goals, suggest 2-4 new financial goals following this priority framework (suggest from the highest applicable priority):
 
@@ -45,7 +46,7 @@ export async function generateGoalSuggestions(
   );
 
   const model = new ChatOpenAI({
-    modelName: "gpt-5-mini",
+    modelName: OPENAI_MODEL,
     timeout: 60_000,
   });
 
@@ -140,7 +141,7 @@ Suggest 2-4 new goals following the priority framework.`;
       void logLlmUsage({
         user_id: null,
         call_type: "goal_suggestions",
-        model: "gpt-5-mini",
+        model: OPENAI_MODEL,
         input_tokens: usage.input_tokens ?? 0,
         output_tokens: usage.output_tokens ?? 0,
         total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),

@@ -797,14 +797,14 @@ _Last updated: February 2026_
 
 | Service | Usage | Est. Monthly Cost |
 |---------|-------|-------------------|
-| **OpenAI (gpt-5-mini)** | Bank statement parsing, classification, insights, goal suggestions, friendly name generation | $1--5 |
+| **OpenAI (gpt-6.1-terra)** | Bank statement parsing, classification, insights, goal suggestions, friendly name generation | $1--5 |
 | **Vercel** | Serverless function execution beyond included credits | $0--5 |
 | **Supabase** | Storage and bandwidth overages | $0--5 |
 | | | **$1--15** |
 
 ### Estimated Total: ~$175--185/mo
 
-> **Cost optimization note:** Pausing the test Supabase project when not actively developing saves $25/mo. OpenAI usage is negligible at low user counts -- gpt-5-mini costs $0.25/1M input tokens and $2.00/1M output tokens.
+> **Cost optimization note:** Pausing the test Supabase project when not actively developing saves $25/mo. OpenAI usage is negligible at low user counts -- gpt-6.1-terra costs $1.00/1M input tokens and $5.00/1M output tokens.
 
 ## Package Documentation
 

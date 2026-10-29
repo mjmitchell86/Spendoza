@@ -12,6 +12,7 @@ interface LlmUsageEntry {
 // Cost per token by model (USD)
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "gpt-5-mini": { input: 0.25 / 1_000_000, output: 2.0 / 1_000_000 },
+  "gpt-6.1-terra": { input: 1.0 / 1_000_000, output: 5.0 / 1_000_000 },
 };
 
 function estimateCost(model: string, inputTokens: number, outputTokens: number): number | null {

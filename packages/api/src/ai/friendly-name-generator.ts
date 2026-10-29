@@ -1,5 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { OPENAI_MODEL } from "./model";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -36,7 +37,7 @@ export async function generateFriendlyNames(
   );
 
   const model = new ChatOpenAI({
-    modelName: "gpt-5-mini",
+    modelName: OPENAI_MODEL,
     timeout: 30_000,
   });
 

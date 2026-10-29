@@ -1,6 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { logLlmUsage } from "./llm-usage-logger";
+import { OPENAI_MODEL } from "./model";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -131,7 +132,7 @@ export async function generateInsights(
   );
 
   const model = new ChatOpenAI({
-    modelName: "gpt-5-mini",
+    modelName: OPENAI_MODEL,
     timeout: 60_000,
   });
 
@@ -215,7 +216,7 @@ ${momSection}${allocationSection}${debtSection}${healthSection}`;
       void logLlmUsage({
         user_id: null, // report-insights doesn't have direct user context
         call_type: "insight_generation",
-        model: "gpt-5-mini",
+        model: OPENAI_MODEL,
         input_tokens: usage.input_tokens ?? 0,
         output_tokens: usage.output_tokens ?? 0,
         total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
@@ -249,7 +250,7 @@ export async function generateQuarterlyInsights(
   );
 
   const model = new ChatOpenAI({
-    modelName: "gpt-5-mini",
+    modelName: OPENAI_MODEL,
     timeout: 60_000,
   });
 
@@ -325,7 +326,7 @@ Top Categories: ${reportData.top_categories.join(", ") || "None"}${allocationSec
       void logLlmUsage({
         user_id: null,
         call_type: "quarterly_insight_generation",
-        model: "gpt-5-mini",
+        model: OPENAI_MODEL,
         input_tokens: usage.input_tokens ?? 0,
         output_tokens: usage.output_tokens ?? 0,
         total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
@@ -366,7 +367,7 @@ export async function generateAnnualInsights(
   );
 
   const model = new ChatOpenAI({
-    modelName: "gpt-5-mini",
+    modelName: OPENAI_MODEL,
     timeout: 90_000,
   });
 
@@ -448,7 +449,7 @@ Top Categories: ${reportData.top_categories.join(", ") || "None"}${allocationSec
       void logLlmUsage({
         user_id: null,
         call_type: "annual_insight_generation",
-        model: "gpt-5-mini",
+        model: OPENAI_MODEL,
         input_tokens: usage.input_tokens ?? 0,
         output_tokens: usage.output_tokens ?? 0,
         total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
