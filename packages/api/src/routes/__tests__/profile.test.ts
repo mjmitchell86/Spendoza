@@ -163,6 +163,23 @@ class MockAccountDeletionError extends Error {
 }
 const mockDeleteAccount = mock((_userId: string) => Promise.resolve());
 
+// ---------------------------------------------------------------------------
+// Mock report generation (onboarding triggers it fire-and-forget)
+// ---------------------------------------------------------------------------
+const mockGenerateUserReport = mock(
+  (_userId: string, _month: Date, _force?: boolean, _client?: unknown, _options?: unknown) =>
+    Promise.resolve(null)
+);
+const mockGenerateHouseholdReport = mock(
+  (_householdId: string, _month: Date, _force?: boolean, _client?: unknown, _options?: unknown) =>
+    Promise.resolve(null)
+);
+
+mock.module("../../services/report.service", () => ({
+  generateUserReport: mockGenerateUserReport,
+  generateHouseholdReport: mockGenerateHouseholdReport,
+}));
+
 mock.module("../../services/account.service", () => ({
   deleteAccount: mockDeleteAccount,
   AccountDeletionError: MockAccountDeletionError,
@@ -425,6 +442,30 @@ describe("PUT /api/profile/onboarding", () => {
     expect(body.onboarding_completed).toBe(true);
 
     expect(mockFrom).toHaveBeenCalledWith("profiles");
+  });
+
+  it("generates this and last month's reports only when they have transactions", async () => {
+    mockGenerateUserReport.mockClear();
+    mockUpdateSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...profileData, onboarding_completed: true }, error: null })
+    );
+
+    const res = await fetch(url(), {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+    expect(res.status).toBe(200);
+
+    // Generation runs after the response; let it finish.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(mockGenerateUserReport).toHaveBeenCalledTimes(2);
+    for (const call of mockGenerateUserReport.mock.calls) {
+      expect(call[0]).toBe(TEST_USER_ID);
+      expect(call[2]).toBe(true);
+      // A new account with no statements must not get an all-zero report (it would read as a real score).
+      expect(call[4]).toEqual({ skipIfEmpty: true });
+    }
   });
 
   it("returns 401 without auth token", async () => {
