@@ -68,10 +68,12 @@ const HOUSEHOLD_OWNED_TABLES = [
 ] as const;
 
 /**
- * Delete a household and everything it owns. Members stay (their
- * household_id is cleared) along with all of their personal data; only rows
- * with entity_type = 'household' for this household are removed. The invite
- * code row goes with the household via its FK cascade.
+ * Delete a household and everything it owns. Only rows with
+ * entity_type = 'household' for this household are removed; members keep all
+ * of their personal data. Retry-safe order: the join code first, then owned
+ * rows, then the household itself. profiles.household_id is ON DELETE SET
+ * NULL, so the last step detaches every member atomically; a failure before
+ * it leaves the household, its head and its members intact.
  */
 export async function deleteHousehold(householdId: string): Promise<void> {
   // Loaded lazily: this module is imported by services that otherwise never
@@ -81,11 +83,12 @@ export async function deleteHousehold(householdId: string): Promise<void> {
     if (error) throw new Error(error.message);
   };
 
+  // Nobody can join mid-delete
   check(
     (
       await supabaseAdmin
-        .from("profiles")
-        .update({ household_id: null })
+        .from("household_invite_codes")
+        .delete()
         .eq("household_id", householdId)
     ).error
   );

@@ -41,12 +41,16 @@ beforeEach(() => {
 });
 
 describe("deleteHousehold", () => {
-  it("clears every member's household_id", async () => {
+  it("issues no profiles update (the FK sets household_id null)", async () => {
     await deleteHousehold(HH);
-    const call = calls.find((c) => c.table === "profiles");
-    expect(call?.op).toBe("update");
-    expect(call?.data).toEqual({ household_id: null });
-    expect(call?.eqs).toEqual([["household_id", HH]]);
+    expect(calls.some((c) => c.table === "profiles")).toBe(false);
+  });
+
+  it("deletes the invite code first", async () => {
+    await deleteHousehold(HH);
+    expect(calls[0].table).toBe("household_invite_codes");
+    expect(calls[0].op).toBe("delete");
+    expect(calls[0].eqs).toEqual([["household_id", HH]]);
   });
 
   it("deletes the household's invitations", async () => {
@@ -79,9 +83,8 @@ describe("deleteHousehold", () => {
     }
   });
 
-  it("clears members first and deletes the household last", async () => {
+  it("deletes the household last", async () => {
     await deleteHousehold(HH);
-    expect(calls[0].table).toBe("profiles");
     const last = calls[calls.length - 1];
     expect(last.table).toBe("households");
     expect(last.op).toBe("delete");
@@ -91,6 +94,13 @@ describe("deleteHousehold", () => {
   it("throws and does not delete the household if a step fails", async () => {
     failTable = "goals";
     await expect(deleteHousehold(HH)).rejects.toThrow("goals failed");
+    expect(calls.some((c) => c.table === "households")).toBe(false);
+  });
+
+  it("leaves members and the household alone if an owned-table delete fails", async () => {
+    failTable = "debts";
+    await expect(deleteHousehold(HH)).rejects.toThrow("debts failed");
+    expect(calls.some((c) => c.table === "profiles")).toBe(false);
     expect(calls.some((c) => c.table === "households")).toBe(false);
   });
 });
