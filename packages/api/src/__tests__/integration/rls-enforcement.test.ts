@@ -599,7 +599,7 @@ describe("Household join uses admin client", () => {
     adminResults = {
       households: {
         selectSingle: {
-          data: { id: TEST_HOUSEHOLD_ID, invite_code: "ABC123", head_of_household_id: "other-user" },
+          data: { id: TEST_HOUSEHOLD_ID, invite_code: "abc123", head_of_household_id: "other-user" },
           error: null,
         },
       },

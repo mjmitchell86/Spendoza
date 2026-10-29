@@ -18,6 +18,7 @@ const TEST_USER_EMAIL = "test@example.com";
 const TEST_TOKEN = "valid-access-token";
 const HOUSEHOLD_ID = "hh-1";
 const INVITE_CODE = "abc12345";
+const NEW_HOUSEHOLD_CODE = "k3m9p2x7qz";
 
 const householdData = {
   id: HOUSEHOLD_ID,
@@ -181,6 +182,7 @@ const mockGetUser = mock(() =>
 // ---------------------------------------------------------------------------
 mock.module("../../services/household.service", () => ({
   generateInviteCode: () => INVITE_CODE,
+  generateHouseholdCode: () => NEW_HOUSEHOLD_CODE,
 }));
 
 // ---------------------------------------------------------------------------
@@ -317,6 +319,22 @@ describe("POST /api/households", () => {
     expect(body.name).toBe("Test Household");
     expect(body.invite_code).toBe(INVITE_CODE);
     expect(body.head_of_household_id).toBe(TEST_USER_ID);
+  });
+
+  it("creates the household with a 10-character invite code", async () => {
+    await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "Test Household" }),
+    });
+
+    const insert = rlsCalls.find(
+      (c) => c.table === "households" && c.op === "insert"
+    );
+    expect(insert?.args.invite_code).toHaveLength(10);
   });
 
   it("returns 400 with invalid data", async () => {
@@ -501,6 +519,26 @@ describe("POST /api/households/join", () => {
       table: "profiles",
       op: "update",
       args: { household_id: HOUSEHOLD_ID },
+    });
+  });
+
+  it("normalizes a formatted code before looking it up", async () => {
+    adminResults.households.selectMaybeSingle = {
+      data: { ...householdData, invite_code: "abc12345xy" },
+      error: null,
+    };
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+
+    const res = await post({ invite_code: "ABC12-345XY" });
+
+    expect(res.status).toBe(200);
+    expect(adminCalls).toContainEqual({
+      table: "households",
+      op: "select.eq",
+      args: ["invite_code", "abc12345xy"],
     });
   });
 

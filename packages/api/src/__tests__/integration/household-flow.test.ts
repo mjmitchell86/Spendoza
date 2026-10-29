@@ -152,6 +152,7 @@ const mockAdminFrom = mock((...args: any[]) =>
 // ---------------------------------------------------------------------------
 mock.module("../../services/household.service", () => ({
   generateInviteCode: () => INVITE_CODE,
+  generateHouseholdCode: () => INVITE_CODE,
 }));
 
 // ---------------------------------------------------------------------------

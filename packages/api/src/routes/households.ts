@@ -1,4 +1,9 @@
-import { Router, type Request, type Response, type NextFunction } from "express";
+import {
+  Router,
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import rateLimit from "express-rate-limit";
 import {
   createHouseholdSchema,
@@ -6,18 +11,23 @@ import {
   joinHouseholdSchema,
   updateSharingSchema,
   transferOwnershipSchema,
+  normalizeInviteCode,
 } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
-import { generateInviteCode } from "../services/household.service";
+import { generateHouseholdCode } from "../services/household.service";
 
 const router = Router();
 
 // ---------------------------------------------------------------------------
 // Middleware: resolve user's household_id and inject it as req.params.id
 // ---------------------------------------------------------------------------
-async function resolveHousehold(req: Request, res: Response, next: NextFunction) {
+async function resolveHousehold(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   const { user, supabase: db } = req as AuthenticatedRequest;
   const { data: profile } = await db
     .from("profiles")
@@ -112,14 +122,12 @@ async function inviteHandler(req: Request, res: Response) {
   }
 
   // Insert invitation
-  const { error } = await db
-    .from("household_invitations")
-    .insert({
-      household_id: householdId,
-      email: req.body.email,
-      invited_by: user.id,
-      status: "pending",
-    });
+  const { error } = await db.from("household_invitations").insert({
+    household_id: householdId,
+    email: req.body.email,
+    invited_by: user.id,
+    status: "pending",
+  });
 
   if (error) {
     return res.status(400).json({ error: error.message });
@@ -142,7 +150,7 @@ async function joinByCodeHandler(req: Request, res: Response) {
   const { data: household } = await supabaseAdmin
     .from("households")
     .select("*")
-    .eq("invite_code", req.body.invite_code)
+    .eq("invite_code", normalizeInviteCode(req.body.invite_code))
     .maybeSingle();
 
   return joinHousehold(req, res, household);
@@ -156,7 +164,10 @@ async function joinHousehold(
   const { user } = req as AuthenticatedRequest;
 
   // Validate invite code matches household
-  if (!household || household.invite_code !== req.body.invite_code) {
+  if (
+    !household ||
+    household.invite_code !== normalizeInviteCode(req.body.invite_code)
+  ) {
     return res.status(400).json({ error: "Invalid invite code" });
   }
   const householdId = household.id;
@@ -290,24 +301,22 @@ async function leaveHandler(req: Request, res: Response) {
     if ((allMembers?.length ?? 0) > 1) {
       return res
         .status(400)
-        .json({ error: "Head of household cannot leave. Transfer ownership first." });
+        .json({
+          error: "Head of household cannot leave. Transfer ownership first.",
+        });
     }
 
     // Sole member — remove from household then delete it
-    await db
-      .from("profiles")
-      .update({ household_id: null })
-      .eq("id", user.id);
+    await db.from("profiles").update({ household_id: null }).eq("id", user.id);
 
     await supabaseAdmin.from("households").delete().eq("id", householdId);
 
-    return res.status(200).json({ message: "Left and deleted household successfully" });
+    return res
+      .status(200)
+      .json({ message: "Left and deleted household successfully" });
   }
 
-  await db
-    .from("profiles")
-    .update({ household_id: null })
-    .eq("id", user.id);
+  await db.from("profiles").update({ household_id: null }).eq("id", user.id);
 
   return res.status(200).json({ message: "Left household successfully" });
 }
@@ -333,7 +342,9 @@ async function transferOwnershipHandler(req: Request, res: Response) {
 
   // Can't transfer to self
   if (new_head_id === user.id) {
-    return res.status(400).json({ error: "Cannot transfer ownership to yourself" });
+    return res
+      .status(400)
+      .json({ error: "Cannot transfer ownership to yourself" });
   }
 
   // Verify new head is a member of the same household
@@ -344,7 +355,9 @@ async function transferOwnershipHandler(req: Request, res: Response) {
     .single();
 
   if (!targetProfile || targetProfile.household_id !== householdId) {
-    return res.status(400).json({ error: "Target user is not a member of this household" });
+    return res
+      .status(400)
+      .json({ error: "Target user is not a member of this household" });
   }
 
   // Update head_of_household_id
@@ -367,35 +380,51 @@ async function transferOwnershipHandler(req: Request, res: Response) {
 // These MUST be registered before /:id routes to avoid path conflicts.
 // ---------------------------------------------------------------------------
 router.get("/", resolveHousehold, getHouseholdHandler);
-router.post("/", validate(createHouseholdSchema), async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+router.post(
+  "/",
+  validate(createHouseholdSchema),
+  async (req, res: Response) => {
+    const { user, supabase: db } = req as AuthenticatedRequest;
 
-  const invite_code = generateInviteCode();
+    const invite_code = generateHouseholdCode();
 
-  const { data: household, error } = await db
-    .from("households")
-    .insert({
-      name: req.body.name,
-      head_of_household_id: user.id,
-      invite_code,
-    })
-    .select()
-    .single();
+    const { data: household, error } = await db
+      .from("households")
+      .insert({
+        name: req.body.name,
+        head_of_household_id: user.id,
+        invite_code,
+      })
+      .select()
+      .single();
 
-  if (error || !household) {
-    return res.status(400).json({ error: error?.message ?? "Failed to create household" });
+    if (error || !household) {
+      return res
+        .status(400)
+        .json({ error: error?.message ?? "Failed to create household" });
+    }
+
+    // Update the user's profile to set household_id
+    await db
+      .from("profiles")
+      .update({ household_id: household.id })
+      .eq("id", user.id);
+
+    return res.status(201).json(household);
   }
-
-  // Update the user's profile to set household_id
-  await db
-    .from("profiles")
-    .update({ household_id: household.id })
-    .eq("id", user.id);
-
-  return res.status(201).json(household);
-});
-router.put("/sharing", resolveHousehold, validate(updateSharingSchema), updateSharingHandler);
-router.post("/invite", resolveHousehold, validate(inviteToHouseholdSchema), inviteHandler);
+);
+router.put(
+  "/sharing",
+  resolveHousehold,
+  validate(updateSharingSchema),
+  updateSharingHandler
+);
+router.post(
+  "/invite",
+  resolveHousehold,
+  validate(inviteToHouseholdSchema),
+  inviteHandler
+);
 router.post("/leave", resolveHousehold, leaveHandler);
 // The code alone is the credential here, so cap failed guesses per user.
 const joinByCodeLimiter = rateLimit({
@@ -405,8 +434,18 @@ const joinByCodeLimiter = rateLimit({
   keyGenerator: (req) => (req as AuthenticatedRequest).user.id,
   message: { error: "Too many attempts. Try again in 15 minutes." },
 });
-router.post("/join", joinByCodeLimiter, validate(joinHouseholdSchema), joinByCodeHandler);
-router.post("/transfer", resolveHousehold, validate(transferOwnershipSchema), transferOwnershipHandler);
+router.post(
+  "/join",
+  joinByCodeLimiter,
+  validate(joinHouseholdSchema),
+  joinByCodeHandler
+);
+router.post(
+  "/transfer",
+  resolveHousehold,
+  validate(transferOwnershipSchema),
+  transferOwnershipHandler
+);
 router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 
 // ---------------------------------------------------------------------------
@@ -415,7 +454,11 @@ router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 router.get("/:id", getHouseholdHandler);
 router.post("/:id/invite", validate(inviteToHouseholdSchema), inviteHandler);
 router.post("/:id/join", validate(joinHouseholdSchema), joinHandler);
-router.post("/:id/transfer", validate(transferOwnershipSchema), transferOwnershipHandler);
+router.post(
+  "/:id/transfer",
+  validate(transferOwnershipSchema),
+  transferOwnershipHandler
+);
 router.delete("/:id/members/:userId", removeMemberHandler);
 router.put("/:id/sharing", validate(updateSharingSchema), updateSharingHandler);
 

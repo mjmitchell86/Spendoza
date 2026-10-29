@@ -1,8 +1,22 @@
 import crypto from "crypto";
+import {
+  HOUSEHOLD_CODE_ALPHABET,
+  HOUSEHOLD_CODE_LENGTH,
+} from "@spendoza/shared";
 import type { ServiceContext } from "./context";
 
 export function generateInviteCode(): string {
   return crypto.randomBytes(4).toString("hex"); // 8-character hex string
+}
+
+/** 10-character Crockford base-32 household invite code (lowercase). */
+export function generateHouseholdCode(): string {
+  let code = "";
+  for (let i = 0; i < HOUSEHOLD_CODE_LENGTH; i++) {
+    code +=
+      HOUSEHOLD_CODE_ALPHABET[crypto.randomInt(HOUSEHOLD_CODE_ALPHABET.length)];
+  }
+  return code;
 }
 
 export async function resolveEntity(
