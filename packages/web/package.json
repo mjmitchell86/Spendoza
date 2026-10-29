@@ -30,9 +30,13 @@
     "tailwindcss": "^4"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@happy-dom/global-registrator": "^21.0.4",
     "@tailwindcss/vite": "^4",
     "@tanstack/react-query-devtools": "^5",
-    "@eslint/js": "^9.39.1",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

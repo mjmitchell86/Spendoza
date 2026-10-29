@@ -1,9 +1,18 @@
 import { useState, type FormEvent } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Share2, RefreshCw } from "lucide-react";
+import { formatInviteCode } from "@spendoza/shared";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useInviteToHousehold } from "@/hooks/use-household";
+import { useInviteToHousehold, useRotateInviteCode } from "@/hooks/use-household";
 
 interface InviteFormProps {
   inviteCode: string;
@@ -11,10 +20,18 @@ interface InviteFormProps {
 
 export function InviteForm({ inviteCode }: InviteFormProps) {
   const invite = useInviteToHousehold();
+  const rotate = useRotateInviteCode();
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [rotateError, setRotateError] = useState<string | null>(null);
+  // Show the freshly rotated code right away, until the prop catches up.
+  const [rotated, setRotated] = useState<{ from: string; code: string } | null>(null);
+  const currentCode = rotated && rotated.from === inviteCode ? rotated.code : inviteCode;
+  const displayCode = formatInviteCode(currentCode);
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -30,9 +47,28 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
   }
 
   async function handleCopyCode() {
-    await navigator.clipboard.writeText(inviteCode);
+    await navigator.clipboard.writeText(displayCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleShare() {
+    try {
+      await navigator.share({ text: `Join my household on Spendoza with code ${displayCode}` });
+    } catch {
+      // Dismissing the share sheet rejects; nothing to do.
+    }
+  }
+
+  async function handleRotate() {
+    setRotateError(null);
+    try {
+      const result = await rotate.mutateAsync();
+      setRotated({ from: inviteCode, code: result.invite_code });
+      setConfirmOpen(false);
+    } catch (err) {
+      setRotateError(err instanceof Error ? err.message : "Failed to generate a new code");
+    }
   }
 
   return (
@@ -40,29 +76,61 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
       {/* Invite code section */}
       <div className="flex flex-col gap-2">
         <Label>Invite Code</Label>
-        <div className="flex gap-2">
-          <Input
-            value={inviteCode}
-            readOnly
-            className="font-mono"
-          />
+        <div className="rounded-md border bg-muted/40 px-4 py-3 text-center font-mono text-2xl tracking-widest">
+          {displayCode}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => void handleCopyCode()}>
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            Copy
+          </Button>
+          {canShare && (
+            <Button variant="outline" size="sm" onClick={() => void handleShare()}>
+              <Share2 className="size-4" />
+              Share
+            </Button>
+          )}
           <Button
-            variant="outline"
-            size="icon"
-            onClick={() => void handleCopyCode()}
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setRotateError(null);
+              setConfirmOpen(true);
+            }}
           >
-            {copied ? (
-              <Check className="size-4" />
-            ) : (
-              <Copy className="size-4" />
-            )}
-            <span className="sr-only">Copy invite code</span>
+            <RefreshCw className="size-4" />
+            Get a new code
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
           Share this code with people you want to join your household.
         </p>
       </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Get a new code?</DialogTitle>
+            <DialogDescription>
+              Anyone who has the old code won't be able to use it. People already in your
+              household stay.
+            </DialogDescription>
+          </DialogHeader>
+          {rotateError && (
+            <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {rotateError}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleRotate()} disabled={rotate.isPending}>
+              {rotate.isPending ? "Working..." : "Replace code"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Email invite */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">

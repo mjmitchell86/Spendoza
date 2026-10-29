@@ -66,6 +66,21 @@ export function useInviteToHousehold() {
   });
 }
 
+export function useRotateInviteCode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient("/household/invite-code", { method: "POST" }) as Promise<{
+        invite_code: string;
+      }>,
+    onSuccess: ({ invite_code }) => {
+      queryClient.setQueryData<HouseholdData | null>(["household"], (old) =>
+        old ? { ...old, household: { ...old.household, invite_code } } : old,
+      );
+    },
+  });
+}
+
 export function useUpdateSharing() {
   const queryClient = useQueryClient();
   return useMutation({
