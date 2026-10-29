@@ -9,8 +9,9 @@ enum Launch {
         case light = "Light", dark = "Dark"
     }
 
-    /// The app lock in a stubbed launch: off, on with Face ID passing, or on with Face ID always failing.
-    enum Lock { case off, passing, failing }
+    /// The app lock in a stubbed launch: off, on with Face ID passing, on with Face ID always failing, or on with
+    /// Face ID alternating pass (launch), fail (next automatic prompt), pass (the Unlock button).
+    enum Lock { case off, passing, failing, alternating }
 
     @MainActor
     static func stubbed(appearance: Appearance = .light, textSize: String? = nil,
@@ -25,6 +26,7 @@ enum Launch {
         case .off: break
         case .passing: arguments.append("-uiTestLockEnabled")
         case .failing: arguments += ["-uiTestLockEnabled", "-uiTestLockFails"]
+        case .alternating: arguments += ["-uiTestLockEnabled", "-uiTestLockAlternates"]
         }
         app.launchArguments = arguments
         app.launch()

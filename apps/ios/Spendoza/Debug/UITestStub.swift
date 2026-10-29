@@ -50,11 +50,31 @@ enum UITestStub {
         func authenticate(reason: String) async -> Bool { false }
     }
 
-    /// Off unless `-uiTestLockEnabled`; with `-uiTestLockFails` it never unlocks.
+    /// Fails every other time, starting with a pass: the launch unlocks, the next automatic prompt (after a trip to
+    /// the background) fails so the lock can be inspected, and the Unlock button then passes.
+    final class AlternatingAuthenticator: Authenticator, @unchecked Sendable {
+        private let lock = NSLock()
+        private var attempts = 0
+        func authenticate(reason: String) async -> Bool {
+            lock.withLock {
+                attempts += 1
+                return attempts % 2 == 1
+            }
+        }
+    }
+
+    /// Off unless `-uiTestLockEnabled`; with `-uiTestLockFails` it never unlocks, with `-uiTestLockAlternates`
+    /// Face ID alternates pass and fail.
     @MainActor static func lock() -> AppLock {
         let arguments = CommandLine.arguments
-        let authenticator: Authenticator = arguments.contains("-uiTestLockFails")
-            ? FailingAuthenticator() : PassingAuthenticator()
+        let authenticator: Authenticator
+        if arguments.contains("-uiTestLockFails") {
+            authenticator = FailingAuthenticator()
+        } else if arguments.contains("-uiTestLockAlternates") {
+            authenticator = AlternatingAuthenticator()
+        } else {
+            authenticator = PassingAuthenticator()
+        }
         return AppLock(authenticator: authenticator, isEnabled: arguments.contains("-uiTestLockEnabled"))
     }
 

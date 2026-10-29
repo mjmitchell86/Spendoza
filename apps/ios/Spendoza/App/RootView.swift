@@ -8,6 +8,15 @@ struct RootView: View {
     let checkup: CheckupRefresh
     private var lock: AppLock { coordinator.lock }
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(Appearance.defaultsKey) private var appearance: Appearance = .system
+    @State private var overlay = LockOverlay()
+
+    /// Locked: the lock screen. Inactive or in the background while signed in: the privacy cover.
+    private func overlayMode(content: RootContent, covered: Bool) -> LockOverlay.Mode {
+        if covered { return .locked }
+        if scenePhase != .active, content != .signIn, content != .restoring { return .privacy }
+        return .none
+    }
 
     var body: some View {
         let content = rootContent(phase: store.phase, isRestoring: store.isRestoring, loadFailed: store.loadError != nil)
@@ -19,17 +28,28 @@ struct RootView: View {
                 .accessibilityHidden(covered)
                 .allowsHitTesting(!covered)
                 .disabled(covered)
+            // The lock itself is shown by `overlay` in a window above this one, which also covers anything this
+            // screen presents (sheets, full-screen covers). This copy only guards the moment before that window
+            // exists.
             if covered {
                 LockView(coordinator: coordinator)
             }
         }
         .overlay {
-            // App-switcher snapshot cover for every signed-in screen.
+            // App-switcher snapshot cover for every signed-in screen (also shown by `overlay`, above sheets).
             if scenePhase != .active, content != .signIn, content != .restoring, !covered {
                 LockView(coordinator: coordinator, offersUnlock: false)
             }
         }
         .background(Theme.paper.ignoresSafeArea())
+        .background(WindowReader { overlay.attach($0) })
+        .onChange(of: overlayMode(content: content, covered: covered), initial: true) { _, mode in
+            overlay.update(mode: mode, coordinator: coordinator, style: appearance.interfaceStyle)
+        }
+        .onChange(of: appearance) { _, new in
+            overlay.update(mode: overlayMode(content: content, covered: covered), coordinator: coordinator,
+                           style: new.interfaceStyle)
+        }
         .task {
             store.onInteractiveSignIn = { [coordinator] in coordinator.interactiveSignIn() }
             // Every sign-out reaches the lock, including one from "Couldn't load your account" (the phase was
