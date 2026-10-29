@@ -129,6 +129,48 @@ export function useLeaveHousehold() {
   });
 }
 
+export interface MyInvitation {
+  id: string;
+  household_name: string;
+  inviter_name: string;
+  expires_at: string;
+}
+
+export function useMyInvitations() {
+  return useQuery<MyInvitation[]>({
+    queryKey: ["household", "invitations", "mine"],
+    queryFn: () => apiClient("/household/invitations/mine"),
+  });
+}
+
+export function useAcceptInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, code }: { id: string; code: string }) =>
+      apiClient(`/household/invitations/${id}/accept`, {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["household"] });
+    },
+  });
+}
+
+export function useDeclineInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, code }: { id: string; code: string }) =>
+      apiClient(`/household/invitations/${id}/decline`, {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["household", "invitations", "mine"] });
+    },
+  });
+}
+
 export interface HouseholdInvitation {
   id: string;
   email: string;

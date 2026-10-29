@@ -44,6 +44,7 @@ import { SavingsRateCard } from "@/components/dashboard/savings-rate-card";
 import { TopExpensesList } from "@/components/dashboard/top-expenses-list";
 import { AiInsightsCard } from "@/components/dashboard/ai-insights-card";
 import { CreateHousehold } from "@/components/household/create-household";
+import { MyInvitations } from "@/components/household/my-invitations";
 import { JoinHousehold } from "@/components/household/join-household";
 import { MemberList } from "@/components/household/member-list";
 import { InviteForm } from "@/components/household/invite-form";
@@ -412,6 +413,8 @@ export function HouseholdPage() {
           </p>
         </div>
 
+        <MyInvitations />
+
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
@@ -489,6 +492,7 @@ export function HouseholdPage() {
             Create or join a household to share finances with your family
           </p>
         </div>
+        <MyInvitations />
         <div className="grid gap-6 sm:grid-cols-2">
           <CreateHousehold />
           <JoinHousehold />
