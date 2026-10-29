@@ -5,9 +5,88 @@ import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { computeFileHash, listBankStatements, getBankStatement } from "../services/bank-statement.service";
 import { toServiceContext } from "../services/context";
+import {
+  isOwnedStatementPath,
+  isStatementFileNeeded,
+  removeStatementFile,
+} from "../services/statement-file.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// bank_statements rows are server-owned: clients can read their own rows but
+// not write them, so writes go through supabaseAdmin scoped by user_id.
+
+/**
+ * Remove a failed statement: its uploaded file, its multi-month split children,
+ * and its row. The file is deleted first (unless another statement still needs
+ * the shared file), so if storage fails nothing is removed and the user can retry.
+ * A file_path outside the user's statements folder is never touched.
+ */
+async function removeFailedStatement(
+  userId: string,
+  statement: { id: string; file_hash: string; file_path: string }
+): Promise<{ error: string | null }> {
+  const { data: children, error: childrenError } = await supabaseAdmin
+    .from("bank_statements")
+    .select("id")
+    .eq("user_id", userId)
+    .like("file_hash", `${statement.file_hash}:%`);
+
+  if (childrenError) {
+    return { error: childrenError.message };
+  }
+
+  const removedIds = [statement.id, ...(children ?? []).map((c: { id: string }) => c.id)];
+
+  let fileKept = false;
+  if (!isOwnedStatementPath(userId, statement.file_path)) {
+    console.error(`[bank-statements] statement ${statement.id} has a file_path outside the user's folder; not deleting it`);
+  } else {
+    try {
+      if (await isStatementFileNeeded(userId, statement.file_path, removedIds)) {
+        fileKept = true;
+      } else {
+        const { error: storageError } = await removeStatementFile(userId, statement.file_path);
+        if (storageError) {
+          return { error: storageError };
+        }
+      }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  // Delete child records from multi-month splits (CASCADE removes their transactions)
+  await supabaseAdmin
+    .from("bank_statements")
+    .delete()
+    .eq("user_id", userId)
+    .like("file_hash", `${statement.file_hash}:%`);
+
+  await supabaseAdmin
+    .from("bank_statements")
+    .delete()
+    .eq("id", statement.id)
+    .eq("user_id", userId);
+
+  // A sibling that needed the shared file may have finished while we were
+  // removing rows (it saw this statement still present), so re-check.
+  if (fileKept) {
+    try {
+      if (!(await isStatementFileNeeded(userId, statement.file_path, []))) {
+        const { error: storageError } = await removeStatementFile(userId, statement.file_path);
+        if (storageError) {
+          console.error(`[bank-statements] failed to delete file ${statement.file_path}: ${storageError}`);
+        }
+      }
+    } catch (err) {
+      console.error(`[bank-statements] file reference re-check failed for ${statement.file_path}:`, err);
+    }
+  }
+
+  return { error: null };
+}
 
 // ---------------------------------------------------------------------------
 // POST /upload — upload a bank statement PDF
@@ -49,18 +128,19 @@ router.post(
     // Check for duplicates
     const { data: existing } = await db
       .from("bank_statements")
-      .select("id, status")
+      .select("id, status, file_hash, file_path")
       .eq("user_id", user.id)
       .eq("file_hash", fileHash)
       .maybeSingle();
 
     if (existing) {
       if (existing.status === "failed") {
-        // Allow re-upload by deleting the failed record first
-        await db
-          .from("bank_statements")
-          .delete()
-          .eq("id", existing.id);
+        // Allow re-upload by removing the failed record and its file first
+        const { error: removeError } = await removeFailedStatement(user.id, existing);
+        if (removeError) {
+          console.error(`[upload] failed to remove failed statement ${existing.id}: ${removeError}`);
+          return res.status(500).json({ error: "Failed to upload file" });
+        }
       } else {
         return res.status(409).json({ error: "Duplicate statement" });
       }
@@ -68,6 +148,9 @@ router.post(
 
     // Upload to Supabase Storage
     const storagePath = `${user.id}/statements/${file.originalname}`;
+    if (!isOwnedStatementPath(user.id, storagePath)) {
+      return res.status(400).json({ error: "Invalid file name" });
+    }
     const { error: storageError } = await supabaseAdmin.storage
       .from("bank-statements")
       .upload(storagePath, file.buffer, {
@@ -81,7 +164,7 @@ router.post(
     }
 
     // Insert record into bank_statements table
-    const { data, error } = await db
+    const { data, error } = await supabaseAdmin
       .from("bank_statements")
       .insert({
         user_id: user.id,
@@ -99,6 +182,11 @@ router.post(
       .single();
 
     if (error) {
+      // Don't leave the uploaded file in storage without a statement record
+      const { error: cleanupError } = await removeStatementFile(user.id, storagePath);
+      if (cleanupError) {
+        console.error(`[upload] failed to remove orphaned file ${storagePath}: ${cleanupError}`);
+      }
       return res.status(400).json({ error: error.message });
     }
 
@@ -143,29 +231,16 @@ router.get("/:id", async (req, res: Response) => {
 // POST /:id/reprocess — re-trigger AI parsing
 // ---------------------------------------------------------------------------
 router.post("/:id/reprocess", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { user } = req as AuthenticatedRequest;
 
-  // Look up the statement first to determine file type and split status
-  const { data: existing } = await db
-    .from("bank_statements")
-    .select("file_type, parsed_data")
-    .eq("id", req.params.id)
-    .eq("user_id", user.id)
-    .single();
-
-  // CSVs that were parent-split need to re-run from extract_text so splitting re-runs.
-  // Other CSVs already have text stored, so start at extract_transactions.
-  const isParentSplit = existing?.parsed_data?.is_parent_split === true;
-  const startStep =
-    existing?.file_type === "csv" && !isParentSplit
-      ? "extract_transactions"
-      : "extract_text";
-
-  const { data, error } = await db
+  // Always restart from extract_text: a failure discards intermediate text, but
+  // the uploaded file is kept until success or removal, so re-read it (for CSVs
+  // this re-runs splitting, or re-derives a split child's month).
+  const { data, error } = await supabaseAdmin
     .from("bank_statements")
     .update({
       status: "processing",
-      parsed_data: { pipeline_step: startStep },
+      parsed_data: { pipeline_step: "extract_text" },
     })
     .eq("id", req.params.id)
     .eq("user_id", user.id)
@@ -189,7 +264,7 @@ router.delete("/:id", async (req, res: Response) => {
 
   const { data: statement } = await db
     .from("bank_statements")
-    .select("id, status, file_hash")
+    .select("id, status, file_hash, file_path")
     .eq("id", req.params.id)
     .eq("user_id", user.id)
     .single();
@@ -202,17 +277,11 @@ router.delete("/:id", async (req, res: Response) => {
     return res.status(400).json({ error: "Only failed statements can be deleted" });
   }
 
-  // Delete child records from multi-month splits (CASCADE removes their transactions)
-  await db
-    .from("bank_statements")
-    .delete()
-    .eq("user_id", user.id)
-    .like("file_hash", `${statement.file_hash}:%`);
-
-  await db
-    .from("bank_statements")
-    .delete()
-    .eq("id", statement.id);
+  const { error: removeError } = await removeFailedStatement(user.id, statement);
+  if (removeError) {
+    console.error(`[delete] failed to remove statement ${statement.id}: ${removeError}`);
+    return res.status(500).json({ error: "Failed to remove statement" });
+  }
 
   return res.status(204).send();
 });

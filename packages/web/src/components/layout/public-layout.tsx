@@ -69,6 +69,14 @@ export function PublicLayout() {
           Gravitaz LLC
         </a>
         . All rights reserved.
+        <span className="mx-2">·</span>
+        <Link to="/support" className="underline hover:text-foreground">
+          Support
+        </Link>
+        <span className="mx-2">·</span>
+        <Link to="/privacy" className="underline hover:text-foreground">
+          Privacy
+        </Link>
       </footer>
     </div>
   );

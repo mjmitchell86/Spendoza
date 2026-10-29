@@ -15,6 +15,7 @@ import {
   computeGoalAchievement,
 } from "../services/pdf-export.service";
 import { sendReportEmail } from "../services/email.service";
+import { deleteAccount, AccountDeletionError } from "../services/account.service";
 import {
   buildReportEmailHtml,
   buildAnnualReportEmailHtml,
@@ -199,11 +200,17 @@ router.delete("/users/:id", async (req, res: Response) => {
     return res.status(400).json({ error: "Cannot delete your own account" });
   }
 
-  // Delete from auth (cascades to profiles via FK)
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
-
-  if (error) {
-    return res.status(400).json({ error: error.message });
+  // Same cleanup as self-service deletion (household, Stripe, storage, reports, ...)
+  try {
+    await deleteAccount(id);
+  } catch (err) {
+    if (err instanceof AccountDeletionError) {
+      const status =
+        err.code === "HOUSEHOLD_HEAD_HAS_MEMBERS" ? 409 : err.code === "NOT_FOUND" ? 404 : 500;
+      return res.status(status).json({ error: err.message });
+    }
+    console.error(`[admin] account deletion failed for ${id}:`, err);
+    return res.status(500).json({ error: "Account deletion failed" });
   }
 
   return res.json({ deleted: true });

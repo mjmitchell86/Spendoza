@@ -1,11 +1,36 @@
 import { useState, useRef, type FormEvent } from "react";
-import { Camera, Check, CreditCard, Loader2, Mail, Monitor, Moon, Sun } from "lucide-react";
-import { Link } from "react-router-dom";
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  CreditCard,
+  Loader2,
+  Mail,
+  Monitor,
+  Moon,
+  Sun,
+  Trash2,
+} from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
+import { DELETE_ACCOUNT_CONFIRMATION } from "@spendoza/shared";
 import { useAuth } from "@/hooks/use-auth";
-import { useProfile, useUpdateProfile, useUploadAvatar } from "@/hooks/use-profile";
+import {
+  useDeleteAccount,
+  useProfile,
+  useUpdateProfile,
+  useUploadAvatar,
+} from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -49,7 +74,12 @@ export function ProfilePage() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
   const uploadAvatar = useUploadAvatar();
+  const deleteAccount = useDeleteAccount();
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
@@ -71,6 +101,30 @@ export function ProfilePage() {
     } finally {
       setSendingEmail(false);
     }
+  }
+
+  function handleDeleteOpenChange(open: boolean) {
+    if (deleteAccount.isPending) return;
+    setDeleteOpen(open);
+    if (!open) {
+      setDeleteConfirmText("");
+      deleteAccount.reset();
+    }
+  }
+
+  async function handleDeleteAccount(e: FormEvent) {
+    e.preventDefault();
+    if (deleteConfirmText !== DELETE_ACCOUNT_CONFIRMATION) return;
+    try {
+      await deleteAccount.mutateAsync({ confirm: DELETE_ACCOUNT_CONFIRMATION });
+    } catch {
+      // Error (e.g. must transfer household ownership first) is shown in the dialog
+      return;
+    }
+    // Leave the authenticated area before clearing the session so the auth
+    // guard doesn't redirect to /login first.
+    navigate("/about", { replace: true });
+    await deleteAccount.clearLocalSession();
   }
 
   // Use local state if user has edited, otherwise profile data
@@ -431,6 +485,97 @@ export function ProfilePage() {
           </dl>
         </CardContent>
       </Card>
+
+      {/* Danger Zone */}
+      <Card className="border-destructive/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="size-4" />
+            Danger Zone
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium">Delete my account</p>
+              <p className="text-sm text-muted-foreground">
+                Permanently delete your account and all of your data. This cannot be undone.
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-fit"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+              Delete my account
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={deleteOpen} onOpenChange={handleDeleteOpenChange}>
+        <DialogContent>
+          <form onSubmit={handleDeleteAccount} className="flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle>Delete your account?</DialogTitle>
+              <DialogDescription>
+                This permanently deletes your account and your data: profile, statements and
+                transactions, income, expenses, goals, debts, reports, advice history, email
+                settings and uploaded files, and cancels any subscription. This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="delete-confirm">
+                Type <span className="font-mono font-semibold">{DELETE_ACCOUNT_CONFIRMATION}</span>{" "}
+                to confirm
+              </Label>
+              <Input
+                id="delete-confirm"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                autoComplete="off"
+                autoFocus
+                disabled={deleteAccount.isPending}
+              />
+            </div>
+            {deleteAccount.isError && (
+              <p className="text-sm text-destructive">
+                {deleteAccount.error instanceof Error
+                  ? deleteAccount.error.message
+                  : "Failed to delete account"}
+              </p>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleDeleteOpenChange(false)}
+                disabled={deleteAccount.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={
+                  deleteConfirmText !== DELETE_ACCOUNT_CONFIRMATION || deleteAccount.isPending
+                }
+              >
+                {deleteAccount.isPending ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete my account"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

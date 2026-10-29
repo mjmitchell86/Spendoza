@@ -1,13 +1,14 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import multer from "multer";
 
-import { updateProfileSchema } from "@spendoza/shared";
+import { updateProfileSchema, deleteAccountSchema } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { generateUserReport, generateHouseholdReport } from "../services/report.service";
 import { getProfile, updateProfile } from "../services/profile.service";
 import { toServiceContext } from "../services/context";
+import { deleteAccount, AccountDeletionError } from "../services/account.service";
 
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
@@ -43,6 +44,28 @@ router.put("/", validate(updateProfileSchema), async (req, res: Response) => {
   }
 
   return res.status(200).json(data);
+});
+
+// ---------------------------------------------------------------------------
+// DELETE / — permanently delete the authenticated user's account and data
+// Body: { confirm: "DELETE" }
+// ---------------------------------------------------------------------------
+router.delete("/", validate(deleteAccountSchema), async (req, res: Response) => {
+  const { user } = req as AuthenticatedRequest;
+
+  try {
+    await deleteAccount(user.id);
+  } catch (err) {
+    if (err instanceof AccountDeletionError) {
+      const status =
+        err.code === "HOUSEHOLD_HEAD_HAS_MEMBERS" ? 409 : err.code === "NOT_FOUND" ? 404 : 500;
+      return res.status(status).json({ error: err.message });
+    }
+    console.error(`[profile] account deletion failed for ${user.id}:`, err);
+    return res.status(500).json({ error: "Account deletion failed" });
+  }
+
+  return res.status(200).json({ deleted: true });
 });
 
 // ---------------------------------------------------------------------------
