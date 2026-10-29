@@ -907,6 +907,42 @@ describe("DELETE /api/households/:id/members/:userId", () => {
     });
   });
 
+  it("returns 500 and changes nothing when rotation fails", async () => {
+    adminResults.profiles.selectMaybeSingle = {
+      data: { id: "user-456" },
+      error: null,
+    };
+    adminResults.household_invite_codes.upsertResult = {
+      data: null,
+      error: { code: "XX000", message: "boom" },
+    };
+    const res = await del();
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("Failed to remove member");
+    expect(
+      adminCalls.some((c) => c.table === "profiles" && c.op === "update")
+    ).toBe(false);
+  });
+
+  it("returns 500 when clearing the profile fails, and a retry succeeds", async () => {
+    adminResults.profiles.selectMaybeSingle = {
+      data: { id: "user-456" },
+      error: null,
+    };
+    adminResults.profiles.updateResult = {
+      data: null,
+      error: { message: "db down" },
+    };
+    const res = await del();
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("Failed to remove member");
+
+    adminResults.profiles.updateResult = { data: null, error: null };
+    const retry = await del();
+    expect(retry.status).toBe(204);
+  });
+
   it("returns 404 for a user who is not in this household", async () => {
     adminResults.profiles.selectMaybeSingle = { data: null, error: null };
     const res = await del("user-in-another-household");

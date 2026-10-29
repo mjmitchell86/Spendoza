@@ -317,6 +317,15 @@ async function removeMemberHandler(req: Request, res: Response) {
       .json({ error: "Member not found in this household" });
   }
 
+  // The removed member knew the code: rotate it first, so there is never a
+  // moment when they are out but the old code still works
+  try {
+    await rotateInviteCode(householdId);
+  } catch (err) {
+    console.error("[households] rotate before removal failed:", err);
+    return res.status(500).json({ error: "Failed to remove member" });
+  }
+
   // Set the removed member's household_id to null
   const { error: removeError } = await supabaseAdmin
     .from("profiles")
@@ -326,16 +335,6 @@ async function removeMemberHandler(req: Request, res: Response) {
 
   if (removeError) {
     return res.status(500).json({ error: "Failed to remove member" });
-  }
-
-  // The removed member knew the code: rotate it
-  try {
-    await rotateInviteCode(householdId);
-  } catch (err) {
-    console.error("[households] rotate after removal failed:", err);
-    return res.status(500).json({
-      error: "Member removed, but the invite code could not be changed",
-    });
   }
 
   return res.status(204).send();
