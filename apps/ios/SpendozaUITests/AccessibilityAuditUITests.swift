@@ -16,7 +16,7 @@ final class AccessibilityAuditUITests: XCTestCase {
     private func audit(_ screen: Screen, _ appearance: Launch.Appearance) throws {
         let app = Launch.stubbed(appearance: appearance, textSize: Launch.largestText, hideTabBar: true)
         app.open(screen)
-        app.settle()
+        app.settle(screen)
         // Prove the run really is in the scheme it claims: the page background is light or dark paper.
         let brightness = app.backgroundBrightness()
         switch appearance {
@@ -24,49 +24,21 @@ final class AccessibilityAuditUITests: XCTestCase {
         case .dark: XCTAssertLessThan(brightness, 0.3, "Expected dark paper")
         }
 
-        var previous = app.screenshot().pngRepresentation
-        for page in 0..<10 {
-            attach(app, "\(screen.rawValue)-\(appearance.rawValue)-p\(page)")
-            try auditCurrentPage(app, "\(screen.rawValue) \(appearance.rawValue) page \(page)")
-            app.scrollDownOnePage()
-            app.settle()
-            let now = app.screenshot().pngRepresentation
-            if now == previous { break }  // the end of the page
-            previous = now
-        }
-    }
+        // One audit from the top of the page covers the whole page: it reports off-screen elements too (it scrolls to
+        // them). Auditing from a scrolled position gave false contrast findings for text the audit itself scrolled
+        // under the top edge, so the page is audited only from the top.
+        try app.performAccessibilityAudit()
 
-    /// Audits what is on screen. The audit's contrast sampling is occasionally wrong for a single run (it has flagged
-    /// plain soft-grey text mid-screen that passes the next time), so a finding must repeat in all three runs to fail.
-    @MainActor
-    private func auditCurrentPage(_ app: XCUIApplication, _ label: String) throws {
-        var findings: [String] = []
-        for _ in 0..<3 {
-            findings = try runAudit(app)
-            if findings.isEmpty { return }
+        // Then walk the page a half-screen at a time to the end, for the screenshots (reviewed by eye for clipping)
+        // and to confirm how long the page really is. The audit scrolls the page back to the top when it finishes.
+        var pages = 1
+        attach(app, "\(screen.rawValue)-\(appearance.rawValue)-p0")
+        while app.scrollDownOnePage(screen) {
+            attach(app, "\(screen.rawValue)-\(appearance.rawValue)-p\(pages)")
+            pages += 1
+            if pages > 12 { XCTFail("\(screen.rawValue): more than 12 pages"); break }
         }
-        XCTFail("\(label): \(findings.joined(separator: "; "))")
-    }
-
-    @MainActor
-    private func runAudit(_ app: XCUIApplication) throws -> [String] {
-        let window = app.windows.firstMatch.frame
-        let statusBar = CGRect(x: window.minX, y: window.minY, width: window.width, height: 62)
-        var findings: [String] = []
-        try app.performAccessibilityAudit { issue in
-            // The tab bar is hidden for these runs (its glass made the audit report contrast for text beneath it,
-            // sometimes without naming the element), so the page is read unobstructed. The only issue still
-            // skipped: a contrast failure for a NAMED element whose frame meets the status bar or the screen edge,
-            // where the scrolling page is blurred or clipped; the same text is audited clear of the edge on
-            // another page. Anything else, including a contrast failure with no element, is a finding.
-            if issue.auditType == .contrast, let frame = issue.element?.frame,
-               frame.intersects(statusBar) || !window.contains(frame) {
-                return true
-            }
-            findings.append("\(issue.compactDescription): \(issue.element?.label ?? "no element")")
-            return true  // collected here, reported by the caller
-        }
-        return findings
+        print("AUDIT-PAGES \(screen.rawValue) \(appearance.rawValue): \(pages) pages")
     }
 
     private func attach(_ app: XCUIApplication, _ name: String) {

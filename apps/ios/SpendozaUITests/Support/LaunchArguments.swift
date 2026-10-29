@@ -63,22 +63,43 @@ extension XCUIApplication {
         return (0.299 * r + 0.587 * g + 0.114 * b) / 255
     }
 
-    /// Waits until the screen stops changing (two identical screenshots in a row), so scrolling and blurs have settled.
+    /// Where the page is scrolled to: the top edge of the screen's heading, read from the accessibility tree (not
+    /// from pixels, so the clock or a fading scroll indicator can't affect it).
     @MainActor
-    func settle(timeout: TimeInterval = 10) {
-        var last = screenshot().pngRepresentation
+    func scrollPosition(_ screen: Screen) -> CGFloat {
+        let probe = switch screen {
+        case .health: "Your money's health"
+        case .wants: "What moved it"
+        case .diningOut: "Transactions"
+        }
+        return (try? staticTexts[probe].snapshot().frame.minY) ?? .nan
+    }
+
+    /// Waits until the page stops moving (the same position twice in a row).
+    @MainActor
+    func settle(_ screen: Screen, timeout: TimeInterval = 10) {
+        var last = scrollPosition(screen)
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
-            let now = screenshot().pngRepresentation
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            let now = scrollPosition(screen)
             if now == last { return }
             last = now
         }
     }
 
-    /// A slow swipe of about a page, which doesn't fling.
+    /// Drags the page up by about half a screen and holds, so it doesn't fling past content the audit hasn't seen.
+    /// Returns false when the page didn't move in three tries: it is at its end.
     @MainActor
-    func scrollDownOnePage() {
-        windows.firstMatch.swipeUp(velocity: .slow)
+    func scrollDownOnePage(_ screen: Screen) -> Bool {
+        let before = scrollPosition(screen)
+        for _ in 0..<3 {
+            let from = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+            let to = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .default, thenHoldForDuration: 0.3)
+            settle(screen)
+            if scrollPosition(screen) != before { return true }
+        }
+        return false
     }
 }
