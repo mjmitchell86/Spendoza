@@ -108,12 +108,22 @@ const ROTATE_ATTEMPTS = 3;
 async function rotateInviteCode(householdId: string): Promise<string> {
   for (let attempt = 0; attempt < ROTATE_ATTEMPTS; attempt++) {
     const code = generateHouseholdCode();
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("household_invite_codes")
-      .update({ code, updated_at: new Date().toISOString() })
-      .eq("household_id", householdId);
+      .upsert(
+        {
+          household_id: householdId,
+          code,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "household_id" }
+      )
+      .select();
 
-    if (!error) return code;
+    if (!error) {
+      if (data?.length !== 1) throw new Error("Invite code was not saved");
+      return code;
+    }
     if (error.code !== UNIQUE_VIOLATION) throw new Error(error.message);
   }
   throw new Error("Could not generate a unique invite code");
@@ -414,8 +424,10 @@ async function transferOwnershipHandler(req: Request, res: Response) {
       .json({ error: "Target user is not a member of this household" });
   }
 
-  // Update head_of_household_id
-  const { data: updated, error } = await db
+  // Update head_of_household_id. Done with the admin client after the checks
+  // above: the "Head can update household" policy has no WITH CHECK, so
+  // Postgres rejects the new row (head is someone else) for the RLS client.
+  const { data: updated, error } = await supabaseAdmin
     .from("households")
     .update({ head_of_household_id: new_head_id })
     .eq("id", householdId)

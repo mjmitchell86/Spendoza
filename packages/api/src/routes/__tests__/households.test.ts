@@ -136,6 +136,19 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
         });
         return { eq: () => makeEq() };
       },
+      upsert: (data: any, opts?: any) => {
+        calls.push({ table, op: "upsert", args: data });
+        calls.push({ table, op: "upsert.opts", args: opts });
+        return {
+          select: () =>
+            Promise.resolve(
+              cfg.upsertResult ?? {
+                data: [{ household_id: data.household_id, code: data.code }],
+                error: null,
+              }
+            ),
+        };
+      },
       delete: () => {
         calls.push({ table, op: "delete" });
         return {
@@ -454,7 +467,7 @@ describe("POST /api/households/:id/invite-code", () => {
     });
   const householdUpdates = () =>
     [...rlsCalls, ...adminCalls].filter(
-      (c) => c.table === "household_invite_codes" && c.op === "update"
+      (c) => c.table === "household_invite_codes" && c.op === "upsert"
     );
 
   it("rotates the code for the head", async () => {
@@ -465,9 +478,17 @@ describe("POST /api/households/:id/invite-code", () => {
     expect(body.invite_code).toHaveLength(10);
     const updates = householdUpdates();
     expect(updates).toHaveLength(1);
-    expect(updates[0].args).toMatchObject({ code: NEW_HOUSEHOLD_CODE });
+    expect(updates[0].args).toMatchObject({
+      household_id: HOUSEHOLD_ID,
+      code: NEW_HOUSEHOLD_CODE,
+    });
+    expect(adminCalls).toContainEqual({
+      table: "household_invite_codes",
+      op: "upsert.opts",
+      args: { onConflict: "household_id" },
+    });
     expect(adminCalls).toContainEqual(
-      expect.objectContaining({ table: "household_invite_codes", op: "update" })
+      expect.objectContaining({ table: "household_invite_codes", op: "upsert" })
     );
     expect(
       [...rlsCalls, ...adminCalls].some(
@@ -502,12 +523,20 @@ describe("POST /api/households/:id/invite-code", () => {
   it("retries once on a unique violation", async () => {
     const results = [
       { data: null, error: { code: "23505", message: "duplicate" } },
-      { data: null, error: null },
+      {
+        data: [{ household_id: HOUSEHOLD_ID, code: NEW_HOUSEHOLD_CODE }],
+        error: null,
+      },
     ];
     const cfg = {
       ...adminResults.household_invite_codes,
-      get updateResult() {
-        return results.shift() ?? { data: null, error: null };
+      get upsertResult() {
+        return (
+          results.shift() ?? {
+            data: [{ household_id: HOUSEHOLD_ID, code: NEW_HOUSEHOLD_CODE }],
+            error: null,
+          }
+        );
       },
     };
     adminResults.household_invite_codes = cfg;
@@ -519,7 +548,7 @@ describe("POST /api/households/:id/invite-code", () => {
   it("gives up after 3 unique violations with a 500", async () => {
     const cfg = {
       ...adminResults.household_invite_codes,
-      updateResult: { data: null, error: { code: "23505", message: "dup" } },
+      upsertResult: { data: null, error: { code: "23505", message: "dup" } },
     };
     adminResults.household_invite_codes = cfg;
     const res = await post(`${HOUSEHOLD_ID}/invite-code`);
@@ -527,10 +556,30 @@ describe("POST /api/households/:id/invite-code", () => {
     expect(householdUpdates()).toHaveLength(3);
   });
 
+  it("persists even when no code row exists yet (upsert returns the row)", async () => {
+    adminResults.household_invite_codes = {
+      ...adminResults.household_invite_codes,
+      selectSingle: { data: null, error: null },
+    };
+    const res = await post(`${HOUSEHOLD_ID}/invite-code`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).invite_code).toBe(NEW_HOUSEHOLD_CODE);
+    expect(householdUpdates()).toHaveLength(1);
+  });
+
+  it("fails if the upsert stored no row", async () => {
+    adminResults.household_invite_codes = {
+      ...adminResults.household_invite_codes,
+      upsertResult: { data: [], error: null },
+    };
+    const res = await post(`${HOUSEHOLD_ID}/invite-code`);
+    expect(res.status).toBe(500);
+  });
+
   it("does not retry other errors", async () => {
     const cfg = {
       ...adminResults.household_invite_codes,
-      updateResult: { data: null, error: { code: "XX000", message: "boom" } },
+      upsertResult: { data: null, error: { code: "XX000", message: "boom" } },
     };
     adminResults.household_invite_codes = cfg;
     const res = await post(`${HOUSEHOLD_ID}/invite-code`);
@@ -850,8 +899,37 @@ describe("PUT /api/households/:id/sharing", () => {
 // POST /api/households/:id/transfer - the old head must not keep the code
 // ===========================================================================
 describe("POST /api/households/:id/transfer", () => {
+  it("performs the update with the admin client", async () => {
+    adminResults.households.updateSingle = {
+      data: { ...householdData, head_of_household_id: "user-456" },
+      error: null,
+    };
+    const res = await fetch(
+      `${baseUrl}/api/households/${HOUSEHOLD_ID}/transfer`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TEST_TOKEN}`,
+        },
+        body: JSON.stringify({
+          new_head_id: "00000000-0000-4000-8000-000000000456",
+        }),
+      }
+    );
+    expect(res.status).toBe(200);
+    expect(adminCalls).toContainEqual({
+      table: "households",
+      op: "update",
+      args: { head_of_household_id: "00000000-0000-4000-8000-000000000456" },
+    });
+    expect(
+      rlsCalls.some((c) => c.table === "households" && c.op === "update")
+    ).toBe(false);
+  });
+
   it("returns the household without invite_code", async () => {
-    rlsResults.households.updateSingle = {
+    adminResults.households.updateSingle = {
       data: { ...householdData, head_of_household_id: "user-456" },
       error: null,
     };
