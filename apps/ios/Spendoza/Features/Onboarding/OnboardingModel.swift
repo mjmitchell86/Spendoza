@@ -76,6 +76,14 @@ final class OnboardingModel {
         }
     }
 
+    /// The last step of "Add a statement": added (or still being read), or nothing could be read.
+    var addStatementResult: (title: String, subtitle: String) {
+        if parsedCount > 0 || isStillWorking {
+            return ("Statement added", "Your check-up will update as we finish reading it.")
+        }
+        return ("We couldn't read that statement", "Nothing was added. Try another file, or add it later.")
+    }
+
     // MARK: Navigation
 
     func begin() { step = .upload }

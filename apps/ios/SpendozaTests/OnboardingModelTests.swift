@@ -297,4 +297,40 @@ struct OnboardingModelTests {
         await #expect(throws: APIError.offline) { try await m.finish(emailReports: true) }
         #expect(!api.calls.contains("completeOnboarding"))
     }
+
+    // MARK: Add statement (I3)
+
+    @Test func theAddStatementCoverCanBeClosedOnEveryStep() {
+        for step in OnboardingModel.Step.allCases {
+            #expect(OnboardingView.showsClose(mode: .addStatement, step: step), "no Close on \(step)")
+        }
+        #expect(!OnboardingView.showsClose(mode: .firstRun, step: .processing))
+    }
+
+    @Test func addingAStatementThatParsedSaysItWasAdded() async {
+        let api = StubAPI()
+        api.statementScript = [[StubAPI.statement(id: "a", status: .parsed)]]
+        let m = processing(api, ids: ["a"])
+        await m.pollUntilProcessed()
+        let copy = m.addStatementResult
+        #expect(copy.title == "Statement added")
+    }
+
+    @Test func addingAStatementThatFailedSaysSo() async {
+        let api = StubAPI()
+        api.statementScript = [[StubAPI.statement(id: "a", status: .failed)]]
+        let m = processing(api, ids: ["a"])
+        await m.pollUntilProcessed()
+        m.continueToComplete()
+        let copy = m.addStatementResult
+        #expect(copy.title == "We couldn't read that statement")
+        #expect(copy.subtitle == "Nothing was added. Try another file, or add it later.")
+    }
+
+    @Test func aStatementStillBeingReadSaysItWillUpdate() {
+        let m = processing(StubAPI(), ids: ["a"])
+        m.continueToComplete()
+        #expect(m.addStatementResult.title == "Statement added")
+        #expect(m.addStatementResult.subtitle == "Your check-up will update as we finish reading it.")
+    }
 }

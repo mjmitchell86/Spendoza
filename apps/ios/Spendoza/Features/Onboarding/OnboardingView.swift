@@ -22,6 +22,12 @@ struct OnboardingView: View {
 
     private static let stepLabels = ["Welcome", "Upload", "Processing", "Review", "Complete"]
 
+    /// "Add a statement" is a cover over Health: it can be closed from any step (the upload carries on on the
+    /// server). The first run has no Close; it ends with "Go to Health".
+    static func showsClose(mode: Mode, step: OnboardingModel.Step) -> Bool {
+        mode == .addStatement
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -48,10 +54,11 @@ struct OnboardingView: View {
                         Label("Back", systemImage: "chevron.left").font(.sans(15, relativeTo: .body))
                     }
                     .foregroundStyle(Theme.note)
-                } else if mode == .addStatement, model.step == .upload {
-                    Button("Cancel", action: onFinish)
+                } else if Self.showsClose(mode: mode, step: model.step) {
+                    Button("Close", action: onFinish)
                         .font(.sans(15, relativeTo: .body))
                         .foregroundStyle(Theme.note)
+                        .frame(minHeight: 44)
                 }
                 Spacer()
                 Text("Step \(model.step.rawValue + 1) of \(OnboardingModel.Step.allCases.count)")
@@ -360,8 +367,8 @@ struct CompleteStep: View {
                 Text("You can always update your settings and upload more statements later.")
                     .font(.sans(13, relativeTo: .footnote)).foregroundStyle(Theme.soft)
             } else {
-                StepTitle(title: "Statement added",
-                          subtitle: "Your check-up will update as we finish reading it.")
+                let result = model.addStatementResult
+                StepTitle(title: result.title, subtitle: result.subtitle)
                 Button("Done", action: onFinish).buttonStyle(PrimaryButtonStyle())
             }
         }
