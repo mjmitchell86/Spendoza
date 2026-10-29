@@ -975,6 +975,15 @@ describe("DELETE /api/households/:id/members/:userId", () => {
     };
     expect((await del()).status).toBe(204);
 
+    // The removed member tries the old code. A separate caller: /join and
+    // /:id/join share a per-user failed-attempt budget with earlier tests.
+    mockGetUser.mockImplementation(() =>
+      Promise.resolve({
+        data: { user: { id: "removed-1", email: "removed@example.com" } },
+        error: null,
+      })
+    );
+
     // The old code no longer exists in household_invite_codes
     adminResults.household_invite_codes.selectMaybeSingle = {
       data: null,

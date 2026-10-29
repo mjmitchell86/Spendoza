@@ -284,7 +284,9 @@ describe("POST /api/household/invite", () => {
     const expires = new Date(update.expires_at).getTime();
     expect(expires).toBeGreaterThanOrEqual(before + 7 * 86400_000 - 5000);
     expect(expires).toBeLessThanOrEqual(Date.now() + 7 * 86400_000 + 5000);
-    expect(update.last_sent_at).toBeDefined();
+    expect(
+      adminOps("household_invitations", "update").at(-1)!.args[0].last_sent_at
+    ).toBeDefined();
     expect("code" in update).toBe(false);
     expect(mockSendEmail.mock.calls[0][3]).toBe("abcdefghjk");
   });
@@ -395,6 +397,47 @@ describe("POST /api/household/invite", () => {
     });
     expect(adminOps("household_invitations", "insert")).toHaveLength(1);
     expect(adminOps("household_invitations", "delete")).toHaveLength(0);
+  });
+
+  // The row as the database would hold it after the writes recorded so far
+  const savedInvitation = () => {
+    const row = { ...adminOps("household_invitations", "insert")[0].args[0] };
+    for (const u of adminOps("household_invitations", "update")) {
+      Object.assign(row, u.args[0]);
+    }
+    return { id: INVITATION_ID, ...row };
+  };
+
+  it("lets the head retry straight after a failed send (no cooldown)", async () => {
+    mockSendEmail.mockImplementation(() => Promise.reject(new Error("boom")));
+    const first = await invite();
+    expect(first.status).toBe(502);
+    expect(savedInvitation().last_sent_at ?? null).toBeNull();
+
+    setExisting(savedInvitation());
+    adminCalls = [];
+    mockSendEmail.mockClear();
+    mockSendEmail.mockImplementation(() => Promise.resolve());
+    const retry = await invite();
+    expect(retry.status).toBe(200);
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("records last_sent_at only after the email is sent", async () => {
+    const res = await invite();
+    expect(res.status).toBe(201);
+    const updates = adminOps("household_invitations", "update");
+    expect(updates.at(-1)!.args[0].last_sent_at).toBeDefined();
+  });
+
+  it("keeps the previous last_sent_at when a resend fails", async () => {
+    setExisting(existingRow());
+    mockSendEmail.mockImplementation(() => Promise.reject(new Error("boom")));
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(502);
+    for (const u of adminOps("household_invitations", "update")) {
+      expect("last_sent_at" in u.args[0]).toBe(false);
+    }
   });
 
   it("answers 502 when a resend fails, keeping the row", async () => {
@@ -676,6 +719,23 @@ describe("POST /api/household/invitations/:id/accept", () => {
     });
   });
 
+  it("answers 500 and leaves the invitation pending when the join write fails", async () => {
+    setInvitation(pending());
+    adminResults["profiles.update"] = {
+      list: { data: null, error: { message: "update failed" } },
+    };
+    const res = await accept();
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: "Couldn't join the household. Try again.",
+    });
+    expect(
+      adminOps("household_invitations", "update").some(
+        (u) => u.args[0].status === "accepted"
+      )
+    ).toBe(false);
+  });
+
   it("refuses when the household is full", async () => {
     setInvitation(pending());
     adminResults["profiles.select"] = {
@@ -801,5 +861,49 @@ describe("POST /api/household/join", () => {
         (u) => u.args[0].status === "accepted"
       )
     ).toBe(true);
+  });
+
+  it("answers 500 and accepts no invitation when the join write fails", async () => {
+    asUser("joiner-2");
+    adminResults["household_invite_codes.select"] = {
+      single: {
+        data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+        error: null,
+      },
+    };
+    adminResults["profiles.update"] = {
+      list: { data: null, error: { message: "update failed" } },
+    };
+    const res = await call("POST", "/join", { invite_code: INVITE_CODE });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: "Couldn't join the household. Try again.",
+    });
+    expect(adminOps("household_invitations", "update")).toHaveLength(0);
+  });
+});
+
+// ===========================================================================
+// POST /:id/join shares the per-user failed-guess limit
+// ===========================================================================
+describe("POST /api/household/:id/join", () => {
+  it("blocks a user after 5 wrong codes in 15 minutes (429)", async () => {
+    asUser("id-joiner-1");
+    adminResults["household_invite_codes.select"] = {
+      single: {
+        data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+        error: null,
+      },
+    };
+    for (let i = 0; i < 5; i++) {
+      const res = await call("POST", `/${HOUSEHOLD_ID}/join`, {
+        invite_code: "wrongcode1",
+      });
+      expect(res.status).toBe(400);
+    }
+    const res = await call("POST", `/${HOUSEHOLD_ID}/join`, {
+      invite_code: INVITE_CODE,
+    });
+    expect(res.status).toBe(429);
   });
 });

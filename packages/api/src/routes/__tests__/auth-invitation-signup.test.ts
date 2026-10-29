@@ -30,6 +30,7 @@ let invitations: Invitation[] = [];
 let memberCount = 0;
 let genericCodeValid = false;
 let headTier = "pro";
+let profileUpdateFails = false;
 let calls: Call[] = [];
 
 const mockCreateUser = mock((_args: Record<string, unknown>) =>
@@ -74,6 +75,9 @@ function resolve(c: Call): { data: unknown; error: unknown } {
   }
   if (c.table === "households" && c.op === "select") {
     return { data: { head_of_household_id: "head-1" }, error: null };
+  }
+  if (c.table === "profiles" && c.op === "update" && profileUpdateFails) {
+    return { data: null, error: { message: "update failed" } };
   }
   if (c.table === "household_invitations" && c.op === "update") {
     for (const inv of invitations) {
@@ -148,6 +152,7 @@ beforeEach(() => {
   memberCount = 1;
   genericCodeValid = false;
   headTier = "pro";
+  profileUpdateFails = false;
   invitations = [invitation()];
   mockCreateUser.mockClear();
 });
@@ -236,6 +241,17 @@ describe("POST /api/auth/signup with a household invitation code", () => {
     expect(body.household_full).toBe(true);
     expect(mockCreateUser).toHaveBeenCalledTimes(1);
     expect(profileUpdates()).toHaveLength(0);
+    expect(invitations[0].status).toBe("pending");
+  });
+
+  it("creates the account but keeps the invitation pending when the join write fails", async () => {
+    profileUpdateFails = true;
+    const res = await signup();
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.joined_household).toBe(false);
+    expect(body.household_full).toBeUndefined();
+    expect(mockCreateUser).toHaveBeenCalledTimes(1);
     expect(invitations[0].status).toBe("pending");
   });
 

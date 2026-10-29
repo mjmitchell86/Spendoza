@@ -24,7 +24,10 @@ import {
   generateHouseholdCode,
   deleteHousehold,
 } from "../services/household.service";
-import { addToHousehold } from "../services/household-membership.service";
+import {
+  addToHousehold,
+  joinFailureStatus,
+} from "../services/household-membership.service";
 import { sendHouseholdInvitationEmail } from "../services/email.service";
 
 const router = Router();
@@ -236,9 +239,10 @@ async function inviteHandler(req: Request, res: Response) {
       .json({ error: "Household has reached the 10-member limit" });
   }
 
+  // last_sent_at is written only once the email has gone out, so a failed
+  // send doesn't start the resend cooldown.
   const timing = {
     expires_at: new Date(now + INVITATION_TTL_MS).toISOString(),
-    last_sent_at: new Date(now).toISOString(),
   };
 
   let code: string;
@@ -268,6 +272,7 @@ async function inviteHandler(req: Request, res: Response) {
           status: "pending",
           code,
           ...timing,
+          last_sent_at: null,
         });
       insertError = error;
       if (!error || error.code !== UNIQUE_VIOLATION) break;
@@ -298,6 +303,19 @@ async function inviteHandler(req: Request, res: Response) {
     return res
       .status(502)
       .json({ error: "Couldn't send the invitation email. Try again." });
+  }
+
+  // Only one pending invitation exists per household and email (the resend
+  // path above reuses it), so this marks exactly the one just sent.
+  const { error: sentError } = await supabaseAdmin
+    .from("household_invitations")
+    .update({ last_sent_at: new Date(now).toISOString() })
+    .eq("household_id", householdId)
+    .eq("email", email)
+    .eq("status", "pending");
+  if (sentError) {
+    // The email went out; only the resend cooldown is missing
+    console.error("[households] recording last_sent_at failed:", sentError);
   }
 
   return res.status(created ? 201 : 200).json({ message: "Invitation sent" });
@@ -337,7 +355,7 @@ async function joinHousehold(
 
   const failure = await addToHousehold(user, row.household_id);
   if (failure) {
-    return res.status(400).json({ error: failure });
+    return res.status(joinFailureStatus(failure)).json({ error: failure });
   }
 
   return res.status(200).json({ message: "Joined household successfully" });
@@ -488,7 +506,7 @@ async function acceptInvitationHandler(req: Request, res: Response) {
 
   const failure = await addToHousehold(user, invitation.household_id);
   if (failure) {
-    return res.status(400).json({ error: failure });
+    return res.status(joinFailureStatus(failure)).json({ error: failure });
   }
 
   await supabaseAdmin
@@ -783,10 +801,11 @@ const inviteLimiter = rateLimit({
 });
 
 // Plan rule: creating a household and growing or editing it (invite, rotate
-// the code, rename, list invitations) need the caller on Pro; member actions
-// pass when the caller or the household's head is. Leaving, deleting,
-// transferring, removing members and revoking invitations only shrink or exit
-// a household, so they work on any plan and nobody is trapped by a downgrade.
+// the code, rename) need the caller on Pro; using it (own sharing, join,
+// accept, household dashboard/reports) passes when the caller or the
+// household's head is. Seeing the household and its pending invitations,
+// leaving, deleting, transferring, removing members and revoking invitations
+// work on any plan, so nobody is trapped by a downgrade.
 const caller = requireHouseholdPlan("caller");
 const callerOrHead = requireHouseholdPlan("callerOrHead");
 const callerOrHeadOfParam = requireHouseholdPlan("callerOrHead", {
@@ -803,7 +822,7 @@ const callerOrHeadOfInvitation = requireHouseholdPlan("callerOrHead", {
 // Routes without household ID (resolve from user's profile)
 // These MUST be registered before /:id routes to avoid path conflicts.
 // ---------------------------------------------------------------------------
-router.get("/", resolveHousehold, callerOrHead, getHouseholdHandler);
+router.get("/", resolveHousehold, getHouseholdHandler);
 router.post(
   "/",
   caller,
@@ -902,12 +921,7 @@ const invitationAttemptLimiter = rateLimit({
   keyGenerator: (req) => (req as AuthenticatedRequest).user.id,
   message: { error: "Too many attempts. Try again in 15 minutes." },
 });
-router.get(
-  "/invitations",
-  caller,
-  resolveHousehold,
-  listInvitationsHandler
-);
+router.get("/invitations", resolveHousehold, listInvitationsHandler);
 // The invitee routes act on the caller's own email, not a household. Listing
 // and declining open no household, so they are allowed on any plan.
 router.get("/invitations/mine", myInvitationsHandler);
@@ -953,7 +967,7 @@ router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 // ---------------------------------------------------------------------------
 // Routes with explicit household ID
 // ---------------------------------------------------------------------------
-router.get("/:id", callerOrHeadOfParam, getHouseholdHandler);
+router.get("/:id", getHouseholdHandler);
 router.patch("/:id", caller, validate(renameHouseholdSchema), renameHandler);
 router.delete(
   "/:id",
@@ -970,6 +984,7 @@ router.post(
 router.post("/:id/invite-code", caller, rotateInviteCodeHandler);
 router.post(
   "/:id/join",
+  joinByCodeLimiter,
   validate(joinHouseholdSchema),
   callerOrHeadOfParam,
   joinHandler

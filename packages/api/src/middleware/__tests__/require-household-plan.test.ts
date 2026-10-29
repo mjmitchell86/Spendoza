@@ -37,7 +37,7 @@ describe("household routes carry a plan mode", () => {
       default: Router;
     };
     expect(modes(router)).toEqual({
-      "GET /": "callerOrHead:caller",
+      "GET /": "open",
       "POST /": "caller",
       "PUT /sharing": "callerOrHead:caller",
       "POST /invite": "caller",
@@ -45,7 +45,7 @@ describe("household routes carry a plan mode", () => {
       "PATCH /": "caller",
       "DELETE /": "open",
       "POST /leave": "open",
-      "GET /invitations": "caller",
+      "GET /invitations": "open",
       "GET /invitations/mine": "open",
       "POST /invitations/:invitationId/accept": "callerOrHead:invitation",
       "POST /invitations/:invitationId/decline": "open",
@@ -53,7 +53,7 @@ describe("household routes carry a plan mode", () => {
       "POST /join": "callerOrHead:joinCode",
       "POST /transfer": "open",
       "DELETE /members/:userId": "open",
-      "GET /:id": "callerOrHead:paramId",
+      "GET /:id": "open",
       "PATCH /:id": "caller",
       "DELETE /:id": "open",
       "POST /:id/invite": "caller",

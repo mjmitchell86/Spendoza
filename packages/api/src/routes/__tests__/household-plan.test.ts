@@ -246,7 +246,6 @@ describe("free member of a Pro head's household", () => {
     await expectUpgrade(await call("POST", "/invite", { email: "a@b.co" }));
     await expectUpgrade(await call("POST", "/invite-code"));
     await expectUpgrade(await call("PATCH", "", { name: "New" }));
-    await expectUpgrade(await call("GET", "/invitations"));
     await expectUpgrade(await call("POST", `/${HH}/invite`, { email: "a@b.co" }));
     await expectUpgrade(await call("PATCH", `/${HH}`, { name: "New" }));
   });
@@ -259,6 +258,7 @@ describe("free member of a Pro head's household", () => {
       }),
       await call("DELETE", "/members/other"),
       await call("DELETE", "/invitations/inv-1"),
+      await call("GET", "/invitations"),
     ]) {
       expect(res.status).toBe(403);
       expect((await res.json()).error).not.toBe("Upgrade required");
@@ -306,9 +306,11 @@ describe("a free member of a free head's household sending another household's c
     codeOwners[OTHER_CODE] = "hh-2";
   });
 
-  it("is refused on GET and PUT sharing", async () => {
+  it("sees only their own household on GET and is refused on PUT sharing", async () => {
     const body = { invite_code: OTHER_CODE };
-    await expectUpgrade(await rawGetWithBody("/api/household", body));
+    const res = await rawGetWithBody("/api/household", body);
+    expect(res.status).toBe(200);
+    expect((await res.json()).household.id).toBe(HH);
     await expectUpgrade(
       await call("PUT", "/sharing", {
         income_sharing_mode: "none",
@@ -352,6 +354,12 @@ describe("a free head", () => {
     await expectUpgrade(await call("PATCH", "", { name: "New" }), "free");
   });
 
+  it("can see the household and its pending invitations", async () => {
+    expect((await call("GET", "")).status).toBe(200);
+    expect((await call("GET", `/${HH}`)).status).toBe(200);
+    expect((await call("GET", "/invitations")).status).toBe(200);
+  });
+
   it("can transfer, remove a member, revoke and delete", async () => {
     const other = "11111111-1111-4111-8111-111111111111";
     users[other] = { id: other, household_id: HH, subscription_tier: "free" };
@@ -367,9 +375,18 @@ describe("a free head", () => {
 });
 
 describe("head drops to free", () => {
-  it("members get 403 on GET", async () => {
+  it("members still see the household (and can leave)", async () => {
     users[HEAD].subscription_tier = "free";
-    await expectUpgrade(await call("GET", ""));
+    expect((await call("GET", "")).status).toBe(200);
+    expect((await call("GET", `/${HH}`)).status).toBe(200);
+  });
+
+  it("members get the plan message on the household dashboard", async () => {
+    users[HEAD].subscription_tier = "free";
+    const res = await fetch(`${baseUrl}/api/dashboard/household`, {
+      headers: { Authorization: "Bearer t" },
+    });
+    await expectUpgrade(res);
   });
 });
 
