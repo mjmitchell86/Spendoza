@@ -1,6 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { DashboardSummary } from "@/hooks/use-dashboard";
+import {
+  formatSavingsRate,
+  getSavingsRateTier,
+  savingsRateArcFraction,
+  type SavingsRateTier,
+} from "@/lib/savings-rate";
 
 interface SavingsRateCardProps {
   summary: DashboardSummary;
@@ -15,30 +21,20 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function getRateColor(rate: number): string {
-  if (rate >= 0.2) return "text-emerald-500";
-  if (rate >= 0.05) return "text-yellow-500";
-  return "text-rose-500";
-}
+const TIER_STYLES: Record<
+  SavingsRateTier,
+  { text: string; border: string; bg: string; stroke: string }
+> = {
+  good: { text: "text-emerald-500", border: "border-l-emerald-500", bg: "from-emerald-500/5", stroke: "#10b981" },
+  fair: { text: "text-yellow-500", border: "border-l-yellow-500", bg: "from-yellow-500/5", stroke: "#eab308" },
+  poor: { text: "text-rose-500", border: "border-l-rose-500", bg: "from-rose-500/5", stroke: "#f43f5e" },
+};
 
-function getRateAccent(rate: number) {
-  if (rate >= 0.2) return { border: "border-l-emerald-500", bg: "from-emerald-500/5" };
-  if (rate >= 0.05) return { border: "border-l-yellow-500", bg: "from-yellow-500/5" };
-  return { border: "border-l-rose-500", bg: "from-rose-500/5" };
-}
-
-function getArcStroke(rate: number): string {
-  if (rate >= 0.2) return "#10b981";
-  if (rate >= 0.05) return "#eab308";
-  return "#f43f5e";
-}
-
-function MiniArc({ rate }: { rate: number }) {
-  const clamped = Math.max(0, Math.min(1, rate));
+function MiniArc({ ratePercent }: { ratePercent: number }) {
   const radius = 20;
   const circumference = Math.PI * radius; // semi-circle
-  const progress = clamped * circumference;
-  const stroke = getArcStroke(rate);
+  const progress = savingsRateArcFraction(ratePercent) * circumference;
+  const stroke = TIER_STYLES[getSavingsRateTier(ratePercent)].stroke;
 
   return (
     <svg width="48" height="28" className="shrink-0">
@@ -64,11 +60,12 @@ function MiniArc({ rate }: { rate: number }) {
 }
 
 export function SavingsRateCard({ summary }: SavingsRateCardProps) {
-  const ratePercent = (summary.savings_rate * 100).toFixed(1);
-  const accent = getRateAccent(summary.savings_rate);
+  // summary.savings_rate is already a percentage (0-100)
+  const rate = summary.savings_rate;
+  const tier = TIER_STYLES[getSavingsRateTier(rate)];
 
   return (
-    <Card className={cn("border-l-4 bg-gradient-to-r to-transparent", accent.border, accent.bg)}>
+    <Card className={cn("border-l-4 bg-gradient-to-r to-transparent", tier.border, tier.bg)}>
       <CardHeader className="pb-0">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           Savings Rate
@@ -76,15 +73,12 @@ export function SavingsRateCard({ summary }: SavingsRateCardProps) {
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-3">
-          <MiniArc rate={summary.savings_rate} />
+          <MiniArc ratePercent={rate} />
           <div>
             <p
-              className={cn(
-                "text-3xl font-bold tracking-tight",
-                getRateColor(summary.savings_rate)
-              )}
+              className={cn("text-3xl font-bold tracking-tight", tier.text)}
             >
-              {ratePercent}%
+              {formatSavingsRate(rate)}
             </p>
             <p className="text-sm text-muted-foreground">
               Net: {formatCurrency(summary.net)}

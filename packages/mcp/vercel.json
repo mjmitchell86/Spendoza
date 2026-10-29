@@ -1,11 +1,3 @@
 {
-  "buildCommand": "",
-  "outputDirectory": ".",
-  "rewrites": [
-    { "source": "/mcp", "destination": "/api/mcp" },
-    { "source": "/authorize", "destination": "/api/authorize" },
-    { "source": "/callback", "destination": "/api/callback" },
-    { "source": "/token", "destination": "/api/token" },
-    { "source": "/register", "destination": "/api/register" }
-  ]
+  "buildCommand": "bun run build:vercel"
 }

@@ -394,6 +394,17 @@ describe("aggregateTransactions", () => {
     expect(result.by_category[1].amount).toBe(800); // 500 + 300
   });
 
+  it("returns savings_rate as a percentage (0-100), not a fraction", () => {
+    // Regression: dashboard showed 2106.9% for income $4,539 / expenses $3,583
+    const result = aggregateTransactions([
+      { amount: 4539, type: "credit", ai_category: "Income" },
+      { amount: 3583, type: "debit", ai_category: "Housing" },
+    ] as any);
+
+    // (4539 - 3583) / 4539 = 21.06%
+    expect(result.summary.savings_rate).toBeCloseTo(21.06, 2);
+  });
+
   it("handles empty transaction array", () => {
     const result = aggregateTransactions([]);
 

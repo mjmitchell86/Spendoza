@@ -8,12 +8,13 @@ import {
   PenLine,
   TrendingUp,
   ArrowRight,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useProfile } from "@/hooks/use-profile";
+import { useProfile, useSignOutOtherSessions } from "@/hooks/use-profile";
 import { TIER_LIMITS } from "@spendoza/shared";
 
 const MCP_URL = "https://mcp.spendoza.io/mcp";
@@ -111,6 +112,7 @@ export function McpPage() {
   const { data: profile } = useProfile();
   const tier = profile?.subscription_tier ?? "free";
   const limits = TIER_LIMITS[tier as keyof typeof TIER_LIMITS];
+  const signOutOthers = useSignOutOtherSessions();
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-4 py-8">
@@ -316,6 +318,30 @@ export function McpPage() {
                 </Link>
               </Button>
             )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Disconnect */}
+      <div className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Disconnect AI Assistants</h2>
+        <Card>
+          <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Signs out every other session, including connected AI assistants
+              and other devices. You stay signed in here.
+            </p>
+            <Button
+              variant="outline"
+              className="shrink-0"
+              disabled={signOutOthers.isPending}
+              onClick={() => signOutOthers.mutate()}
+            >
+              <LogOut className="mr-1 size-4" />
+              {signOutOthers.isPending
+                ? "Disconnecting..."
+                : "Disconnect AI assistants"}
+            </Button>
           </CardContent>
         </Card>
       </div>

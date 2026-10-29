@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 type Row = Record<string, any>;
-type Result = { data: any; error: { message: string; code?: string } | null };
+type Result = { data: any; error: { message: string; code?: string } | null; count?: number };
 
 export interface FakeSupabase {
   tables: Record<string, Row[]>;
@@ -48,12 +48,16 @@ export function createFakeSupabase(initial: Record<string, Row[]> = {}, files: s
     private filters: ((r: Row) => boolean)[] = [];
     private op: "select" | "insert" | "update" | "delete" = "select";
     private payload: any;
+    private selectOpts: { count?: string; head?: boolean } = {};
 
     constructor(private table: string) {
       tables[table] ??= [];
     }
 
-    select(_cols?: string) { return this; }
+    select(_cols?: string, opts?: { count?: string; head?: boolean }) {
+      if (this.op === "select" && opts) this.selectOpts = opts;
+      return this;
+    }
     insert(payload: any) { this.op = "insert"; this.payload = payload; return this; }
     update(payload: any) { this.op = "update"; this.payload = payload; return this; }
     delete() { this.op = "delete"; return this; }
@@ -104,8 +108,13 @@ export function createFakeSupabase(initial: Record<string, Row[]> = {}, files: s
     private async exec(): Promise<Result> {
       const rows = tables[this.table];
       switch (this.op) {
-        case "select":
-          return { data: rows.filter((r) => this.matches(r)).map((r) => ({ ...r })), error: null };
+        case "select": {
+          const matched = rows.filter((r) => this.matches(r)).map((r) => ({ ...r }));
+          if (this.selectOpts.count) {
+            return { data: this.selectOpts.head ? null : matched, error: null, count: matched.length };
+          }
+          return { data: matched, error: null };
+        }
         case "insert": {
           if (insertErrors[this.table]) {
             const message = insertErrors[this.table];

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/server.ts",
-    "build": "bun build api/mcp.ts --outfile dist/api/mcp.mjs --target node",
+    "build": "bun build handlers/mcp.ts --outfile dist/api/mcp.mjs --target node",
+    "build:vercel": "bun scripts/build-output.ts",
     "typecheck": "tsc --noEmit",
     "test": "bash run-tests.sh",
     "lint": "echo 'no lint configured yet'"
@@ -15,6 +16,7 @@
     "@spendoza/api": "workspace:*",
     "@spendoza/shared": "workspace:*",
     "@supabase/supabase-js": "^2",
+    "express": "5.2.1",
     "zod": "^3"
   },
   "devDependencies": {

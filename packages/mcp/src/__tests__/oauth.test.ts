@@ -7,6 +7,7 @@ import { describe, it, expect, mock, beforeEach } from "bun:test";
 const mockGetUser = mock();
 const mockSignIn = mock();
 const mockRefreshSession = mock();
+const mockAdminSignOut = mock();
 const mockInsert = mock(() => ({ error: null }));
 const mockMaybeSingle = mock();
 const mockUpdateEq = mock(() => ({ error: null }));
@@ -26,7 +27,7 @@ const mockFrom = mock(() => ({
 
 mock.module("../lib/supabase", () => ({
   supabaseAdmin: {
-    auth: { getUser: mockGetUser },
+    auth: { getUser: mockGetUser, admin: { signOut: mockAdminSignOut } },
     from: mockFrom,
   },
   createSupabaseClient: mock(() => ({
@@ -178,6 +179,23 @@ describe("SpendozaOAuthProvider", () => {
       ).rejects.toThrow("expired");
     });
 
+    it("treats an auth code with no creation time as expired", async () => {
+      mockMaybeSingle.mockResolvedValue({
+        data: {
+          code: "no-timestamp-code",
+          access_token: "token",
+          refresh_token: "refresh",
+          expires_in: 3600,
+          used: false,
+        },
+        error: null,
+      });
+
+      await expect(
+        provider.exchangeAuthorizationCode(TEST_CLIENT as any, "no-timestamp-code")
+      ).rejects.toThrow("expired");
+    });
+
     it("throws for an already-used auth code", async () => {
       mockMaybeSingle.mockResolvedValue({
         data: null,
@@ -252,6 +270,102 @@ describe("SpendozaOAuthProvider", () => {
         provider.verifyAccessToken("invalid-token")
       ).rejects.toThrow("Invalid access token");
     });
+  });
+});
+
+describe("SpendozaOAuthProvider.revokeToken", () => {
+  // Supabase access tokens are JWTs (header.payload.signature); refresh tokens
+  // are short opaque strings.
+  const ACCESS_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLWFiYyJ9.c2lnbmF0dXJl";
+  const REFRESH_TOKEN = "v1-opaque-refresh";
+  let provider: InstanceType<typeof SpendozaOAuthProvider>;
+
+  beforeEach(() => {
+    provider = new SpendozaOAuthProvider();
+    mockAdminSignOut.mockReset();
+    mockAdminSignOut.mockResolvedValue({ data: null, error: null });
+    mockRefreshSession.mockReset();
+  });
+
+  it("ends the Supabase session behind a revoked access token, and only that session", async () => {
+    await provider.revokeToken(TEST_CLIENT as any, { token: ACCESS_JWT });
+
+    expect(mockAdminSignOut).toHaveBeenCalledTimes(1);
+    expect(mockAdminSignOut).toHaveBeenCalledWith(ACCESS_JWT, "local");
+    expect(mockRefreshSession).not.toHaveBeenCalled();
+  });
+
+  it("treats a JWT as an access token even when the hint says refresh_token", async () => {
+    await provider.revokeToken(TEST_CLIENT as any, {
+      token: ACCESS_JWT,
+      token_type_hint: "refresh_token",
+    });
+
+    expect(mockAdminSignOut).toHaveBeenCalledWith(ACCESS_JWT, "local");
+  });
+
+  it("ends the session behind a revoked refresh token", async () => {
+    mockRefreshSession.mockResolvedValue({
+      data: { session: { access_token: "session-access-jwt", refresh_token: "rotated" } },
+      error: null,
+    });
+
+    await provider.revokeToken(TEST_CLIENT as any, {
+      token: REFRESH_TOKEN,
+      token_type_hint: "refresh_token",
+    });
+
+    expect(mockRefreshSession).toHaveBeenCalledWith({ refresh_token: REFRESH_TOKEN });
+    expect(mockAdminSignOut).toHaveBeenCalledTimes(1);
+    expect(mockAdminSignOut).toHaveBeenCalledWith("session-access-jwt", "local");
+  });
+
+  it("never signs the user out globally", async () => {
+    mockRefreshSession.mockResolvedValue({
+      data: { session: { access_token: "session-access-jwt", refresh_token: "rotated" } },
+      error: null,
+    });
+
+    await provider.revokeToken(TEST_CLIENT as any, { token: ACCESS_JWT });
+    await provider.revokeToken(TEST_CLIENT as any, { token: REFRESH_TOKEN });
+
+    for (const call of mockAdminSignOut.mock.calls) {
+      expect(call[1]).toBe("local");
+    }
+  });
+
+  it("succeeds without signing out when the refresh token is already invalid (RFC 7009)", async () => {
+    mockRefreshSession.mockResolvedValue({
+      data: { session: null },
+      error: { message: "Invalid Refresh Token: Already Used", status: 400 },
+    });
+
+    await expect(
+      provider.revokeToken(TEST_CLIENT as any, { token: REFRESH_TOKEN })
+    ).resolves.toBeUndefined();
+    expect(mockAdminSignOut).not.toHaveBeenCalled();
+  });
+
+  it("succeeds when the access token is expired or its session is already gone (RFC 7009)", async () => {
+    mockAdminSignOut.mockResolvedValue({
+      data: null,
+      error: { message: "invalid JWT: token is expired", status: 401 },
+    });
+
+    await expect(
+      provider.revokeToken(TEST_CLIENT as any, { token: ACCESS_JWT })
+    ).resolves.toBeUndefined();
+  });
+
+  it("fails when Supabase can't be reached, so the client can retry", async () => {
+    mockAdminSignOut.mockResolvedValue({
+      data: null,
+      error: { message: "upstream unavailable", status: 503 },
+    });
+
+    await expect(
+      provider.revokeToken(TEST_CLIENT as any, { token: ACCESS_JWT })
+    ).rejects.toThrow();
   });
 });
 

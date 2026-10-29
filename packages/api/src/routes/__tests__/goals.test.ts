@@ -330,10 +330,15 @@ beforeAll(async () => {
   const { default: goalsRouter } = (await import("../goals")) as { default: Router };
   const { requireAuth } = await import("../../middleware/auth");
   const { requireTier } = await import("../../middleware/require-tier");
+  const { errorHandler } = await import("../../middleware/error-handler");
+  const { installAsyncErrorHandling } = await import("../../lib/async-errors");
+
+  installAsyncErrorHandling();
 
   const app = express();
   app.use(express.json());
   app.use("/api/goals", requireAuth, requireTier("starter"), goalsRouter);
+  app.use(errorHandler);
 
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => {
@@ -730,6 +735,47 @@ describe("GET /api/goals/suggestions", () => {
     const body = await res.json();
     expect(body.suggestions).toHaveLength(0);
     expect(body.report_month).toBeNull();
+  });
+
+  it("returns 200 with empty suggestions and a message when AI generation fails", async () => {
+    // e.g. no OPENAI_API_KEY (ChatOpenAI constructor throws), OpenAI outage or timeout
+    mockGenerateGoalSuggestions.mockImplementation(() =>
+      Promise.reject(new Error("OpenAI API key not found"))
+    );
+
+    const res = await fetch(url(), {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.suggestions).toEqual([]);
+    expect(body.report_month).toBe("2026-03-01");
+    expect(typeof body.message).toBe("string");
+    expect(body.message.length).toBeGreaterThan(0);
+    // Must not leak the underlying provider error to the client
+    expect(body.message).not.toContain("API key");
+    // A failed generation must not be cached
+    expect(mockAdminUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 JSON (not a crash) when the handler throws unexpectedly, and keeps serving", async () => {
+    mockReportSingle.mockImplementation(() =>
+      Promise.reject(new Error("database connection reset"))
+    );
+
+    const res = await fetch(url(), {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Internal server error" });
+
+    // Server is still alive and serving other requests
+    const listRes = await fetch(`${baseUrl}/api/goals`, {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+    expect(listRes.status).toBe(200);
   });
 });
 
