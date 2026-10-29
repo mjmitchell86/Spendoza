@@ -32,6 +32,10 @@ public final class SnapshotStore: Sendable {
         defaults?.set(data, forKey: Self.key)
     }
 
+    public func clear() {
+        defaults?.removeObject(forKey: Self.key)
+    }
+
     public func load() -> WidgetSnapshot? {
         guard let data = defaults?.data(forKey: Self.key) else { return nil }
         return try? JSONDecoder().decode(WidgetSnapshot.self, from: data)

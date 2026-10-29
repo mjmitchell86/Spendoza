@@ -45,6 +45,8 @@ public final class SessionStore {
     public private(set) var restoredSession = false
     /// Raised by a successful interactive `signIn` / `signUp` only; never by `restore()`, `refresh()` or a retry.
     @ObservationIgnored public var onInteractiveSignIn: (@MainActor () -> Void)?
+    /// Runs whenever the store drops to signed out (sign-out, an ended session): clear per-account caches here.
+    @ObservationIgnored public var onSignOut: (@MainActor () -> Void)?
     /// Set when sign-up created an account but the follow-up sign-in failed; Sign in prefills this email and says the account is ready.
     public private(set) var accountReadyEmail: String?
     /// The Spendoza API, authorized with this store's session.
@@ -156,5 +158,6 @@ public final class SessionStore {
         profile = nil
         loadError = nil
         phase = .signedOut
+        onSignOut?()
     }
 }

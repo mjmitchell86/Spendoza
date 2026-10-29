@@ -25,7 +25,8 @@ struct RootView: View {
                 LoadFailedView(message: store.loadError ?? "", retry: { Task { await store.refresh() } },
                                signOut: { Task { await store.signOut() } })
             case .onboarding:
-                PlaceholderView(title: "Onboarding", store: store)
+                OnboardingView(api: store.api, signOut: { Task { await store.signOut() } },
+                               onFinish: { Task { await store.refresh() } })
             case .ready:
                 MainTabs(store: store, lock: lock)
             }
@@ -53,22 +54,6 @@ struct RootView: View {
         .onChange(of: store.phase) { _, new in
             if new == .signedOut { coordinator.signedOut() }
         }
-    }
-}
-
-/// Stands in until onboarding exists.
-private struct PlaceholderView: View {
-    let title: String
-    let store: SessionStore
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text(title).font(.serif(28, relativeTo: .largeTitle)).foregroundStyle(Theme.ink)
-            Button("Sign out") { Task { await store.signOut() } }
-                .buttonStyle(SecondaryButtonStyle())
-                .padding(.horizontal, 20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

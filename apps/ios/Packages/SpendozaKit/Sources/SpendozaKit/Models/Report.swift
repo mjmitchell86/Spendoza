@@ -1,7 +1,7 @@
 import Foundation
 
 /// A row of `GET /api/reports/personal`.
-public struct Report: Decodable, Sendable {
+public struct Report: Codable, Sendable {
     public let month: Month
     public let data: ReportData
     /// `ai_insights` split into bullet lines; empty when null.
@@ -27,6 +27,19 @@ public struct Report: Decodable, Sendable {
         generatedAt = date
     }
 
+    /// Writes the same wire format the server sends, so a cached report decodes through `init(from:)`.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(month, forKey: .month)
+        try c.encode(data, forKey: .data)
+        if !insights.isEmpty {
+            try c.encode(insights.map { "- \($0)" }.joined(separator: "\n"), forKey: .insights)
+        }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        try c.encode(formatter.string(from: generatedAt), forKey: .generatedAt)
+    }
+
     static func bulletLines(_ text: String?) -> [String] {
         guard let text else { return [] }
         let bullets: Set<Character> = ["-", "*", "\u{2022}"]
@@ -48,14 +61,14 @@ public struct Report: Decodable, Sendable {
     }
 }
 
-public struct CategoryAmount: Decodable, Sendable, Equatable {
+public struct CategoryAmount: Codable, Sendable, Equatable {
     /// The category's name (the API keys by name, not id).
     public let category: String
     public let amount: Double
     public let percentage: Double?
 }
 
-public struct ReportData: Decodable, Sendable {
+public struct ReportData: Codable, Sendable {
     public let totalIncome: Double
     public let totalExpenses: Double
     /// Already a percentage (16.0 means 16%).
@@ -79,13 +92,22 @@ public struct ReportData: Decodable, Sendable {
         byCategory = try c.decodeIfPresent([CategoryAmount].self, forKey: .byCategory) ?? []
         health = try c.decodeIfPresent(HealthScore.self, forKey: .health)
     }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(totalIncome, forKey: .totalIncome)
+        try c.encode(totalExpenses, forKey: .totalExpenses)
+        try c.encode(savingsRate, forKey: .savingsRate)
+        try c.encode(byCategory, forKey: .byCategory)
+        try c.encodeIfPresent(health, forKey: .health)
+    }
 }
 
-public enum Rating: String, Decodable, Sendable {
+public enum Rating: String, Codable, Sendable {
     case good, ok, warning, critical
 }
 
-public struct PartScore: Decodable, Sendable, Equatable {
+public struct PartScore: Codable, Sendable, Equatable {
     /// Percentage for savings/needs/wants, months for the emergency fund, a 0-1 ratio for debt vs. income.
     public let value: Double
     public let points: Int
@@ -93,7 +115,7 @@ public struct PartScore: Decodable, Sendable, Equatable {
     public let rating: Rating
 }
 
-public struct HealthScore: Decodable, Sendable {
+public struct HealthScore: Codable, Sendable {
     public let score: Int
     public let previousScore: Int?
     public let parts: [ScorePart: PartScore]
@@ -114,6 +136,13 @@ public struct HealthScore: Decodable, Sendable {
             if let part = ScorePart(rawValue: key) { parts[part] = value }
         }
         self.parts = parts
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(score, forKey: .score)
+        try c.encodeIfPresent(previousScore, forKey: .previousScore)
+        try c.encode(Dictionary(uniqueKeysWithValues: parts.map { ($0.key.rawValue, $0.value) }), forKey: .factors)
     }
 
     public init(score: Int, previousScore: Int?, parts: [ScorePart: PartScore]) {
