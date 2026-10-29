@@ -308,6 +308,15 @@ describe("POST /api/household/invite", () => {
     expect(mockSendEmail.mock.calls[0][3]).toBe("k3m9p2x7qz");
   });
 
+  it("treats a legacy invitation that was never sent (null last_sent_at) as resendable", async () => {
+    setExisting(existingRow({ code: null, last_sent_at: null }));
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(200);
+    expect(adminOps("household_invitations", "update")[0].args[0].code).toBe(
+      "k3m9p2x7qz"
+    );
+  });
+
   it("refuses to resend within 10 minutes (429)", async () => {
     setExisting(
       existingRow({ last_sent_at: new Date(Date.now() - 60_000).toISOString() })
@@ -768,5 +777,29 @@ describe("POST /api/household/invitations/:id/decline", () => {
       expect((await decline({ code: `guess${i}` })).status).toBe(404);
     }
     expect((await decline()).status).toBe(429);
+  });
+});
+
+// ===========================================================================
+// POST /join marks the caller's invitation accepted by lowercased email
+// ===========================================================================
+describe("POST /api/household/join", () => {
+  it("matches the pending invitation by the caller's lowercased email", async () => {
+    asUser("joiner-1", "Mixed.Case@Example.com");
+    adminResults["household_invite_codes.select"] = {
+      single: {
+        data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+        error: null,
+      },
+    };
+    const res = await call("POST", "/join", { invite_code: INVITE_CODE });
+    expect(res.status).toBe(200);
+    const eqs = adminOps("household_invitations", "eq").map((c) => c.args);
+    expect(eqs).toContainEqual(["email", "mixed.case@example.com"]);
+    expect(
+      adminOps("household_invitations", "update").some(
+        (u) => u.args[0].status === "accepted"
+      )
+    ).toBe(true);
   });
 });

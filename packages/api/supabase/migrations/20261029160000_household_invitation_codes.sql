@@ -9,41 +9,16 @@
 
 alter table public.household_invitations
   add column if not exists code text,
-  add column if not exists last_sent_at timestamptz not null default now();
+  add column if not exists last_sent_at timestamptz;
 
 -- Emails are stored and matched lowercased.
 update public.household_invitations set email = lower(email) where email <> lower(email);
 
--- Backfill: pending invitations get a fresh 10-char Crockford base-32 code
--- (same alphabet as household codes). Other rows stay null.
-create or replace function pg_temp.new_invitation_code() returns text
-language plpgsql as $$
-declare
-  alphabet constant text := '0123456789abcdefghjkmnpqrstvwxyz';
-  result text := '';
-begin
-  for i in 1..10 loop
-    result := result || substr(alphabet, 1 + floor(random() * 32)::int, 1);
-  end loop;
-  return result;
-end $$;
-
-do $$
-declare
-  r record;
-  c text;
-begin
-  for r in select id from public.household_invitations
-           where status = 'pending' and code is null loop
-    loop
-      c := pg_temp.new_invitation_code();
-      exit when not exists (
-        select 1 from public.household_invitations where code = c
-      );
-    end loop;
-    update public.household_invitations set code = c where id = r.id;
-  end loop;
-end $$;
+-- Existing pending invitations keep code = null and last_sent_at = null on
+-- purpose: SQL random() is not a CSPRNG, so no codes are generated here. A
+-- legacy invitation cannot be accepted until the head resends it, which
+-- generates the code in the API; a null last_sent_at means "never sent", so
+-- that resend is allowed right away.
 
 create unique index if not exists household_invitations_code_key
   on public.household_invitations (code);

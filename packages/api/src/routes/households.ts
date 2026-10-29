@@ -202,6 +202,7 @@ async function inviteHandler(req: Request, res: Response) {
 
   if (
     existingIsLive &&
+    existing.last_sent_at && // null: legacy invitation, never sent by this flow
     now - new Date(existing.last_sent_at).getTime() < RESEND_COOLDOWN_MS
   ) {
     return res.status(429).json({
@@ -374,12 +375,14 @@ async function addToHousehold(
     .eq("id", user.id);
 
   // If there's a pending invitation for this user's email, mark it as accepted
-  await supabaseAdmin
-    .from("household_invitations")
-    .update({ status: "accepted" })
-    .eq("household_id", householdId)
-    .eq("email", user.email)
-    .eq("status", "pending");
+  if (user.email) {
+    await supabaseAdmin
+      .from("household_invitations")
+      .update({ status: "accepted" })
+      .eq("household_id", householdId)
+      .eq("email", user.email.toLowerCase())
+      .eq("status", "pending");
+  }
 
   return null;
 }
