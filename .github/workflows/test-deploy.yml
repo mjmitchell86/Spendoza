@@ -48,6 +48,7 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_API_PROJECT_ID_TEST }}
           vercel-args: '--prod'
+          vercel-version: '64.3.1'
 
   deploy-web:
     needs: migrate
@@ -61,3 +62,4 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_WEB_PROJECT_ID_TEST }}
           vercel-args: '--prod'
+          vercel-version: '64.3.1'
