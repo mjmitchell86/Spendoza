@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Covers the app while it's locked, and (without the button) while the app is inactive so the app switcher shows nothing.
 struct LockView: View {
-    let lock: AppLock
+    let coordinator: LockCoordinator
     /// False for the privacy cover shown while merely inactive.
     var offersUnlock = true
 
@@ -18,7 +18,7 @@ struct LockView: View {
                 .foregroundStyle(Theme.ink)
                 .accessibilityAddTraits(.isHeader)
             if offersUnlock {
-                Button("Unlock") { Task { await lock.appDidBecomeActive() } }
+                Button("Unlock") { Task { await coordinator.unlockTapped() } }
                     .buttonStyle(PrimaryButtonStyle())
                     .padding(.horizontal, 20)
                     .frame(maxWidth: 320)

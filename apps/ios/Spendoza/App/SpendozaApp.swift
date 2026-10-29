@@ -4,12 +4,12 @@ import SwiftUI
 @main
 struct SpendozaApp: App {
     @State private var store = SpendozaApp.makeStore()
-    @State private var lock = AppLock(authenticator: DeviceAuthenticator())
+    @State private var coordinator = LockCoordinator(lock: AppLock(authenticator: DeviceAuthenticator()))
     @AppStorage(Appearance.defaultsKey) private var appearance: Appearance = .system
 
     var body: some Scene {
         WindowGroup {
-            RootView(store: store, lock: lock)
+            RootView(store: store, coordinator: coordinator)
                 .preferredColorScheme(appearance.colorScheme)
         }
     }

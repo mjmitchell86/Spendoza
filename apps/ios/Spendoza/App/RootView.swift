@@ -4,7 +4,8 @@ import SwiftUI
 /// Switches between the signed-out screens, onboarding and the app.
 struct RootView: View {
     let store: SessionStore
-    let lock: AppLock
+    let coordinator: LockCoordinator
+    private var lock: AppLock { coordinator.lock }
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -25,36 +26,35 @@ struct RootView: View {
                     // Locked content is not built at all, so VoiceOver can't reach it.
                     Group {
                         if lock.isLocked {
-                            LockView(lock: lock)
+                            LockView(coordinator: coordinator)
                         } else {
                             MainTabs(store: store, lock: lock)
                         }
                     }
                     .overlay {
                         if !lock.isLocked && scenePhase != .active {
-                            LockView(lock: lock, offersUnlock: false)
+                            LockView(coordinator: coordinator, offersUnlock: false)
                         }
                     }
-                    .task { await lock.appDidBecomeActive() }
                 }
             }
         }
         .background(Theme.paper.ignoresSafeArea())
-        .task { await store.restore() }
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .background: lock.appDidEnterBackground()
-            case .active where store.phase.isReady: Task { await lock.appDidBecomeActive() }
-            default: break
-            }
+        .task {
+            store.onInteractiveSignIn = { [coordinator] in coordinator.interactiveSignIn() }
+            await store.restore()
+            await coordinator.launched(restoredSession: store.restoredSession)
         }
-        .onChange(of: store.phase) { old, new in
-            // A restored session also moves off .signedOut, but while the store is still restoring.
-            if new == .signedOut {
-                lock.sessionEnded()
-            } else if old == .signedOut, !store.isRestoring {
-                lock.sessionStartedFresh()
+        .onChange(of: scenePhase) { _, phase in
+            let mapped: LockScenePhase = switch phase {
+            case .active: .active
+            case .background: .background
+            default: .inactive
             }
+            Task { await coordinator.scenePhaseChanged(to: mapped) }
+        }
+        .onChange(of: store.phase) { _, new in
+            if new == .signedOut { coordinator.signedOut() }
         }
     }
 }
@@ -89,12 +89,5 @@ private struct LoadFailedView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    }
-}
-
-private extension AppPhase {
-    var isReady: Bool {
-        if case .ready = self { return true }
-        return false
     }
 }

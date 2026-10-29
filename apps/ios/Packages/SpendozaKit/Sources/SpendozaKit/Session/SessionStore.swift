@@ -41,6 +41,10 @@ public final class SessionStore {
     public private(set) var loadError: String?
     public private(set) var profile: Profile?
     public let isConfigured: Bool
+    /// True when launch found a stored session (set once `restore()` finishes; false if it turned out invalid).
+    public private(set) var restoredSession = false
+    /// Raised by a successful interactive `signIn` / `signUp` only; never by `restore()`, `refresh()` or a retry.
+    @ObservationIgnored public var onInteractiveSignIn: (@MainActor () -> Void)?
     /// Set when sign-up created an account but the follow-up sign-in failed; Sign in prefills this email and says the account is ready.
     public private(set) var accountReadyEmail: String?
     /// The Spendoza API, authorized with this store's session.
@@ -93,6 +97,7 @@ public final class SessionStore {
         }
         guard auth.currentSession != nil else { return }
         await refresh()
+        restoredSession = auth.currentSession != nil
     }
 
     public func signIn(email: String, password: String) async throws {
@@ -102,6 +107,7 @@ public final class SessionStore {
         } catch {
             throw signInError(error)
         }
+        onInteractiveSignIn?()
         await refresh()
     }
 
