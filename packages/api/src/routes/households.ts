@@ -789,6 +789,15 @@ const inviteLimiter = rateLimit({
 // a household, so they work on any plan and nobody is trapped by a downgrade.
 const caller = requireHouseholdPlan("caller");
 const callerOrHead = requireHouseholdPlan("callerOrHead");
+const callerOrHeadOfParam = requireHouseholdPlan("callerOrHead", {
+  target: "paramId",
+});
+const callerOrHeadOfCode = requireHouseholdPlan("callerOrHead", {
+  target: "joinCode",
+});
+const callerOrHeadOfInvitation = requireHouseholdPlan("callerOrHead", {
+  target: "invitation",
+});
 
 // ---------------------------------------------------------------------------
 // Routes without household ID (resolve from user's profile)
@@ -905,7 +914,7 @@ router.get("/invitations/mine", myInvitationsHandler);
 router.post(
   "/invitations/:invitationId/accept",
   invitationAttemptLimiter,
-  callerOrHead,
+  callerOrHeadOfInvitation,
   acceptInvitationHandler
 );
 router.post(
@@ -930,7 +939,7 @@ router.post(
   "/join",
   joinByCodeLimiter,
   validate(joinHouseholdSchema),
-  callerOrHead,
+  callerOrHeadOfCode,
   joinByCodeHandler
 );
 router.post(
@@ -944,7 +953,7 @@ router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 // ---------------------------------------------------------------------------
 // Routes with explicit household ID
 // ---------------------------------------------------------------------------
-router.get("/:id", callerOrHead, getHouseholdHandler);
+router.get("/:id", callerOrHeadOfParam, getHouseholdHandler);
 router.patch("/:id", caller, validate(renameHouseholdSchema), renameHandler);
 router.delete(
   "/:id",
@@ -962,7 +971,7 @@ router.post("/:id/invite-code", caller, rotateInviteCodeHandler);
 router.post(
   "/:id/join",
   validate(joinHouseholdSchema),
-  callerOrHead,
+  callerOrHeadOfParam,
   joinHandler
 );
 router.post(
@@ -973,7 +982,7 @@ router.post(
 router.delete("/:id/members/:userId", removeMemberHandler);
 router.put(
   "/:id/sharing",
-  callerOrHead,
+  callerOrHeadOfParam,
   validate(updateSharingSchema),
   updateSharingHandler
 );

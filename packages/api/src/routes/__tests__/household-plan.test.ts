@@ -8,7 +8,7 @@ import {
   afterEach,
   mock,
 } from "bun:test";
-import type { Server } from "http";
+import { request, type Server } from "http";
 import type { Router } from "express";
 
 // ---------------------------------------------------------------------------
@@ -39,6 +39,7 @@ let invitations: Array<{
   expires_at: string;
 }> = [];
 let currentUserId = MEMBER;
+const codeOwners: Record<string, string> = {};
 
 type Filter = [string, unknown];
 
@@ -73,6 +74,12 @@ function resolve(table: string, op: string, filters: Filter[]) {
     return h ? { data: h, error: null } : none;
   }
   if (table === "household_invite_codes" && op === "select") {
+    if (typeof f("code") === "string" && codeOwners[f("code") as string]) {
+      return {
+        data: { household_id: codeOwners[f("code") as string], code: f("code") },
+        error: null,
+      };
+    }
     if (f("code") === CODE || f("household_id") === HH) {
       return { data: { household_id: HH, code: CODE }, error: null };
     }
@@ -127,6 +134,13 @@ mock.module("../../services/email.service", () => ({
   sendHouseholdInvitationEmail: () => Promise.resolve(),
   sendReportEmail: () => Promise.resolve({ success: true }),
 }));
+mock.module("../../services/dashboard.service", () => ({
+  currentMonthStr: () => "2026-10",
+  getPersonalDashboardForMonth: () => Promise.resolve({}),
+  getPersonalDashboardForRange: () => Promise.resolve({}),
+  getHouseholdDashboardForMonth: () => Promise.resolve({}),
+  getHouseholdDashboardForRange: () => Promise.resolve({}),
+}));
 mock.module("../../services/household.service", () => ({
   generateHouseholdCode: () => "k3m9p2x7qz",
   deleteHousehold: () => Promise.resolve(),
@@ -146,6 +160,10 @@ beforeAll(async () => {
   app.use(express.json());
   app.use("/api/households", requireAuth, householdsRouter);
   app.use("/api/household", requireAuth, householdsRouter);
+  const { default: dashboardRouter } = (await import("../dashboard")) as {
+    default: Router;
+  };
+  app.use("/api/dashboard", requireAuth, dashboardRouter);
   await new Promise<void>((r) => {
     server = app.listen(0, () => {
       const addr = server.address();
@@ -249,6 +267,76 @@ describe("free member of a Pro head's household", () => {
   it("cannot create a household", async () => {
     currentUserId = "outsider";
     await expectUpgrade(await call("POST", "", { name: "Mine" }));
+  });
+});
+
+// fetch refuses a body on GET, so send one by hand
+function rawGetWithBody(path: string, body: unknown): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = request(
+      `${baseUrl}${path}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer t",
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(data),
+        },
+      },
+      (res) => {
+        let text = "";
+        res.on("data", (c) => (text += c));
+        res.on("end", () =>
+          resolve(new Response(text, { status: res.statusCode }))
+        );
+      }
+    );
+    req.on("error", reject);
+    req.end(data);
+  });
+}
+
+describe("a free member of a free head's household sending another household's code", () => {
+  const OTHER_CODE = "pro0000000";
+  beforeEach(() => {
+    users[HEAD].subscription_tier = "free";
+    users["pro-head"] = { id: "pro-head", household_id: "hh-2", subscription_tier: "pro" };
+    households["hh-2"] = { id: "hh-2", name: "Other", head_of_household_id: "pro-head" };
+    codeOwners[OTHER_CODE] = "hh-2";
+  });
+
+  it("is refused on GET and PUT sharing", async () => {
+    const body = { invite_code: OTHER_CODE };
+    await expectUpgrade(await rawGetWithBody("/api/household", body));
+    await expectUpgrade(
+      await call("PUT", "/sharing", {
+        income_sharing_mode: "none",
+        shared_income_amount: null,
+        expense_sharing_mode: "none",
+        ...body,
+      })
+    );
+  });
+
+  it("is refused on the household dashboard", async () => {
+    await expectUpgrade(
+      await rawGetWithBody("/api/dashboard/household", { invite_code: OTHER_CODE })
+    );
+  });
+
+  it("can still join the Pro household with that code", async () => {
+    currentUserId = "outsider";
+    expect(
+      (await call("POST", "/join", { invite_code: OTHER_CODE })).status
+    ).toBe(200);
+  });
+
+  it("is refused on /:id routes for a household it is not in", async () => {
+    // /:id acts on that household, whose handler checks membership
+    const res = await call("GET", "/hh-2");
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("Not a member of this household");
   });
 });
 

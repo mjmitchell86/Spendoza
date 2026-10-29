@@ -5,13 +5,13 @@ mock.module("@supabase/supabase-js", () => ({
   createClient: () => ({ from: () => ({}), auth: {} }),
 }));
 
-type Mode = "caller" | "callerOrHead" | "open";
+type Mode = string;
 
 interface Layer {
   route?: {
     path: string;
     methods: Record<string, boolean>;
-    stack: Array<{ handle: { planMode?: string } }>;
+    stack: Array<{ handle: { planMode?: string; planTarget?: string } }>;
   };
 }
 
@@ -21,10 +21,12 @@ function modes(router: Router): Record<string, Mode> {
   for (const layer of (router as unknown as { stack: Layer[] }).stack) {
     if (!layer.route) continue;
     const method = Object.keys(layer.route.methods)[0].toUpperCase();
-    const mode = layer.route.stack
-      .map((s) => s.handle.planMode)
-      .find((m) => m) as Mode | undefined;
-    out[`${method} ${layer.route.path}`] = mode ?? "open";
+    const gate = layer.route.stack.map((s) => s.handle).find((h) => h.planMode);
+    out[`${method} ${layer.route.path}`] = !gate
+      ? "open"
+      : gate.planMode === "caller"
+        ? "caller"
+        : `callerOrHead:${gate.planTarget}`;
   }
   return out;
 }
@@ -35,9 +37,9 @@ describe("household routes carry a plan mode", () => {
       default: Router;
     };
     expect(modes(router)).toEqual({
-      "GET /": "callerOrHead",
+      "GET /": "callerOrHead:caller",
       "POST /": "caller",
-      "PUT /sharing": "callerOrHead",
+      "PUT /sharing": "callerOrHead:caller",
       "POST /invite": "caller",
       "POST /invite-code": "caller",
       "PATCH /": "caller",
@@ -45,21 +47,21 @@ describe("household routes carry a plan mode", () => {
       "POST /leave": "open",
       "GET /invitations": "caller",
       "GET /invitations/mine": "open",
-      "POST /invitations/:invitationId/accept": "callerOrHead",
+      "POST /invitations/:invitationId/accept": "callerOrHead:invitation",
       "POST /invitations/:invitationId/decline": "open",
       "DELETE /invitations/:invitationId": "open",
-      "POST /join": "callerOrHead",
+      "POST /join": "callerOrHead:joinCode",
       "POST /transfer": "open",
       "DELETE /members/:userId": "open",
-      "GET /:id": "callerOrHead",
+      "GET /:id": "callerOrHead:paramId",
       "PATCH /:id": "caller",
       "DELETE /:id": "open",
       "POST /:id/invite": "caller",
       "POST /:id/invite-code": "caller",
-      "POST /:id/join": "callerOrHead",
+      "POST /:id/join": "callerOrHead:paramId",
       "POST /:id/transfer": "open",
       "DELETE /:id/members/:userId": "open",
-      "PUT /:id/sharing": "callerOrHead",
+      "PUT /:id/sharing": "callerOrHead:paramId",
     });
   });
 
@@ -70,8 +72,8 @@ describe("household routes carry a plan mode", () => {
     const { default: reports } = (await import("../../routes/reports")) as {
       default: Router;
     };
-    expect(modes(dashboard)["GET /household"]).toBe("callerOrHead");
-    expect(modes(reports)["GET /household"]).toBe("callerOrHead");
-    expect(modes(reports)["GET /export/household"]).toBe("callerOrHead");
+    expect(modes(dashboard)["GET /household"]).toBe("callerOrHead:caller");
+    expect(modes(reports)["GET /household"]).toBe("callerOrHead:caller");
+    expect(modes(reports)["GET /export/household"]).toBe("callerOrHead:caller");
   });
 });

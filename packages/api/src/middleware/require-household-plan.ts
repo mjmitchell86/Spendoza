@@ -33,15 +33,28 @@ export async function householdHeadOnPro(
   return tier !== null && meetsTier(tier, "pro");
 }
 
-// The household the request acts on: an explicit :id, the household of the
-// invitation being accepted, the household a join code belongs to, or else the
-// caller's own household. Null when it can't be found.
-async function targetHouseholdId(req: Request): Promise<string | null> {
+// Which household a callerOrHead route acts on. Each route says so explicitly,
+// so nothing in the body or params can point the check at another household.
+//  - "caller" (default): the caller's own household
+//  - "paramId": the :id in the path (the handler checks membership of it)
+//  - "joinCode": the household the code in the body belongs to (POST /join)
+//  - "invitation": the household of :invitationId (POST .../accept)
+export type HouseholdPlanTarget =
+  | "caller"
+  | "paramId"
+  | "joinCode"
+  | "invitation";
+
+// Null when the household can't be found.
+async function targetHouseholdId(
+  req: Request,
+  target: HouseholdPlanTarget
+): Promise<string | null> {
   const { user, supabase: db } = req as AuthenticatedRequest;
 
-  if (req.params.id) return req.params.id;
+  if (target === "paramId") return req.params.id ?? null;
 
-  if (req.params.invitationId) {
+  if (target === "invitation") {
     const { data } = await supabaseAdmin
       .from("household_invitations")
       .select("household_id")
@@ -50,7 +63,8 @@ async function targetHouseholdId(req: Request): Promise<string | null> {
     return data?.household_id ?? null;
   }
 
-  if (typeof req.body?.invite_code === "string") {
+  if (target === "joinCode") {
+    if (typeof req.body?.invite_code !== "string") return null;
     const { data } = await supabaseAdmin
       .from("household_invite_codes")
       .select("household_id")
@@ -70,7 +84,11 @@ async function targetHouseholdId(req: Request): Promise<string | null> {
 // "caller": the caller must be on Pro (create a household, head-only
 // management). "callerOrHead": the caller is on Pro, or the target
 // household's head is. A no-op when plan checks are off, like requireTier.
-export function requireHouseholdPlan(mode: HouseholdPlanMode) {
+export function requireHouseholdPlan(
+  mode: HouseholdPlanMode,
+  options: { target?: HouseholdPlanTarget } = {}
+) {
+  const target = options.target ?? "caller";
   const middleware = async (
     req: Request,
     res: Response,
@@ -83,7 +101,7 @@ export function requireHouseholdPlan(mode: HouseholdPlanMode) {
     if (meetsTier(callerTier, "pro")) return next();
 
     if (mode === "callerOrHead") {
-      const householdId = await targetHouseholdId(req);
+      const householdId = await targetHouseholdId(req, target);
       // No household found: nothing to grant, and the handler rejects it
       if (!householdId) return next();
       const tier = await headTier(householdId);
@@ -93,5 +111,5 @@ export function requireHouseholdPlan(mode: HouseholdPlanMode) {
     return sendUpgradeRequired(res, "pro", callerTier);
   };
   // Lets tests enumerate which routes carry which mode
-  return Object.assign(middleware, { planMode: mode });
+  return Object.assign(middleware, { planMode: mode, planTarget: target });
 }
