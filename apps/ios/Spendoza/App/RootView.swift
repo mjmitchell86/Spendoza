@@ -9,34 +9,31 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
+        let content = rootContent(phase: store.phase, isLocked: lock.isLocked,
+                                  isRestoring: store.isRestoring, loadFailed: store.loadError != nil)
         Group {
-            if store.isRestoring {
+            switch content {
+            case .restoring:
                 ProgressView().tint(Theme.note).frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityLabel("Loading")
-            } else if let message = store.loadError {
-                LoadFailedView(message: message, retry: { Task { await store.refresh() } },
+            case .signIn:
+                SignInView(store: store)
+            case .lock:
+                // Locked content is not built at all, so VoiceOver can't reach it.
+                LockView(coordinator: coordinator)
+            case .loadFailed:
+                LoadFailedView(message: store.loadError ?? "", retry: { Task { await store.refresh() } },
                                signOut: { Task { await store.signOut() } })
-            } else {
-                switch store.phase {
-                case .signedOut:
-                    SignInView(store: store)
-                case .onboarding:
-                    PlaceholderView(title: "Onboarding", store: store)
-                case .ready:
-                    // Locked content is not built at all, so VoiceOver can't reach it.
-                    Group {
-                        if lock.isLocked {
-                            LockView(coordinator: coordinator)
-                        } else {
-                            MainTabs(store: store, lock: lock)
-                        }
-                    }
-                    .overlay {
-                        if !lock.isLocked && scenePhase != .active {
-                            LockView(coordinator: coordinator, offersUnlock: false)
-                        }
-                    }
-                }
+            case .onboarding:
+                PlaceholderView(title: "Onboarding", store: store)
+            case .ready:
+                MainTabs(store: store, lock: lock)
+            }
+        }
+        .overlay {
+            // App-switcher snapshot cover for every signed-in screen.
+            if scenePhase != .active, content != .signIn, content != .restoring, content != .lock {
+                LockView(coordinator: coordinator, offersUnlock: false)
             }
         }
         .background(Theme.paper.ignoresSafeArea())
