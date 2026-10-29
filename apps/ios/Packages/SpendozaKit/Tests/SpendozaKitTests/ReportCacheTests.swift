@@ -261,6 +261,23 @@ private struct OfflineAPI: SpendozaAPI {
 
 private typealias UnusedAPI = OfflineAPI
 
+@MainActor
+struct StoredSessionScopeTests {
+    @Test func storedSessionActivatesTheScopeWithoutANetworkCall() {
+        let scope = AccountScope()
+        let store = SessionStore(api: OfflineAPI(result: .failure(.offline)), userID: "user-a", accountScope: scope)
+        #expect(store.activateStoredSessionScope())
+        #expect(scope.userID == "user-a")
+    }
+
+    @Test func noStoredSessionLeavesTheScopeEmpty() {
+        let scope = AccountScope()
+        let store = SessionStore(api: OfflineAPI(result: .failure(.offline)), userID: nil, accountScope: scope)
+        #expect(!store.activateStoredSessionScope())
+        #expect(scope.userID == nil)
+    }
+}
+
 extension OfflineAPI {
     init() { self.init(result: .failure(.offline)) }
 }

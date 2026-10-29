@@ -101,6 +101,15 @@ public final class SessionStore {
         }
     }
 
+    /// For a background launch that never ran `restore()`: points the account scope at the stored session's user
+    /// (no network) so scoped writes work. Returns false when this device has no stored session.
+    @discardableResult
+    public func activateStoredSessionScope() -> Bool {
+        guard let userID = sessionUserID() else { return false }
+        accountScope.begin(userID: userID)
+        return true
+    }
+
     /// Restores the stored session on launch and keeps the phase in step with sign-outs.
     public func restore() async {
         defer { isRestoring = false }

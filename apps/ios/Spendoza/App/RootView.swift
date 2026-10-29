@@ -5,6 +5,7 @@ import SwiftUI
 struct RootView: View {
     let store: SessionStore
     let coordinator: LockCoordinator
+    let checkup: CheckupRefresh
     private var lock: AppLock { coordinator.lock }
     @Environment(\.scenePhase) private var scenePhase
 
@@ -43,7 +44,14 @@ struct RootView: View {
             await store.restore()
             await coordinator.launched(restoredSession: store.restoredSession)
         }
+        .task(id: content == .ready) {
+            // First time the app is ready: ask once for permission to announce the monthly check-up.
+            guard content == .ready else { return }
+            checkup.schedule()
+            await checkup.requestPermissionIfNeeded()
+        }
         .onChange(of: scenePhase) { _, phase in
+            if phase != .inactive, content == .ready { checkup.schedule() }
             let mapped: LockScenePhase = switch phase {
             case .active: .active
             case .background: .background

@@ -29,6 +29,7 @@ targets:
           - Info.plist
     dependencies:
       - package: SpendozaKit
+      - target: SpendozaWidgets
     info:
       path: Spendoza/Info.plist
       properties:
@@ -38,6 +39,8 @@ targets:
         UILaunchScreen: {}
         UIAppFonts: [Newsreader-Variable.ttf, PublicSans-Variable.ttf]
         ITSAppUsesNonExemptEncryption: false
+        BGTaskSchedulerPermittedIdentifiers: [com.gravitaz.spendoza.checkup]
+        UIBackgroundModes: [fetch]
         NSFaceIDUsageDescription: Unlock Spendoza with Face ID.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         APIBaseURL: "$(API_BASE_URL)"
@@ -58,16 +61,62 @@ targets:
           CODE_SIGN_IDENTITY: "-"
           CODE_SIGNING_REQUIRED: NO
           CODE_SIGNING_ALLOWED: YES
+  SpendozaWidgets:
+    type: app-extension
+    platform: iOS
+    # R6: only the dial, theme, typography and band colours are shared with the app; no other app code.
+    sources:
+      - path: SpendozaWidgets
+        excludes:
+          - Info.plist
+      - Spendoza/DesignSystem/Theme.swift
+      - Spendoza/DesignSystem/Typography.swift
+      - Spendoza/DesignSystem/ScoreBand+Color.swift
+      - Spendoza/Features/Health/EngravedDial.swift
+      - path: Spendoza/Resources/Fonts
+        includes:
+          - "*.ttf"
+        buildPhase: resources
+    dependencies:
+      - package: SpendozaKit
+    info:
+      path: SpendozaWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Spendoza
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UIAppFonts: [Newsreader-Variable.ttf, PublicSans-Variable.ttf]
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: SpendozaWidgets/SpendozaWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.gravitaz.spendoza]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gravitaz.spendoza.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGNING_REQUIRED: NO
+          CODE_SIGNING_ALLOWED: YES
   SpendozaTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: SpendozaTests
+      # The widget views are rendered in tests (RENDER_WIDGETS_DIR) to check them by eye.
+      - SpendozaWidgets/HealthWidgetViews.swift
     dependencies:
       - target: Spendoza
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gravitaz.spendoza.tests
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_VIEWS_IN_APP_TESTS"
         GENERATE_INFOPLIST_FILE: YES
   SpendozaUITests:
     type: bundle.ui-testing

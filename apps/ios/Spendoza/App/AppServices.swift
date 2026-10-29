@@ -1,4 +1,5 @@
 import SpendozaKit
+import WidgetKit
 
 /// Per-device stores shared by the app and (for the snapshot) the widget.
 enum AppServices {
@@ -14,5 +15,7 @@ enum AppServices {
         reportCache.clear()
         profileCache.clear()
         snapshots.clear()
+        CheckupRefresh.clearLastNotified()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }

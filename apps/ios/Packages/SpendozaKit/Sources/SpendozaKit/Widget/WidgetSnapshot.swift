@@ -13,6 +13,14 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
         self.previousScore = previousScore
         self.month = month
     }
+
+    /// "Fair · down 9" (just "Fair" with no previous score). Words and two small numbers only.
+    public var summaryLine: String {
+        guard let previousScore else { return band.name }
+        let delta = score - previousScore
+        if delta == 0 { return "\(band.name) \u{00B7} same" }
+        return "\(band.name) \u{00B7} \(delta < 0 ? "down" : "up") \(abs(delta))"
+    }
 }
 
 /// Stores the snapshot in the shared App Group defaults.
