@@ -149,7 +149,11 @@ public final class SessionStore {
     /// Restores the stored session on launch and keeps the phase in step with sign-outs.
     public func restore() async {
         defer { isRestoring = false }
-        guard let auth else { return }
+        guard let auth else {
+            // The test seam: a store given a user id stands for a stored session.
+            restoredSession = sessionUserID() != nil
+            return
+        }
         listenForSignOuts(auth.authStateChanges)
         guard auth.currentSession != nil else {
             // No session: nothing on this device may belong to a previous account.

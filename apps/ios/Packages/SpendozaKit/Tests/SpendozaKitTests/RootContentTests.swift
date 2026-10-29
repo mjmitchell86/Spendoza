@@ -2,27 +2,34 @@ import Testing
 @testable import SpendozaKit
 
 @Suite struct RootContentTests {
-    private func content(_ phase: AppPhase, locked: Bool = false, restoring: Bool = false,
-                         loadFailed: Bool = false) -> RootContent {
-        rootContent(phase: phase, isLocked: locked, isRestoring: restoring, loadFailed: loadFailed)
+    private func content(_ phase: AppPhase, restoring: Bool = false, loadFailed: Bool = false) -> RootContent {
+        rootContent(phase: phase, isRestoring: restoring, loadFailed: loadFailed)
     }
 
-    @Test func lockedCoversEverySignedInScreen() {
-        #expect(content(.onboarding, locked: true) == .lock)
-        #expect(content(.ready(isAdmin: false), locked: true) == .lock)
-        #expect(content(.signedOut, locked: true, loadFailed: true) == .lock)
+    @Test func theLockCoversEverySignedInScreen() {
+        #expect(lockCovers(.onboarding, isLocked: true))
+        #expect(lockCovers(.ready, isLocked: true))
+        #expect(lockCovers(.loadFailed, isLocked: true))
     }
 
-    @Test func unlockedShowsTheScreen() {
+    /// I1: locking only covers the screen; what's underneath stays the same screen (built, with its state).
+    @Test func lockingKeepsTheSameScreenUnderneath() {
         #expect(content(.onboarding) == .onboarding)
         #expect(content(.ready(isAdmin: false)) == .ready)
         #expect(content(.signedOut, loadFailed: true) == .loadFailed)
     }
 
+    @Test func unlockedCoversNothing() {
+        for screen in [RootContent.onboarding, .ready, .loadFailed, .signIn, .restoring] {
+            #expect(!lockCovers(screen, isLocked: false))
+        }
+    }
+
     @Test func signedOutAndRestoringIgnoreTheLock() {
-        #expect(content(.signedOut, locked: true) == .signIn)
         #expect(content(.signedOut) == .signIn)
-        #expect(content(.signedOut, locked: true, restoring: true) == .restoring)
-        #expect(content(.ready(isAdmin: false), locked: true, restoring: true) == .restoring)
+        #expect(!lockCovers(.signIn, isLocked: true))
+        #expect(content(.signedOut, restoring: true) == .restoring)
+        #expect(content(.ready(isAdmin: false), restoring: true) == .restoring)
+        #expect(!lockCovers(.restoring, isLocked: true))
     }
 }

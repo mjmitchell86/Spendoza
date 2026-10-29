@@ -27,7 +27,7 @@ struct SpendozaApp: App {
     private static func makeCoordinator() -> LockCoordinator {
         #if DEBUG
         if UITestStub.isOn {
-            return LockCoordinator(lock: AppLock(authenticator: UITestStub.PassingAuthenticator(), isEnabled: false))
+            return LockCoordinator(lock: UITestStub.lock())
         }
         #endif
         return LockCoordinator(lock: AppLock(authenticator: DeviceAuthenticator()))

@@ -45,6 +45,19 @@ enum UITestStub {
         func authenticate(reason: String) async -> Bool { true }
     }
 
+    /// Face ID that always fails, so the app stays locked.
+    struct FailingAuthenticator: Authenticator {
+        func authenticate(reason: String) async -> Bool { false }
+    }
+
+    /// Off unless `-uiTestLockEnabled`; with `-uiTestLockFails` it never unlocks.
+    @MainActor static func lock() -> AppLock {
+        let arguments = CommandLine.arguments
+        let authenticator: Authenticator = arguments.contains("-uiTestLockFails")
+            ? FailingAuthenticator() : PassingAuthenticator()
+        return AppLock(authenticator: authenticator, isEnabled: arguments.contains("-uiTestLockEnabled"))
+    }
+
     /// No permission prompt, notification, background task or widget reload.
     struct QuietNotifier: CheckupNotifying {
         func canPost() async -> Bool { false }

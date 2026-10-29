@@ -9,15 +9,23 @@ enum Launch {
         case light = "Light", dark = "Dark"
     }
 
+    /// The app lock in a stubbed launch: off, on with Face ID passing, or on with Face ID always failing.
+    enum Lock { case off, passing, failing }
+
     @MainActor
     static func stubbed(appearance: Appearance = .light, textSize: String? = nil,
-                        hideTabBar: Bool = false) -> XCUIApplication {
+                        hideTabBar: Bool = false, lock: Lock = .off) -> XCUIApplication {
         let app = XCUIApplication()
         // The launch argument `-AppleInterfaceStyle` doesn't change an iOS app's scheme; the device setting does.
         XCUIDevice.shared.appearance = appearance == .dark ? .dark : .light
         var arguments = ["-uiTestStubAPI", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         if let textSize { arguments += ["-UIPreferredContentSizeCategoryName", textSize] }
         if hideTabBar { arguments.append("-uiTestHideTabBar") }
+        switch lock {
+        case .off: break
+        case .passing: arguments.append("-uiTestLockEnabled")
+        case .failing: arguments += ["-uiTestLockEnabled", "-uiTestLockFails"]
+        }
         app.launchArguments = arguments
         app.launch()
         XCUIDevice.shared.appearance = appearance == .dark ? .dark : .light

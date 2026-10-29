@@ -186,6 +186,23 @@ struct SessionEndedHookTests {
     }
 }
 
+@MainActor
+struct SeamRestoreTests {
+    /// The stubbed UI tests launch like a restored session, so the lock behaves as it does on a real launch.
+    @Test func aSeamStoreWithAUserRestoresASession() async {
+        let store = SessionStore(api: FailingAPI(error: .offline), userID: "user-a")
+        await store.restore()
+        #expect(store.restoredSession)
+        #expect(!store.isRestoring)
+    }
+
+    @Test func aSeamStoreWithoutAUserRestoresNothing() async {
+        let store = SessionStore(api: FailingAPI(error: .offline), userID: nil)
+        await store.restore()
+        #expect(!store.restoredSession)
+    }
+}
+
 private struct CountingAuthenticator: Authenticator {
     func authenticate(reason: String) async -> Bool { true }
 }
