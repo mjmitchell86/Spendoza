@@ -7,9 +7,12 @@ struct HealthView: View {
     let api: any SpendozaAPI
     @State private var addingStatement = false
 
-    init(api: any SpendozaAPI, cache: ReportCache, snapshots: SnapshotStore, scope: AccountScope) {
+    init(api: any SpendozaAPI, cache: ReportCache, snapshots: SnapshotStore, scope: AccountScope,
+         onSessionEnded: @escaping @MainActor () -> Void) {
         self.api = api
-        _model = State(initialValue: HealthModel(api: api, cache: cache, snapshots: snapshots, scope: scope))
+        let model = HealthModel(api: api, cache: cache, scope: scope, sync: WidgetSync(snapshots: snapshots))
+        model.onSessionEnded = onSessionEnded
+        _model = State(initialValue: model)
     }
 
     /// For previews and render checks: a model already in a state.
@@ -29,7 +32,7 @@ struct HealthView: View {
         }
         // Reload unless there's something on screen: a load that was cancelled leaves the state as it was.
         .task { if !model.isLoaded { await model.load(now: AppClock.now) } }
-        .onDisappear { model.cancel() }
+        // No cancelling on disappear: switching tabs must not drop a month the person just picked (9.47).
         .fullScreenCover(isPresented: $addingStatement) {
             OnboardingView(api: api, mode: .addStatement) {
                 addingStatement = false
@@ -59,8 +62,10 @@ struct HealthView: View {
             ProgressView().tint(Theme.note)
                 .frame(maxWidth: .infinity, minHeight: 240)
                 .accessibilityLabel("Loading your check-up")
-        case .empty:
-            emptyState
+        case .empty(let returning):
+            emptyState(returning: returning)
+        case .inProgress(let soFar):
+            inProgress(soFar)
         case .failed(let message):
             VStack(alignment: .leading, spacing: 16) {
                 InlineError(message: message).padding(.top, 16)
@@ -74,14 +79,41 @@ struct HealthView: View {
 
     // MARK: Empty
 
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Your check-up will appear here once we've read a statement.")
+    /// The empty state's line and button; someone with statements isn't asked for their first (9.42).
+    static func emptyText(returning: Bool) -> (message: String, button: String) {
+        returning
+            ? ("There's no check-up for the last six months. Add a recent statement to see one.", "Add a statement")
+            : ("Your check-up will appear here once we've read a statement.", "Add your first statement")
+    }
+
+    /// "Your first check-up arrives when November ends."
+    static func firstCheckupText(soFar month: Month) -> String {
+        "Your first check-up arrives when \(month.name) ends."
+    }
+
+    private func emptyState(returning: Bool) -> some View {
+        let text = Self.emptyText(returning: returning)
+        return VStack(alignment: .leading, spacing: 16) {
+            Text(text.message)
                 .font(.sans(15, relativeTo: .subheadline))
                 .foregroundStyle(Theme.soft)
                 .padding(.top, 8)
-            Button("Add your first statement") { addingStatement = true }
+            Button(text.button) { addingStatement = true }
                 .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    /// Only the month in progress has a report (R42): no check-up yet, but where the month stands.
+    private func inProgress(_ soFar: Report) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(Self.firstCheckupText(soFar: soFar.month))
+                .font(.sans(15, relativeTo: .subheadline))
+                .foregroundStyle(Theme.soft)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            NavigationLink { SoFarView(report: soFar) } label: { soFarRow(soFar) }
+                .buttonStyle(.plain)
+                .topRule()
         }
     }
 

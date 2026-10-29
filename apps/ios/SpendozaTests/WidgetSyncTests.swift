@@ -93,8 +93,8 @@ struct WidgetSyncTests {
             sep: StubAPI.report(sep, score: 73, previous: 70, points: [23, 20, 15, 10, 5]),
             oct: StubAPI.report(oct, score: 64, previous: 73, points: [20, 20, 9, 10, 5]),
         ]
-        let model = HealthModel(api: stub, cache: ReportCache(directory: dir, scope: scope), snapshots: snapshots,
-                                scope: scope, calendar: Self.utc, sync: sync)
+        let model = HealthModel(api: stub, cache: ReportCache(directory: dir, scope: scope), scope: scope,
+                                calendar: Self.utc, sync: sync)
         await model.load(now: Self.date(2026, 11, 2))
 
         #expect(snapshots.load() == snapshot)

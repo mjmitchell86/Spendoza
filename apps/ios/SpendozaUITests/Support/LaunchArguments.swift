@@ -15,13 +15,14 @@ enum Launch {
 
     @MainActor
     static func stubbed(appearance: Appearance = .light, textSize: String? = nil,
-                        hideTabBar: Bool = false, lock: Lock = .off) -> XCUIApplication {
+                        hideTabBar: Bool = false, lock: Lock = .off, slowSelect: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         // The launch argument `-AppleInterfaceStyle` doesn't change an iOS app's scheme; the device setting does.
         XCUIDevice.shared.appearance = appearance == .dark ? .dark : .light
         var arguments = ["-uiTestStubAPI", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         if let textSize { arguments += ["-UIPreferredContentSizeCategoryName", textSize] }
         if hideTabBar { arguments.append("-uiTestHideTabBar") }
+        if slowSelect { arguments.append("-uiTestSlowSelect") }
         switch lock {
         case .off: break
         case .passing: arguments.append("-uiTestLockEnabled")

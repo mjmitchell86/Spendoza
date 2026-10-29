@@ -24,6 +24,10 @@ enum UITestStub {
             tx("t3", "2026-10-02", "Dominos Pizza", 25.30),
             tx("t4", "2026-10-01", "Panera Bread", 26.27),
         ]
+        // `-uiTestSlowSelect`: months before June answer slowly, so picking an older check-up takes a while.
+        if CommandLine.arguments.contains("-uiTestSlowSelect") {
+            api.reportDelay = { $0 < DrillFixture.jun ? .seconds(3) : nil }
+        }
         api.profileResult = Profile(id: "ui-test-user", displayName: "Test", onboardingCompleted: true,
                                     isAdmin: false, emailReportsEnabled: false, householdID: nil)
         return api

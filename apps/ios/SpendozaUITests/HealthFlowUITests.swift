@@ -25,4 +25,20 @@ final class HealthFlowUITests: XCTestCase {
         let steakhouse = app.buttons["Steakhouse 1820, $212.40, Oct 18"]
         XCTAssertTrue(steakhouse.waitForExistence(timeout: 10))
     }
+
+    /// 9.47: switching tabs while an older check-up loads doesn't drop the choice.
+    @MainActor func testAPickedMonthSurvivesATabSwitch() {
+        let app = Launch.stubbed(slowSelect: true)
+        let menu = app.buttons["October check-up"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 15))
+        menu.tap()
+        let september = app.buttons["September check-up"]
+        XCTAssertTrue(september.waitForExistence(timeout: 5))
+        september.tap()
+
+        app.tabBars.buttons["Me"].tap()
+        app.tabBars.buttons["Health"].tap()
+
+        XCTAssertTrue(app.buttons["September check-up"].waitForExistence(timeout: 10))
+    }
 }

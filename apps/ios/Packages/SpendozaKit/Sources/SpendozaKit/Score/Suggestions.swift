@@ -91,7 +91,11 @@ private func budgetSuggestion(
         current: current.data, previous: previousReport?.data, budgetClass: budgetClass, categories: categories)
     let pick: CategoryChange?
     if previousReport != nil {
-        pick = rows.first { ($0.delta ?? 0) > 0 }
+        // A category the previous month didn't have went up by its whole amount.
+        func increase(_ row: CategoryChange) -> Double { row.delta ?? row.amount }
+        pick = rows.filter { increase($0) > 0 }.enumerated()
+            .max { a, b in increase(a.element) != increase(b.element)
+                ? increase(a.element) < increase(b.element) : a.offset > b.offset }?.element
     } else {
         pick = rows.max { $0.amount < $1.amount }
     }
@@ -108,6 +112,8 @@ private func budgetSuggestion(
     var detail: String
     if let delta = pick.delta, let previousReport {
         detail = "\(pick.category) is up \(dollars(delta)) since \(previousReport.month.name).\(cost)"
+    } else if let previousReport {
+        detail = "\(pick.category) is new since \(previousReport.month.name) at \(dollars(pick.amount)).\(cost)"
     } else {
         detail = "\(pick.category) is your biggest \(budgetClass == .want ? "wants" : "needs") category this month at \(dollars(pick.amount))."
     }
@@ -131,7 +137,8 @@ private func budgetAmount(for category: String, currentAmount: Double, history: 
         let total = history.reduce(0.0) { sum, report in
             sum + (report.data.byCategory.first { $0.category == category }?.amount ?? 0)
         }
-        average = total / Double(history.count)
+        // A category none of those months had would average $0: start from this month's amount instead.
+        average = total > 0 ? total / Double(history.count) : currentAmount
     }
     return Int((average / 50).rounded(.up)) * 50
 }

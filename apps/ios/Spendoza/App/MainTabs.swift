@@ -10,7 +10,7 @@ struct MainTabs: View {
         TabView {
             Tab("Health", systemImage: "gauge.with.needle") {
                 HealthView(api: store.api, cache: AppServices.reportCache, snapshots: AppServices.snapshots,
-                           scope: AppServices.accountScope)
+                           scope: AppServices.accountScope, onSessionEnded: { Task { await store.signOut() } })
                     .debugHidingTabBar()
             }
             Tab("Me", systemImage: "person") {

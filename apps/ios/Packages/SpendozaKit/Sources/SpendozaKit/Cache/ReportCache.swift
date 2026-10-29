@@ -17,18 +17,33 @@ public final class ReportCache: @unchecked Sendable {
         files = ScopedFiles(root: directory ?? defaultCacheRoot(), scope: scope)
     }
 
+    /// A cached report and when the app fetched it (what "Last updated" means).
+    public struct Entry: Codable, Sendable {
+        public let report: Report
+        public let fetchedAt: Date
+
+        enum CodingKeys: String, CodingKey { case report, fetchedAt = "fetched_at" }
+    }
+
     private func name(for month: Month) -> String { "report-\(month.apiString).json" }
 
     /// Dropped when `token` is stale (the account changed or signed out since it was taken).
-    public func store(_ report: Report, token: AccountScope.Token) {
-        guard let data = try? JSONEncoder().encode(report) else { return }
+    public func store(_ report: Report, fetchedAt: Date, token: AccountScope.Token) {
+        guard let data = try? JSONEncoder().encode(Entry(report: report, fetchedAt: fetchedAt)) else { return }
         files.write(data, name: name(for: report.month), token: token)
     }
 
     /// `nil` when nothing is cached for the month (or the file can't be read).
-    public func load(month: Month) -> Report? {
+    public func entry(month: Month) -> Entry? {
         guard let data = files.read(name: name(for: month)) else { return nil }
-        return try? JSONDecoder().decode(Report.self, from: data)
+        return try? JSONDecoder().decode(Entry.self, from: data)
+    }
+
+    public func load(month: Month) -> Report? { entry(month: month)?.report }
+
+    /// Forgets a month the server no longer has a report for. Dropped when `token` is stale.
+    public func remove(month: Month, token: AccountScope.Token) {
+        files.remove(name: name(for: month), token: token)
     }
 
     public func clear() { files.removeAll() }

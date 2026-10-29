@@ -28,7 +28,10 @@ struct HealthModelTests {
         let scope = existingScope ?? AccountScope(userID: "user-a")
         let cache = existing ?? ReportCache(directory: dir, scope: scope)
         let snapshots = SnapshotStore(appGroup: suite)
-        let model = HealthModel(api: api, cache: cache, snapshots: snapshots, scope: scope, calendar: Self.calendar)
+        // A sync of its own (11.59): never the real widget centre or the standard defaults.
+        let sync = WidgetSync(snapshots: snapshots, widgets: UITestStub.QuietWidgets(),
+                              defaults: UserDefaults(suiteName: suite)!)
+        let model = HealthModel(api: api, cache: cache, scope: scope, calendar: Self.calendar, sync: sync)
         return Harness(model: model, cache: cache, snapshots: snapshots, scope: scope, cleanup: {
             try? FileManager.default.removeItem(at: dir)
             UserDefaults().removePersistentDomain(forName: suite)
@@ -112,13 +115,115 @@ struct HealthModelTests {
         #expect(h.snapshots.load() == nil)
     }
 
-    @Test func onlyTheInProgressMonthIsStillEmpty() async {
+    /// R42: before the first month ends there's no check-up, but the month so far is shown.
+    @Test func onlyTheInProgressMonthShowsItSoFar() async {
         let api = StubAPI()
         api.reports = [nov: StubAPI.standardReports()[nov]!]
         let h = harness(api)
         defer { h.cleanup() }
         await h.model.load(now: now)
-        guard case .empty = h.model.state else { Issue.record("expected .empty, got \(h.model.state)"); return }
+        guard case .inProgress(let report) = h.model.state else {
+            Issue.record("expected .inProgress, got \(h.model.state)"); return
+        }
+        #expect(report.month == nov)
+        #expect(HealthView.firstCheckupText(soFar: nov) == "Your first check-up arrives when November ends.")
+    }
+
+    /// R42: an all-zero report (no income, spending or categories) is no report.
+    @Test func emptyReportsCountAsNoReport() async {
+        let api = StubAPI()
+        api.reports = [oct: StubAPI.emptyReport(oct), sep: StubAPI.emptyReport(sep)]
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        guard case .empty(let returning) = h.model.state else {
+            Issue.record("expected .empty, got \(h.model.state)"); return
+        }
+        #expect(!returning)
+        #expect(h.model.availableMonths.isEmpty)
+        #expect(h.cache.load(month: oct) == nil)
+        #expect(h.snapshots.load() == nil)
+    }
+
+    @Test func anEmptyFinishedMonthBesideARealSoFarMonthShowsSoFar() async {
+        let api = StubAPI()
+        api.reports = [oct: StubAPI.emptyReport(oct), nov: StubAPI.standardReports()[nov]!]
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        guard case .inProgress = h.model.state else { Issue.record("expected .inProgress, got \(h.model.state)"); return }
+    }
+
+    /// 9.42: someone with statements but no report in the last six months isn't asked for their "first" statement.
+    @Test func aReturningPersonWithNothingRecentIsNotNew() async {
+        let api = StubAPI()
+        api.statementScript = [[StubAPI.statement(id: "s1", status: .parsed)]]
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        guard case .empty(let returning) = h.model.state else { Issue.record("expected .empty, got \(h.model.state)"); return }
+        #expect(returning)
+        #expect(HealthView.emptyText(returning: true).button == "Add a statement")
+        #expect(HealthView.emptyText(returning: false).button == "Add your first statement")
+    }
+
+    /// Minor 2: when the check-up is the oldest month of the window, the month before it is fetched too.
+    @Test func aCheckupAtTheWindowsEdgeStillGetsDeltas() async throws {
+        let jun = Month(year: 2026, month: 6), may = Month(year: 2026, month: 5)
+        let api = StubAPI()
+        api.reports = [
+            jun: StubAPI.report(jun, score: 64, previous: 70, points: [20, 20, 9, 10, 5]),
+            may: StubAPI.report(may, score: 70, previous: nil, points: [22, 20, 15, 8, 5]),
+        ]
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        let snapshot = try loaded(h.model)
+        #expect(snapshot.report.month == jun)
+        #expect(snapshot.previous?.month == may)
+        #expect(snapshot.parts.first { $0.part == .wants }?.delta == -6)
+        #expect(api.requestedMonths.contains(may))
+    }
+
+    /// 9.39: a month the server no longer has is dropped from the cache.
+    @Test func aMonthThatIsGoneIsEvictedFromTheCache() async throws {
+        let api = StubAPI()
+        api.reports = StubAPI.standardReports()
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        #expect(h.cache.load(month: oct) != nil)
+
+        api.reports[oct] = nil
+        await h.model.load(now: now)
+        #expect(h.cache.load(month: oct) == nil)
+        #expect(try loaded(h.model).report.month == sep)
+    }
+
+    /// 9.40: the server saying the session has ended signs the person out.
+    @Test func anUnauthorizedAnswerEndsTheSession() async {
+        let api = StubAPI()
+        api.reportError = .unauthorized
+        let h = harness(api)
+        defer { h.cleanup() }
+        var ended = 0
+        h.model.onSessionEnded = { ended += 1 }
+        await h.model.load(now: now)
+        #expect(ended == 1)
+    }
+
+    /// 9.43: one month failing for real doesn't hide an older check-up that loaded.
+    @Test func aFailureOlderThanTheCheckupStillShowsIt() async throws {
+        let api = StubAPI()
+        api.reports = StubAPI.standardReports()
+        api.failingMonths = [aug: APIError.message("Server down")]
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        let snapshot = try loaded(h.model)
+        #expect(snapshot.report.month == oct)
+        #expect(!snapshot.isCached)
+        #expect(snapshot.previous?.month == sep)
     }
 
     @Test func offlineAfterACachedOctoberShowsTheCachedCheckup() async throws {
@@ -132,13 +237,14 @@ struct HealthModelTests {
         offline.reportError = .offline
         let second = harness(offline, cache: first.cache, scope: first.scope)
         defer { second.cleanup() }
-        await second.model.load(now: now)
+        await second.model.load(now: now.addingTimeInterval(2 * 86_400))
 
         let snapshot = try loaded(second.model)
         #expect(snapshot.isCached)
         #expect(snapshot.report.month == oct)
         #expect(snapshot.previous?.month == sep)
-        #expect(snapshot.updatedAt == snapshot.report.generatedAt)
+        // 9.38: "Last updated" is when the app last fetched October, not when the server generated it.
+        #expect(snapshot.updatedAt == now)
         // A cached view must not overwrite the widget with older data.
         #expect(second.snapshots.load() == nil)
     }
@@ -238,13 +344,29 @@ struct HealthModelTests {
         #expect(try loaded(h.model).report.month == oct)
     }
 
-    @Test func aURLSessionCancellationIsNotAFailure() async {
+    /// 9.44: URLError.cancelled is a cancellation only when the load itself was cancelled; otherwise it's a failure
+    /// (the screen mustn't sit on the spinner).
+    @Test func aURLSessionCancellationOutsideACancelledLoadIsAFailure() async {
         let api = StubAPI()
         api.reports = StubAPI.standardReports()
         api.failingMonths = [oct: URLError(.cancelled)]
         let h = harness(api)
         defer { h.cleanup() }
         await h.model.load(now: now)
+        guard case .failed = h.model.state else { Issue.record("expected .failed, got \(h.model.state)"); return }
+    }
+
+    @Test func aURLSessionCancellationInACancelledLoadLeavesTheStateAlone() async throws {
+        let api = StubAPI()
+        api.reports = StubAPI.standardReports()
+        api.reportDelay = { _ in .milliseconds(300) }
+        api.failingMonths = [oct: URLError(.cancelled)]
+        let h = harness(api)
+        defer { h.cleanup() }
+        let task = Task { await h.model.load(now: now) }
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+        await task.value
         #expect(isLoading(h.model))
     }
 

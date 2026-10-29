@@ -19,7 +19,7 @@ struct ReportCacheTests {
         let (cache, scope, dir) = makeCache()
         defer { try? FileManager.default.removeItem(at: dir) }
         let original = try Fixture.october
-        cache.store(original, token: scope.token())
+        cache.store(original, fetchedAt: .now, token: scope.token())
         let loaded = try #require(cache.load(month: Month(year: 2026, month: 10)))
         #expect(loaded.month == original.month)
         #expect(loaded.insights == original.insights)
@@ -38,26 +38,26 @@ struct ReportCacheTests {
     @Test func otherMonthsAreSeparate() throws {
         let (cache, scope, dir) = makeCache()
         defer { try? FileManager.default.removeItem(at: dir) }
-        cache.store(try Fixture.october, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
         #expect(cache.load(month: Month(year: 2026, month: 9)) == nil)
     }
 
     @Test func clearRemovesEverything() throws {
         let (cache, scope, dir) = makeCache()
         defer { try? FileManager.default.removeItem(at: dir) }
-        cache.store(try Fixture.october, token: scope.token())
-        cache.store(try Fixture.september, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
+        cache.store(try Fixture.september, fetchedAt: .now, token: scope.token())
         cache.clear()
         #expect(cache.load(month: Month(year: 2026, month: 10)) == nil)
         #expect(cache.load(month: Month(year: 2026, month: 9)) == nil)
-        cache.store(try Fixture.october, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
         #expect(cache.load(month: Month(year: 2026, month: 10)) != nil)
     }
 
     @Test func corruptFileIsTreatedAsMissing() throws {
         let (cache, scope, dir) = makeCache()
         defer { try? FileManager.default.removeItem(at: dir) }
-        cache.store(try Fixture.october, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
         let files = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey])!
         for case let file as URL in files where file.pathExtension == "json" {
             try Data("nope".utf8).write(to: file)
@@ -70,7 +70,7 @@ struct ReportCacheTests {
     @Test func filesLiveUnderTheUsersFolder() throws {
         let (cache, scope, dir) = makeCache(user: "user-a")
         defer { try? FileManager.default.removeItem(at: dir) }
-        cache.store(try Fixture.october, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
         let file = dir.appendingPathComponent("user-a").appendingPathComponent("report-2026-10-01.json")
         #expect(FileManager.default.fileExists(atPath: file.path))
     }
@@ -78,7 +78,7 @@ struct ReportCacheTests {
     @Test func anotherUserNeverSeesTheFirstUsersReports() throws {
         let (cache, scope, dir) = makeCache(user: "user-a")
         defer { try? FileManager.default.removeItem(at: dir) }
-        cache.store(try Fixture.october, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
         scope.begin(userID: "user-b")
         #expect(cache.load(month: Month(year: 2026, month: 10)) == nil)
         scope.begin(userID: "user-a")
@@ -88,7 +88,7 @@ struct ReportCacheTests {
     @Test func noUserMeansNothingIsStoredOrLoaded() throws {
         let (cache, scope, dir) = makeCache(user: nil)
         defer { try? FileManager.default.removeItem(at: dir) }
-        cache.store(try Fixture.october, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
         #expect(!FileManager.default.fileExists(atPath: dir.path))
         #expect(cache.load(month: Month(year: 2026, month: 10)) == nil)
     }
@@ -96,7 +96,7 @@ struct ReportCacheTests {
     @Test func unsafeUserIDsAreRefused() throws {
         let (cache, scope, dir) = makeCache(user: "../evil")
         defer { try? FileManager.default.removeItem(at: dir) }
-        cache.store(try Fixture.october, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
         #expect(!FileManager.default.fileExists(atPath: dir.path))
     }
 
@@ -108,7 +108,7 @@ struct ReportCacheTests {
         let token = scope.token()
         scope.end()
         cache.clear()
-        cache.store(try Fixture.october, token: token)
+        cache.store(try Fixture.october, fetchedAt: .now, token: token)
         scope.begin(userID: "user-a")
         #expect(cache.load(month: Month(year: 2026, month: 10)) == nil)
     }
@@ -117,7 +117,7 @@ struct ReportCacheTests {
         let (cache, scope, dir) = makeCache()
         defer { try? FileManager.default.removeItem(at: dir) }
         scope.begin(userID: "user-a")   // same user: no bump
-        cache.store(try Fixture.october, token: scope.token())
+        cache.store(try Fixture.october, fetchedAt: .now, token: scope.token())
         #expect(cache.load(month: Month(year: 2026, month: 10)) != nil)
     }
 

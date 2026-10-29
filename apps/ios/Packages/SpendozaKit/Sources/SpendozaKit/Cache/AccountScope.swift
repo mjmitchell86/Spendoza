@@ -93,6 +93,15 @@ final class ScopedFiles: @unchecked Sendable {
         }
     }
 
+    func remove(name: String, token: AccountScope.Token) {
+        scope.performIfCurrent(token) { userID in
+            lock.withLock {
+                try? FileManager.default.removeItem(
+                    at: root.appendingPathComponent(userID, isDirectory: true).appendingPathComponent(name))
+            }
+        }
+    }
+
     func removeAll() {
         lock.withLock { try? FileManager.default.removeItem(at: root) }
     }

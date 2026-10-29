@@ -61,7 +61,7 @@ struct OfflineColdLaunchTests {
         let profile = Profile(id: "user-a", displayName: "A", onboardingCompleted: true, isAdmin: false,
                               emailReportsEnabled: true, householdID: nil)
         profiles.store(profile, token: scope.token())
-        reports.store(try Fixture.october, token: scope.token())
+        reports.store(try Fixture.october, fetchedAt: .now, token: scope.token())
 
         let api = APIClient(baseURL: URL(string: "https://api.example.test")!, session: StubURLProtocol.session(),
                             accessToken: { throw URLError(.notConnectedToInternet) })

@@ -14,6 +14,7 @@ struct HealthSnapshot {
     /// The in-progress month, shown "so far".
     let soFar: Report?
     let isCached: Bool
+    /// When the shown month was fetched (for a cached month, the time it was cached).
     let updatedAt: Date
 }
 
@@ -47,7 +48,11 @@ extension HealthSnapshot {
 @MainActor @Observable
 final class HealthModel {
     enum State {
-        case loading, empty
+        case loading
+        /// No report in the window. `returning`: the person has statements, so this isn't their first.
+        case empty(returning: Bool)
+        /// Only the month in progress has a report: no check-up yet, but the month so far.
+        case inProgress(Report)
         case loaded(HealthSnapshot)
         case failed(String)
     }
@@ -62,6 +67,9 @@ final class HealthModel {
     /// Months that returned a report, newest first. Includes the in-progress month when it has one.
     private(set) var availableMonths: [Month] = []
 
+    /// Called when the server says the session has ended (401): sign out.
+    @ObservationIgnored var onSessionEnded: (@MainActor () -> Void)?
+
     @ObservationIgnored private let api: any SpendozaAPI
     @ObservationIgnored private let cache: ReportCache
     @ObservationIgnored private let sync: WidgetSync
@@ -72,6 +80,8 @@ final class HealthModel {
     @ObservationIgnored private var categories: [BudgetCategory] = []
     /// Months whose report came from the cache because the request failed.
     @ObservationIgnored private var cachedMonths: Set<Month> = []
+    /// When each report was fetched: now for fresh ones, the cache's time for cached ones.
+    @ObservationIgnored private var fetchedAt: [Month: Date] = [:]
     /// Months that failed with nothing cached, so we can't say whether they have a report.
     @ObservationIgnored private var unresolved: Set<Month> = []
     /// A failure that wasn't just "offline".
@@ -81,11 +91,12 @@ final class HealthModel {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var selectTask: Task<Void, Never>?
 
-    init(api: any SpendozaAPI, cache: ReportCache, snapshots: SnapshotStore, scope: AccountScope,
-         calendar: Calendar = .current, sync: WidgetSync? = nil) {
+    /// `sync` is required (no default) so a test can't reach the real widget centre or standard defaults by accident.
+    init(api: any SpendozaAPI, cache: ReportCache, scope: AccountScope, calendar: Calendar = .current,
+         sync: WidgetSync) {
         self.api = api
         self.cache = cache
-        self.sync = sync ?? WidgetSync(snapshots: snapshots)
+        self.sync = sync
         self.scope = scope
         self.calendar = calendar
     }
@@ -112,20 +123,36 @@ final class HealthModel {
         let current = soFarMonth(now: now, calendar: calendar)
 
         async let categoryList = (try? await api.categories()) ?? []
-        let result = await fetch(Self.window(endingAt: current), token: token)
+        var result = await fetch(Self.window(endingAt: current), token: token, now: now)
+        // The check-up's own previous month is needed for its deltas; when the check-up is the oldest month of
+        // the window, that month wasn't asked for yet.
+        if let checkup = checkupMonth(now: now, calendar: calendar, reportMonths: Set(result.reports.keys)),
+           !result.asked.contains(checkup.previous), !result.cancelled {
+            result.merge(await fetch([checkup.previous], token: token, now: now))
+        }
         let cats = await categoryList
         guard isCurrent(mine, token), !result.cancelled else { return }
 
         reports = result.reports
         cachedMonths = result.cached
+        fetchedAt = result.fetchedAt
         unresolved = result.unresolved
         hardError = result.hardError
         fetched = result.asked
         categories = cats
         availableMonths = reports.keys.sorted(by: >)
+        if endsSession(hardError) { return }
 
         guard let checkup = checkupMonth(now: now, calendar: calendar, reportMonths: Set(reports.keys)) else {
-            state = unresolved.isEmpty ? .empty : .failed(Self.message(for: hardError))
+            if !unresolved.isEmpty {
+                state = .failed(Self.message(for: hardError))
+            } else if let soFar = reports[current] {
+                state = .inProgress(soFar)
+            } else {
+                let returning = await hasStatements()
+                guard isCurrent(mine, token) else { return }
+                state = .empty(returning: returning)
+            }
             return
         }
         // A newer month that failed for a real reason might be the true check-up; don't show an older one as if it
@@ -145,11 +172,13 @@ final class HealthModel {
         let token = scope.token()
         // Earlier months this month's own window needs and the first load didn't ask for.
         let missing = Self.window(endingAt: month).filter { reports[$0] == nil && !fetched.contains($0) }
-        let result = await fetch(missing, token: token)
+        let result = await fetch(missing, token: token, now: now)
         guard isCurrent(mine, token), !result.cancelled else { return }
+        if endsSession(result.hardError) { return }
 
         reports.merge(result.reports) { _, new in new }
         cachedMonths.formUnion(result.cached)
+        fetchedAt.merge(result.fetchedAt) { _, new in new }
         unresolved.formUnion(result.unresolved)
         hardError = hardError ?? result.hardError
         fetched.formUnion(result.asked)
@@ -167,9 +196,6 @@ final class HealthModel {
     /// Waits for the selection started by `requestSelect`.
     func settle() async { await selectTask?.value }
 
-    /// Stops in-flight selection work (the screen went away).
-    func cancel() { selectTask?.cancel() }
-
     private func isCurrent(_ mine: Int, _ token: AccountScope.Token) -> Bool {
         mine == generation && !Task.isCancelled && scope.isCurrent(token)
     }
@@ -179,10 +205,33 @@ final class HealthModel {
     private struct Fetched {
         var reports: [Month: Report] = [:]
         var cached: Set<Month> = []
+        var fetchedAt: [Month: Date] = [:]
         var unresolved: Set<Month> = []
         var asked: Set<Month> = []
         var hardError: Error?
         var cancelled = false
+
+        mutating func merge(_ other: Fetched) {
+            reports.merge(other.reports) { _, new in new }
+            cached.formUnion(other.cached)
+            fetchedAt.merge(other.fetchedAt) { _, new in new }
+            unresolved.formUnion(other.unresolved)
+            asked.formUnion(other.asked)
+            hardError = hardError ?? other.hardError
+            cancelled = cancelled || other.cancelled
+        }
+    }
+
+    /// A 401 means the session is over: hand it to the sign-out and show nothing more.
+    private func endsSession(_ error: Error?) -> Bool {
+        guard (error as? APIError) == .unauthorized else { return false }
+        onSessionEnded?()
+        return true
+    }
+
+    /// Whether the person has uploaded statements before (so an empty window doesn't mean they're new).
+    private func hasStatements() async -> Bool {
+        ((try? await api.statements()) ?? []).isEmpty == false
     }
 
     private static func window(endingAt month: Month) -> [Month] {
@@ -191,9 +240,10 @@ final class HealthModel {
         return months
     }
 
-    /// Fetches the months in parallel. A month the server has no report for stays absent; a month that fails
-    /// falls back to its cached report. Cancellation is reported as such, never as a failure.
-    private func fetch(_ months: [Month], token: AccountScope.Token) async -> Fetched {
+    /// Fetches the months in parallel. A month the server has no report for (or only an empty one, R42) stays
+    /// absent and leaves the cache; a month that fails falls back to its cached report. Cancellation is reported as
+    /// such, never as a failure.
+    private func fetch(_ months: [Month], token: AccountScope.Token, now: Date) async -> Fetched {
         let api = self.api
         let results = await withTaskGroup(of: (Month, Result<Report?, Error>).self) { group in
             for month in months {
@@ -208,19 +258,24 @@ final class HealthModel {
             out.asked.insert(month)
             switch result {
             case .success(let report):
-                if let report {
+                if let report, !report.data.hasNoData {
                     out.reports[month] = report
-                    cache.store(report, token: token)
+                    out.fetchedAt[month] = now
+                    cache.store(report, fetchedAt: now, token: token)
+                } else {
+                    cache.remove(month: month, token: token)
                 }
             case .failure(let error):
-                if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                // URLError.cancelled is only a cancellation when this load was cancelled; otherwise it failed.
+                if error is CancellationError || ((error as? URLError)?.code == .cancelled && Task.isCancelled) {
                     out.cancelled = true
                     continue
                 }
                 if (error as? APIError) != .offline { out.hardError = out.hardError ?? error }
-                if let cached = cache.load(month: month) {
-                    out.reports[month] = cached
+                if let entry = cache.entry(month: month), !entry.report.data.hasNoData {
+                    out.reports[month] = entry.report
                     out.cached.insert(month)
+                    out.fetchedAt[month] = entry.fetchedAt
                 } else {
                     out.unresolved.insert(month)
                 }
@@ -233,7 +288,7 @@ final class HealthModel {
     // MARK: Building
 
     private func build(for month: Month, saveWidget: Bool, token: AccountScope.Token) {
-        guard let report = reports[month] else { state = .empty; return }
+        guard let report = reports[month] else { state = .empty(returning: true); return }
         let current = soFarMonth(now: now, calendar: calendar)
         let history = Array(reports.values
             .filter { $0.month < month }
@@ -253,7 +308,7 @@ final class HealthModel {
         state = .loaded(HealthSnapshot(
             report: report, previous: previous, history: history, parts: parts,
             suggestion: suggestion, soFar: soFar, isCached: isCached,
-            updatedAt: isCached ? report.generatedAt : now))
+            updatedAt: fetchedAt[month] ?? now))
 
         if saveWidget, !isCached, let health = report.data.health {
             sync.save(WidgetSnapshot(score: health.score, band: ScoreBand(score: health.score),

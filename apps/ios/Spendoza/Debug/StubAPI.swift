@@ -161,6 +161,17 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         return try! JSONDecoder().decode(Report.self, from: Data(json.utf8))
     }
 
+    /// What the server generated for a month with no transactions: zeros, no categories, a score of 55.
+    static func emptyReport(_ month: Month) -> Report {
+        let json = """
+        { "id": "r", "report_month": "\(month.apiString)",
+          "report_data": { "total_income": 0, "total_expenses": 0, "savings_rate": 0, "by_category": [],
+            "financial_health_score": { "score": 55, "previous_score": null, "factors": {} } },
+          "ai_insights": null, "generated_at": "2026-11-01T09:30:00.000Z", "has_new_data": false }
+        """
+        return try! JSONDecoder().decode(Report.self, from: Data(json.utf8))
+    }
+
     static let sep = Month(year: 2026, month: 9)
     static let oct = Month(year: 2026, month: 10)
     static let nov = Month(year: 2026, month: 11)

@@ -93,6 +93,10 @@ public struct ReportData: Codable, Sendable {
         health = try c.decodeIfPresent(HealthScore.self, forKey: .health)
     }
 
+    /// No income, no spending and no category rows: nothing was read for the month (R42). Clients treat such a
+    /// report as no report, since its score would only describe the empty data.
+    public var hasNoData: Bool { totalIncome == 0 && totalExpenses == 0 && byCategory.isEmpty }
+
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(totalIncome, forKey: .totalIncome)
