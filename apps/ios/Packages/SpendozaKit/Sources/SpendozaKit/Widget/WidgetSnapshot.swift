@@ -32,6 +32,11 @@ public final class SnapshotStore: Sendable {
         defaults?.set(data, forKey: Self.key)
     }
 
+    /// Saves only if `token` is still current (no sign-out or account change since it was taken).
+    public func save(_ s: WidgetSnapshot, token: AccountScope.Token, scope: AccountScope) {
+        scope.performIfCurrent(token) { _ in save(s) }
+    }
+
     public func clear() {
         defaults?.removeObject(forKey: Self.key)
     }

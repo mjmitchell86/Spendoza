@@ -9,9 +9,14 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     var reports: [Month: Report] = [:]
     var reportError: APIError?
+    /// Per-month failures (any error, e.g. `URLError(.cancelled)`).
+    var failingMonths: [Month: Error] = [:]
+    /// Months that answer slowly (a cancellable sleep).
+    var reportDelay: @Sendable (Month) -> Duration? = { _ in nil }
     var categoryList: [BudgetCategory] = StubAPI.defaultCategories
     var transactionList: [Transaction] = []
     var transactionsError: APIError?
+    var statementTransactions: [String: [Transaction]] = [:]
 
     var uploadResults: [Result<Statement, APIError>] = []
     /// Each `statements()` call returns the next script entry; the last entry repeats.
@@ -49,6 +54,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     func personalReport(_ month: Month) async throws -> Report? {
         lock.withLock { _requestedMonths.append(month) }
+        if let delay = reportDelay(month) { try await Task.sleep(for: delay) }
+        if let failure = failingMonths[month] { throw failure }
         if let reportError { throw reportError }
         return reports[month]
     }
@@ -64,11 +71,17 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         return transactionList
     }
 
+    func transactions(statementID: String) async throws -> [Transaction] {
+        record("transactions(\(statementID))")
+        if let transactionsError { throw transactionsError }
+        return statementTransactions[statementID] ?? []
+    }
+
     func setCategory(transactionID: String, category: String) async throws {}
     func createBudgetGoal(name: String, categoryID: String, amount: Int) async throws {}
 
-    func uploadStatement(fileURL: URL, mimeType: String) async throws -> Statement {
-        record("upload(\(fileURL.lastPathComponent), \(mimeType))")
+    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement {
+        record("upload(\(fileURL.lastPathComponent), \(mimeType))" + (bankName.map { " bank=\($0)" } ?? ""))
         let result: Result<Statement, APIError> = lock.withLock {
             uploadResults.isEmpty
                 ? .success(StubAPI.statement(id: "s-\(_calls.count)", status: .uploaded))
@@ -104,8 +117,10 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     // MARK: Builders
 
-    static func statement(id: String, status: StatementStatus, fileType: String = "pdf") -> Statement {
-        Statement(id: id, status: status, fileType: fileType, createdAt: Date(timeIntervalSince1970: 1_790_000_000))
+    static func statement(id: String, status: StatementStatus, fileType: String = "pdf",
+                          isParentSplit: Bool = false, childCount: Int? = nil) -> Statement {
+        Statement(id: id, status: status, fileType: fileType, createdAt: Date(timeIntervalSince1970: 1_790_000_000),
+                  isParentSplit: isParentSplit, childCount: childCount)
     }
 
     /// A report in the server's wire format. `points` are savings, needs, wants, emergency fund, debt.

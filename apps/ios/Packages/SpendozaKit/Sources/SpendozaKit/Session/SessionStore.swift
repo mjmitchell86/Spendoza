@@ -52,12 +52,18 @@ public final class SessionStore {
     /// The Spendoza API, authorized with this store's session.
     @ObservationIgnored public private(set) var api: any SpendozaAPI
 
+    /// Whose data the account caches hold; ended on sign-out so in-flight cache writes are dropped.
+    @ObservationIgnored public let accountScope: AccountScope
+    @ObservationIgnored private let profileCache: ProfileCache?
+    /// The signed-in user's id, if a session is stored on this device (readable offline).
+    @ObservationIgnored private let sessionUserID: @MainActor () -> String?
     @ObservationIgnored private let auth: AuthClient?
     @ObservationIgnored private var listener: Task<Void, Never>?
 
     public static let notConfiguredMessage = "This build isn't configured to sign in."
 
-    public init(config: SupabaseConfig?, apiBaseURL: URL, urlSession: URLSession = .shared) {
+    public init(config: SupabaseConfig?, apiBaseURL: URL, urlSession: URLSession = .shared,
+                accountScope: AccountScope = AccountScope(), profileCache: ProfileCache? = nil) {
         let auth = config.map {
             AuthClient(configuration: .init(
                 url: $0.url.appendingPathComponent("auth/v1"),
@@ -67,6 +73,9 @@ public final class SessionStore {
             ))
         }
         self.auth = auth
+        self.accountScope = accountScope
+        self.profileCache = profileCache
+        self.sessionUserID = { auth?.currentSession?.user.id.uuidString }
         self.isConfigured = auth != nil
         self.api = APIClient(baseURL: apiBaseURL, session: urlSession) {
             guard let auth else { return nil }
@@ -75,7 +84,11 @@ public final class SessionStore {
     }
 
     /// Test seam: a store around any API with no Supabase client.
-    public init(api: any SpendozaAPI) {
+    public init(api: any SpendozaAPI, userID: String? = nil, accountScope: AccountScope = AccountScope(),
+                profileCache: ProfileCache? = nil) {
+        self.accountScope = accountScope
+        self.profileCache = profileCache
+        self.sessionUserID = { userID }
         self.auth = nil
         self.isConfigured = false
         self.api = api
@@ -97,7 +110,11 @@ public final class SessionStore {
                 self?.clear()
             }
         }
-        guard auth.currentSession != nil else { return }
+        guard auth.currentSession != nil else {
+            // No session: nothing on this device may belong to a previous account.
+            clear()
+            return
+        }
         await refresh()
         restoredSession = auth.currentSession != nil
     }
@@ -137,15 +154,27 @@ public final class SessionStore {
 
     /// Reloads the profile and recomputes the phase.
     public func refresh() async {
-        guard let auth, auth.currentSession != nil else { clear(); return }
+        guard let userID = sessionUserID() else { clear(); return }
+        accountScope.begin(userID: userID)
+        let token = accountScope.token()
         do {
             let profile = try await api.profile()
+            profileCache?.store(profile, token: token)
             self.profile = profile
             loadError = nil
             accountReadyEmail = nil
             phase = appPhase(session: true, profile: profile)
         } catch APIError.unauthorized {
             await signOut()
+        } catch APIError.offline {
+            // Offline launch: the last profile this user had decides the phase, so the cached check-up is reachable.
+            if accountScope.isCurrent(token), let cached = profileCache?.load() {
+                profile = cached
+                loadError = nil
+                phase = appPhase(session: true, profile: cached)
+            } else {
+                loadError = APIError.offline.userMessage
+            }
         } catch let error as APIError {
             loadError = error.userMessage
         } catch {
@@ -158,6 +187,7 @@ public final class SessionStore {
         profile = nil
         loadError = nil
         phase = .signedOut
+        accountScope.end()
         onSignOut?()
     }
 }

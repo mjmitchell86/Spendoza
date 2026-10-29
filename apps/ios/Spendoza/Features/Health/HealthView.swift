@@ -7,9 +7,9 @@ struct HealthView: View {
     let api: any SpendozaAPI
     @State private var addingStatement = false
 
-    init(api: any SpendozaAPI, cache: ReportCache, snapshots: SnapshotStore) {
+    init(api: any SpendozaAPI, cache: ReportCache, snapshots: SnapshotStore, scope: AccountScope) {
         self.api = api
-        _model = State(initialValue: HealthModel(api: api, cache: cache, snapshots: snapshots))
+        _model = State(initialValue: HealthModel(api: api, cache: cache, snapshots: snapshots, scope: scope))
     }
 
     /// For previews and render checks: a model already in a state.
@@ -22,7 +22,9 @@ struct HealthView: View {
         ScrollView { page }
         .refreshable { await model.load(now: .now) }
         .background(Theme.paper.ignoresSafeArea())
-        .task { if case .loading = model.state { await model.load(now: .now) } }
+        // Reload unless there's something on screen: a load that was cancelled leaves the state as it was.
+        .task { if !model.isLoaded { await model.load(now: .now) } }
+        .onDisappear { model.cancel() }
         .fullScreenCover(isPresented: $addingStatement) {
             OnboardingView(api: api, mode: .addStatement) {
                 addingStatement = false
@@ -137,7 +139,7 @@ struct HealthView: View {
             Menu {
                 ForEach(model.checkupChoices, id: \.self) { month in
                     Button {
-                        Task { await model.select(month) }
+                        model.requestSelect(month)
                     } label: {
                         if month == model.selectedMonth { Label("\(month.name) check-up", systemImage: "checkmark") }
                         else { Text("\(month.name) check-up") }

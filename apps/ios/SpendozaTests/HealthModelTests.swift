@@ -18,16 +18,18 @@ struct HealthModelTests {
         let model: HealthModel
         let cache: ReportCache
         let snapshots: SnapshotStore
+        let scope: AccountScope
         let cleanup: () -> Void
     }
 
-    private func harness(_ api: StubAPI, cache existing: ReportCache? = nil) -> Harness {
+    private func harness(_ api: StubAPI, cache existing: ReportCache? = nil, scope existingScope: AccountScope? = nil) -> Harness {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("health-\(UUID().uuidString)")
         let suite = "test.spendoza.\(UUID().uuidString)"
-        let cache = existing ?? ReportCache(directory: dir)
+        let scope = existingScope ?? AccountScope(userID: "user-a")
+        let cache = existing ?? ReportCache(directory: dir, scope: scope)
         let snapshots = SnapshotStore(appGroup: suite)
-        let model = HealthModel(api: api, cache: cache, snapshots: snapshots, calendar: Self.calendar)
-        return Harness(model: model, cache: cache, snapshots: snapshots, cleanup: {
+        let model = HealthModel(api: api, cache: cache, snapshots: snapshots, scope: scope, calendar: Self.calendar)
+        return Harness(model: model, cache: cache, snapshots: snapshots, scope: scope, cleanup: {
             try? FileManager.default.removeItem(at: dir)
             UserDefaults().removePersistentDomain(forName: suite)
         })
@@ -128,7 +130,7 @@ struct HealthModelTests {
 
         let offline = StubAPI()
         offline.reportError = .offline
-        let second = harness(offline, cache: first.cache)
+        let second = harness(offline, cache: first.cache, scope: first.scope)
         defer { second.cleanup() }
         await second.model.load(now: now)
 
@@ -208,6 +210,170 @@ struct HealthModelTests {
     @Test func updatedDateReadsAsMonthAndDay() {
         let date = Date(timeIntervalSince1970: 1_793_000_000)   // 2026-10-26 UTC
         #expect(HealthView.updatedText(date, calendar: Self.calendar) == "Last updated Oct 26")
+    }
+
+    // MARK: Cancellation (B)
+
+    private func isLoading(_ model: HealthModel) -> Bool {
+        if case .loading = model.state { return true }
+        return false
+    }
+
+    @Test func aCancelledLoadLeavesTheStateAloneAndAReloadWorks() async throws {
+        let api = StubAPI()
+        api.reports = StubAPI.standardReports()
+        api.reportDelay = { _ in .milliseconds(400) }
+        let h = harness(api)
+        defer { h.cleanup() }
+        let task = Task { await h.model.load(now: now) }
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+        await task.value
+        #expect(isLoading(h.model))
+        #expect(h.cache.load(month: oct) == nil)
+        #expect(h.snapshots.load() == nil)
+
+        api.reportDelay = { _ in nil }
+        await h.model.load(now: now)
+        #expect(try loaded(h.model).report.month == oct)
+    }
+
+    @Test func aURLSessionCancellationIsNotAFailure() async {
+        let api = StubAPI()
+        api.reports = StubAPI.standardReports()
+        api.failingMonths = [oct: URLError(.cancelled)]
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        #expect(isLoading(h.model))
+    }
+
+    // MARK: Stale selection (C)
+
+    @Test func anOlderSelectFinishingLateDoesNotOverwriteANewerOne() async throws {
+        let apr = Month(year: 2026, month: 4)
+        let api = StubAPI()
+        api.reports = StubAPI.standardReports()
+        api.reportDelay = { $0 == apr ? .milliseconds(300) : nil }
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+
+        let slow = Task { await h.model.select(sep) }
+        try await Task.sleep(for: .milliseconds(50))
+        await h.model.select(oct)
+        await slow.value
+        #expect(h.model.selectedMonth == oct)
+        #expect(try loaded(h.model).report.month == oct)
+    }
+
+    @Test func requestSelectCancelsThePreviousRequest() async throws {
+        let apr = Month(year: 2026, month: 4)
+        let api = StubAPI()
+        api.reports = StubAPI.standardReports()
+        api.reportDelay = { $0 == apr ? .milliseconds(300) : nil }
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        h.model.requestSelect(sep)
+        try await Task.sleep(for: .milliseconds(50))
+        h.model.requestSelect(oct)
+        await h.model.settle()
+        #expect(h.model.selectedMonth == oct)
+        #expect(try loaded(h.model).report.month == oct)
+    }
+
+    // MARK: Gaps (D)
+
+    @Test func deltasCompareOnlyWithTheCalendarMonthBefore() async throws {
+        let api = StubAPI()
+        var reports = StubAPI.standardReports()
+        reports[sep] = nil   // August and October exist, September doesn't
+        api.reports = reports
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        let snapshot = try loaded(h.model)
+        #expect(snapshot.report.month == oct)
+        #expect(snapshot.previous == nil)
+        #expect(snapshot.parts.allSatisfy { $0.delta == nil })
+        #expect(snapshot.history.map(\.month) == [aug])   // kept, with the gap, for trends
+    }
+
+    @Test func theFirstEverMonthHasNoDeltas() async throws {
+        let api = StubAPI()
+        let all = StubAPI.standardReports()
+        api.reports = [oct: all[oct]!, nov: all[nov]!]
+        let h = harness(api)
+        defer { h.cleanup() }
+        await h.model.load(now: now)
+        let snapshot = try loaded(h.model)
+        #expect(snapshot.parts.allSatisfy { $0.delta == nil })
+        #expect(snapshot.history.isEmpty)
+    }
+
+    // MARK: Sign-out (F)
+
+    @Test func signingOutDuringALoadDropsItsWrites() async throws {
+        let api = StubAPI()
+        api.reports = StubAPI.standardReports()
+        api.reportDelay = { _ in .milliseconds(200) }
+        let h = harness(api)
+        defer { h.cleanup() }
+        let task = Task { await h.model.load(now: now) }
+        try await Task.sleep(for: .milliseconds(50))
+        h.scope.end()
+        await task.value
+        h.scope.begin(userID: "user-a")   // the same person signs back in
+        #expect(h.cache.load(month: oct) == nil)
+        #expect(h.snapshots.load() == nil)
+        #expect(!isLoaded(h.model))
+    }
+
+    private func isLoaded(_ model: HealthModel) -> Bool {
+        if case .loaded = model.state { return true }
+        return false
+    }
+
+    // MARK: Month boundary offline (G)
+
+    @Test func offlineAfterTheMonthTurnedStillShowsTheNewestCachedCheckup() async throws {
+        let oct20 = Date(timeIntervalSince1970: 1_792_454_400)   // 2026-10-20
+        let online = StubAPI()
+        let all = StubAPI.standardReports()
+        online.reports = [aug: all[aug]!, sep: all[sep]!, oct: all[oct]!]
+        let first = harness(online)
+        defer { first.cleanup() }
+        await first.model.load(now: oct20)
+
+        let offline = StubAPI()
+        offline.reportError = .offline
+        let second = harness(offline, cache: first.cache, scope: first.scope)
+        defer { second.cleanup() }
+        let dec3 = Date(timeIntervalSince1970: 1_796_256_000)   // 2026-12-03: November has no cache
+        await second.model.load(now: dec3)
+        let snapshot = try loaded(second.model)
+        #expect(snapshot.isCached)
+        #expect(snapshot.report.month == oct)
+    }
+
+    @Test func aRealServerErrorForANewerMonthStillFails() async throws {
+        let oct20 = Date(timeIntervalSince1970: 1_792_454_400)
+        let online = StubAPI()
+        let all = StubAPI.standardReports()
+        online.reports = [sep: all[sep]!, oct: all[oct]!]
+        let first = harness(online)
+        defer { first.cleanup() }
+        await first.model.load(now: oct20)
+
+        let flaky = StubAPI()
+        flaky.reports = [sep: all[sep]!, oct: all[oct]!]
+        flaky.failingMonths = [nov: APIError.message("Server down")]
+        let second = harness(flaky, cache: first.cache, scope: first.scope)
+        defer { second.cleanup() }
+        await second.model.load(now: Date(timeIntervalSince1970: 1_796_256_000))
+        guard case .failed(let message) = second.model.state else { Issue.record("expected .failed, got \(second.model.state)"); return }
+        #expect(message == "Server down")
     }
 
     @Test func menuListsFinishedMonthsNewestFirst() async {

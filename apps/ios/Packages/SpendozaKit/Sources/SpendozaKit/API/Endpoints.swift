@@ -33,6 +33,10 @@ struct Endpoint {
         .get("/api/transactions", query: [URLQueryItem(name: "from_date", value: from), URLQueryItem(name: "to_date", value: to)])
     }
 
+    static func transactions(statementID: String) -> Endpoint {
+        .get("/api/transactions", query: [URLQueryItem(name: "bank_statement_id", value: statementID)])
+    }
+
     static func setCategory(id: String, category: String) -> Endpoint {
         .json(.put, "/api/transactions/\(id)", ["ai_category": category])
     }

@@ -46,7 +46,11 @@ public final class APIClient: SpendozaAPI {
         try await sendIgnoringBody(.budgetGoal(name: name, categoryID: categoryID, amount: amount))
     }
 
-    public func uploadStatement(fileURL: URL, mimeType: String) async throws -> Statement {
+    public func transactions(statementID: String) async throws -> [Transaction] {
+        try await send(.transactions(statementID: statementID))
+    }
+
+    public func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement {
         let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         if size > Self.maxStatementBytes { throw APIError.fileTooLarge(maxMB: Self.maxStatementMB) }
         let fileData = try Data(contentsOf: fileURL)
@@ -60,7 +64,14 @@ public final class APIClient: SpendozaAPI {
         add("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
         add("Content-Type: \(mimeType)\r\n\r\n")
         body.append(fileData)
-        add("\r\n--\(boundary)--\r\n")
+        add("\r\n")
+        let bank = (bankName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !bank.isEmpty {
+            add("--\(boundary)\r\n")
+            add("Content-Disposition: form-data; name=\"bank_name\"\r\n\r\n")
+            add("\(bank)\r\n")
+        }
+        add("--\(boundary)--\r\n")
 
         var endpoint = Endpoint(method: .post, path: Endpoint.uploadPath)
         endpoint.body = body

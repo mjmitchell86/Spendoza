@@ -11,7 +11,10 @@ public protocol SpendozaAPI: Sendable {
     func transactions(from: Date, to: Date) async throws -> [Transaction]
     func setCategory(transactionID: String, category: String) async throws
     func createBudgetGoal(name: String, categoryID: String, amount: Int) async throws
-    func uploadStatement(fileURL: URL, mimeType: String) async throws -> Statement
+    /// The transactions extracted from one statement.
+    func transactions(statementID: String) async throws -> [Transaction]
+    /// `bankName` is sent as the `bank_name` field when it has text.
+    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement
     func statements() async throws -> [Statement]
     func reprocessStatement(id: String) async throws
     func removeStatement(id: String) async throws

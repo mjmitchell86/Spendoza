@@ -17,7 +17,8 @@ struct SpendozaApp: App {
     private static func makeStore() -> SessionStore {
         let base = (Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String).flatMap(URL.init(string:))
         let store = SessionStore(config: SupabaseConfig(bundle: .main),
-                                 apiBaseURL: base ?? URL(string: "https://api.spendoza.io")!)
+                                 apiBaseURL: base ?? URL(string: "https://api.spendoza.io")!,
+                                 accountScope: AppServices.accountScope, profileCache: AppServices.profileCache)
         store.onSignOut = { AppServices.clearAccountData() }
         return store
     }

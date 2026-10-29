@@ -9,7 +9,8 @@ struct MainTabs: View {
     var body: some View {
         TabView {
             Tab("Health", systemImage: "gauge.with.needle") {
-                HealthView(api: store.api, cache: AppServices.reportCache, snapshots: AppServices.snapshots)
+                HealthView(api: store.api, cache: AppServices.reportCache, snapshots: AppServices.snapshots,
+                           scope: AppServices.accountScope)
             }
             Tab("Me", systemImage: "person") {
                 MeView(store: store, lock: lock)

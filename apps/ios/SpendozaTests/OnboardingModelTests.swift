@@ -205,12 +205,64 @@ struct OnboardingModelTests {
         #expect(m.progressMessage == "Categorizing expenses...")
     }
 
+    // MARK: Bank name, review and split (R25)
+
+    @Test func theBankNameGoesWithEveryFile() async throws {
+        let api = StubAPI()
+        let m = model(api)
+        m.begin()
+        await m.upload(fileURLs: [try tempFile("a.csv"), try tempFile("b.csv")], bankName: "Chase")
+        #expect(api.calls.filter { $0.hasPrefix("upload") }.allSatisfy { $0.hasSuffix(" bank=Chase") })
+    }
+
+    @Test func aBlankBankNameIsLeftOut() async throws {
+        let api = StubAPI()
+        let m = model(api)
+        m.begin()
+        await m.upload(fileURLs: [try tempFile("a.pdf")], bankName: "   ")
+        #expect(api.calls.contains { $0.hasPrefix("upload(a.pdf, application/pdf)") && !$0.contains("bank=") })
+    }
+
+    @Test func reviewShowsOnlyTheTrackedStatementsTransactions() async {
+        let api = StubAPI()
+        api.statementTransactions = [
+            "s1": [Transaction(id: "1", date: "2026-10-02", description: "Cafe", amount: 4, type: .debit, category: nil)],
+            "s2": [Transaction(id: "2", date: "2026-10-09", description: "Gas", amount: 30, type: .debit, category: nil)],
+            "other": [Transaction(id: "3", date: "2026-10-10", description: "Old", amount: 1, type: .debit, category: nil)],
+        ]
+        let m = processing(api, ids: ["s1", "s2"])
+        await m.loadReview()
+        #expect(m.reviewTransactions.map(\.id) == ["2", "1"])
+        #expect(api.calls.contains("transactions(s1)") && api.calls.contains("transactions(s2)"))
+        #expect(!api.calls.contains("transactions"))
+    }
+
+    @Test func aSplitCSVExplainsItselfInsteadOfAdvancing() async {
+        let api = StubAPI()
+        api.statementScript = [[StubAPI.statement(id: "s1", status: .parsed, fileType: "csv", isParentSplit: true, childCount: 3)]]
+        let m = processing(api, ids: ["s1"])
+        await m.pollUntilProcessed()
+        #expect(m.step == .processing)
+        #expect(m.allParsedAreSplits)
+        #expect(m.splitMessage == "Your statement was split into 3 monthly statements. They're processing in the background.")
+    }
+
+    @Test func splitMessageHandlesPluralAndUnknownCounts() {
+        let m = model(StubAPI())
+        m.startProcessing([StubAPI.statement(id: "a", status: .parsed, isParentSplit: true),
+                           StubAPI.statement(id: "b", status: .parsed, isParentSplit: true, childCount: 2)])
+        #expect(m.splitMessage == "Your statements were split into 2 monthly statements. They're processing in the background.")
+        let n = model(StubAPI())
+        n.startProcessing([StubAPI.statement(id: "a", status: .parsed, isParentSplit: true)])
+        #expect(n.splitMessage == "Your statement was split into multiple monthly statements. They're processing in the background.")
+    }
+
     // MARK: Review and finish
 
     @Test func reviewListsTheTransactionsFound() async {
         let api = StubAPI()
-        api.transactionList = [Transaction(id: "t", date: "2026-10-02", description: "Cafe", amount: 4.5, type: .debit, category: "Dining out")]
-        let m = model(api)
+        api.statementTransactions = ["s1": [Transaction(id: "t", date: "2026-10-02", description: "Cafe", amount: 4.5, type: .debit, category: "Dining out")]]
+        let m = processing(api, ids: ["s1"])
         await m.loadReview()
         #expect(m.reviewTransactions.count == 1)
     }
@@ -218,7 +270,7 @@ struct OnboardingModelTests {
     @Test func reviewFailureIsAnEmptyList() async {
         let api = StubAPI()
         api.transactionsError = .offline
-        let m = model(api)
+        let m = processing(api, ids: ["s1"])
         await m.loadReview()
         #expect(m.reviewTransactions.isEmpty)
         #expect(!m.isLoadingReview)

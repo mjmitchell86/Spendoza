@@ -235,7 +235,7 @@ struct APIClientTests {
     @Test func uploadSendsMultipartFileField() async throws {
         let log = stub(status: 201, body: #"{"id":"s9","file_type":"pdf","status":"uploaded","created_at":"2026-10-29T12:00:00Z"}"#)
         let url = try tempFile(bytes: 64)
-        let statement = try await client().uploadStatement(fileURL: url, mimeType: "application/pdf")
+        let statement = try await client().uploadStatement(fileURL: url, mimeType: "application/pdf", bankName: nil)
         let request = try #require(log.all.first)
         #expect(request.method == "POST")
         #expect(request.path == "/api/bank-statements/upload")
@@ -249,11 +249,47 @@ struct APIClientTests {
         #expect(statement.status == .uploaded)
     }
 
+    @Test func uploadSendsTheBankNameFieldWhenGiven() async throws {
+        let log = stub(status: 201, body: #"{"id":"s9","file_type":"csv","status":"uploaded","created_at":"2026-10-29T12:00:00Z"}"#)
+        let url = try tempFile(bytes: 64)
+        _ = try await client().uploadStatement(fileURL: url, mimeType: "text/csv", bankName: "  Chase  ")
+        let text = String(decoding: try #require(log.all.first).body, as: UTF8.self)
+        #expect(text.contains(#"name="bank_name""#))
+        #expect(text.contains("\r\n\r\nChase\r\n"))
+    }
+
+    @Test func uploadLeavesOutAnEmptyBankName() async throws {
+        let log = stub(status: 201, body: #"{"id":"s9","file_type":"pdf","status":"uploaded","created_at":"2026-10-29T12:00:00Z"}"#)
+        let url = try tempFile(bytes: 64)
+        _ = try await client().uploadStatement(fileURL: url, mimeType: "application/pdf", bankName: "   ")
+        let text = String(decoding: try #require(log.all.first).body, as: UTF8.self)
+        #expect(!text.contains("bank_name"))
+    }
+
+    @Test func transactionsForAStatementFilterByIt() async throws {
+        let log = stub(body: #"[{"id":"t1","date":"2026-10-03","description":"Coffee","amount":4.5,"type":"debit","ai_category":null}]"#)
+        let rows = try await client().transactions(statementID: "s9")
+        #expect(log.all.first?.path == "/api/transactions")
+        #expect(log.all.first?.query == ["bank_statement_id": "s9"])
+        #expect(rows.count == 1)
+    }
+
+    @Test func statementDecodesParentSplitInfo() throws {
+        let json = #"{"id":"s","status":"parsed","file_type":"csv","created_at":"2026-10-29T12:00:00Z","parsed_data":{"is_parent_split":true,"child_count":3}}"#
+        let statement = try APICoding.makeDecoder().decode(Statement.self, from: Data(json.utf8))
+        #expect(statement.isParentSplit)
+        #expect(statement.childCount == 3)
+        let plain = #"{"id":"s","status":"parsed","file_type":"pdf","created_at":"2026-10-29T12:00:00Z","parsed_data":null}"#
+        let other = try APICoding.makeDecoder().decode(Statement.self, from: Data(plain.utf8))
+        #expect(!other.isParentSplit)
+        #expect(other.childCount == nil)
+    }
+
     @Test func oversizedUploadThrowsWithoutARequest() async throws {
         let log = stub()
         let url = try tempFile(bytes: APIClient.maxStatementBytes + 1)
         await expectError(.fileTooLarge(maxMB: 4)) {
-            try await client().uploadStatement(fileURL: url, mimeType: "application/pdf")
+            try await client().uploadStatement(fileURL: url, mimeType: "application/pdf", bankName: nil)
         }
         #expect(log.count == 0)
     }

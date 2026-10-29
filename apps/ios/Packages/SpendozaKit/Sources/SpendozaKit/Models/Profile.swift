@@ -1,7 +1,7 @@
 import Foundation
 
 /// `GET /api/profile` (the fields the app reads).
-public struct Profile: Decodable, Sendable, Equatable {
+public struct Profile: Codable, Sendable, Equatable {
     public let id: String
     public let displayName: String
     public let onboardingCompleted: Bool

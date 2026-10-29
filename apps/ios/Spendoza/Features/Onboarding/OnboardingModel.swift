@@ -29,6 +29,7 @@ final class OnboardingModel {
     @ObservationIgnored private let pollInterval: Duration
     @ObservationIgnored private let maxPolls: Int
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
+    @ObservationIgnored private var uploadTask: Task<Void, Never>?
 
     /// Polls every `pollInterval` up to `maxPolls` times (3 s and 40 polls by default: about two minutes).
     init(api: any SpendozaAPI, timeZone: TimeZone = .current, pollInterval: Duration = .seconds(3),
@@ -45,6 +46,21 @@ final class OnboardingModel {
     var parsedCount: Int { statements.filter { $0.status == .parsed }.count }
     /// Some statement is still being read.
     var isStillWorking: Bool { statements.contains { $0.status == .uploaded || $0.status == .processing } }
+
+    /// Every parsed statement was a multi-month CSV the server split into monthly statements.
+    var allParsedAreSplits: Bool {
+        let parsed = statements.filter { $0.status == .parsed }
+        return !parsed.isEmpty && parsed.allSatisfy(\.isParentSplit)
+    }
+
+    /// The web's split message, for the processing step.
+    var splitMessage: String {
+        let splits = statements.filter { $0.status == .parsed && $0.isParentSplit }
+        let total = splits.compactMap(\.childCount).reduce(0, +)
+        let count = total > 0 ? "\(total)" : "multiple"
+        let lead = splits.count == 1 ? "Your statement was" : "Your statements were"
+        return "\(lead) split into \(count) monthly statements. They're processing in the background."
+    }
 
     /// What the server is doing now, in the web's words.
     var progressMessage: String {
@@ -80,14 +96,29 @@ final class OnboardingModel {
 
     func upload(fileURL: URL) async { await upload(fileURLs: [fileURL]) }
 
+    /// Starts an upload the model owns (so `cancel()` can stop it); `finally` runs when it ends, for example
+    /// to release security-scoped file access.
+    func startUpload(_ fileURLs: [URL], bankName: String, finally: @escaping @MainActor () -> Void) {
+        uploadTask?.cancel()
+        uploadTask = Task {
+            await upload(fileURLs: fileURLs, bankName: bankName)
+            finally()
+        }
+    }
+
+    /// Stops an upload in flight (the screen went away or the person signed out).
+    func cancel() { uploadTask?.cancel() }
+
     /// Uploads each file in turn, then moves to processing if at least one was accepted.
-    func upload(fileURLs: [URL]) async {
+    func upload(fileURLs: [URL], bankName: String = "") async {
         uploadError = nil
         isUploading = true
         defer { isUploading = false }
         var errors: [String] = []
         var accepted = 0
+        let bank = bankName.trimmingCharacters(in: .whitespacesAndNewlines)
         for url in fileURLs {
+            if Task.isCancelled { break }
             guard let mime = Self.mimeType(for: url) else { errors.append(Self.wrongTypeMessage); continue }
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             if size > APIClient.maxStatementBytes {
@@ -95,7 +126,7 @@ final class OnboardingModel {
                 continue
             }
             do {
-                track(try await api.uploadStatement(fileURL: url, mimeType: mime))
+                track(try await api.uploadStatement(fileURL: url, mimeType: mime, bankName: bank.isEmpty ? nil : bank))
                 accepted += 1
             } catch let error as APIError {
                 errors.append(error.userMessage)
@@ -151,7 +182,7 @@ final class OnboardingModel {
                 }
             }
             guard !isStillWorking else { continue }
-            if failedStatements.isEmpty, parsedCount > 0 { step = .review }
+            if failedStatements.isEmpty, parsedCount > 0, !allParsedAreSplits { step = .review }
             return
         }
         pollTimedOut = true
@@ -178,7 +209,7 @@ final class OnboardingModel {
             try await api.removeStatement(id: id)
             statements.removeAll { $0.id == id }
             if statements.isEmpty { step = .upload }
-            else if !isStillWorking, failedStatements.isEmpty, parsedCount > 0 { step = .review }
+            else if !isStillWorking, failedStatements.isEmpty, parsedCount > 0, !allParsedAreSplits { step = .review }
             else { pollToken += 1 }
         } catch {
             actionError = (error as? APIError)?.userMessage ?? "Couldn't remove this statement. Try again in a moment."
@@ -187,12 +218,14 @@ final class OnboardingModel {
 
     // MARK: Review
 
-    /// The new account's transactions, newest first (nothing else is in it yet).
-    func loadReview(now: Date = .now) async {
+    /// The transactions extracted from the statements uploaded in this flow, newest first.
+    func loadReview() async {
         isLoadingReview = true
         defer { isLoadingReview = false }
-        let from = Calendar.current.date(byAdding: .year, value: -5, to: now) ?? now
-        let found = (try? await api.transactions(from: from, to: now)) ?? []
+        var found: [Transaction] = []
+        for id in statementIDs {
+            found += (try? await api.transactions(statementID: id)) ?? []
+        }
         reviewTransactions = found.sorted { $0.date > $1.date }
     }
 

@@ -35,6 +35,7 @@ struct OnboardingView: View {
         }
         .background(Theme.paper.ignoresSafeArea())
         .onAppear { if mode == .addStatement, model.step == .welcome { model.begin() } }
+        .onDisappear { model.cancel() }
     }
 
     // MARK: Header
@@ -151,12 +152,16 @@ struct UploadStep: View {
     let model: OnboardingModel
     let canSkip: Bool
     @State private var picking = false
+    @State private var bankName = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             StepTitle(title: "Upload bank statements",
                       subtitle: "Upload PDF or CSV bank statements and we'll automatically extract your transactions.")
             if let error = model.uploadError { InlineError(message: error) }
+
+            AuthField(label: "Bank name (optional)", text: $bankName, capitalization: .words)
+                .disabled(model.isUploading)
 
             Button { picking = true } label: {
                 VStack(spacing: 8) {
@@ -194,10 +199,9 @@ struct UploadStep: View {
         .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf, .commaSeparatedText],
                       allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
-            Task {
-                // Files from the picker stay readable only while access is held.
-                let held = urls.filter { $0.startAccessingSecurityScopedResource() }
-                await model.upload(fileURLs: urls)
+            // Files from the picker stay readable only while access is held.
+            let held = urls.filter { $0.startAccessingSecurityScopedResource() }
+            model.startUpload(urls, bankName: bankName) {
                 held.forEach { $0.stopAccessingSecurityScopedResource() }
             }
         }
@@ -215,6 +219,8 @@ struct ProcessingStep: View {
                 working
             } else if model.pollTimedOut {
                 stillWorking
+            } else if model.allParsedAreSplits, model.failedStatements.isEmpty {
+                split
             } else {
                 finished
             }
@@ -235,6 +241,13 @@ struct ProcessingStep: View {
             }
             Text("This usually takes a minute or two\(model.statements.count > 1 ? " per statement" : "").")
                 .font(.sans(13, relativeTo: .footnote)).foregroundStyle(Theme.soft)
+        }
+    }
+
+    private var split: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            StepTitle(title: "Statements split successfully", subtitle: model.splitMessage)
+            Button("Continue") { model.continueToComplete() }.buttonStyle(PrimaryButtonStyle())
         }
     }
 

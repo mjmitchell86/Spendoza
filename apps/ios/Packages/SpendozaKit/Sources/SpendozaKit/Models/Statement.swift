@@ -15,9 +15,16 @@ public struct Statement: Decodable, Sendable, Equatable, Identifiable {
     public let createdAt: Date
     /// `parsed_data.pipeline_step`, when the server reports progress.
     public let pipelineStep: String?
+    /// A multi-month CSV the server split into one statement per month (`parsed_data.is_parent_split`).
+    public let isParentSplit: Bool
+    /// `parsed_data.child_count` for a split statement.
+    public let childCount: Int?
 
     public init(id: String, status: StatementStatus, fileType: String, bankName: String? = nil,
-                accountLabel: String? = nil, createdAt: Date, pipelineStep: String? = nil) {
+                accountLabel: String? = nil, createdAt: Date, pipelineStep: String? = nil,
+                isParentSplit: Bool = false, childCount: Int? = nil) {
+        self.isParentSplit = isParentSplit
+        self.childCount = childCount
         self.id = id
         self.status = status
         self.fileType = fileType
@@ -38,7 +45,13 @@ public struct Statement: Decodable, Sendable, Equatable, Identifiable {
 
     private struct ParsedData: Decodable {
         let pipelineStep: String?
-        enum CodingKeys: String, CodingKey { case pipelineStep = "pipeline_step" }
+        let isParentSplit: Bool?
+        let childCount: Int?
+        enum CodingKeys: String, CodingKey {
+            case pipelineStep = "pipeline_step"
+            case isParentSplit = "is_parent_split"
+            case childCount = "child_count"
+        }
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,6 +63,9 @@ public struct Statement: Decodable, Sendable, Equatable, Identifiable {
         accountLabel = try c.decodeIfPresent(String.self, forKey: .accountLabel)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         // parsed_data is an arbitrary object (or null); tolerate any shape.
-        pipelineStep = (try? c.decodeIfPresent(ParsedData.self, forKey: .parsedData))?.pipelineStep
+        let parsed = try? c.decodeIfPresent(ParsedData.self, forKey: .parsedData)
+        pipelineStep = parsed?.pipelineStep
+        isParentSplit = parsed?.isParentSplit ?? false
+        childCount = parsed?.childCount
     }
 }
