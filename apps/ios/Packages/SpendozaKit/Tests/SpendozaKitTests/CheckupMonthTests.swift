@@ -29,6 +29,16 @@ struct CheckupMonthTests {
         #expect(checkupMonth(now: date(2026, 11, 1, 0, 5), calendar: calendar, reportMonths: [oct]) == oct)
     }
 
+    /// 4.14: 23:30 on Oct 31 in New York is already November in UTC; the check-up follows the person's calendar.
+    @Test func lastMinutesOfAMonthUseThePersonsTimeZone() {
+        let lateOct31 = date(2026, 10, 31, 23, 30)
+        #expect(checkupMonth(now: lateOct31, calendar: calendar, reportMonths: [sep, oct]) == sep)
+        #expect(soFarMonth(now: lateOct31, calendar: calendar) == oct)
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        #expect(checkupMonth(now: lateOct31, calendar: utc, reportMonths: [sep, oct]) == oct)
+    }
+
     @Test func soFarIsCurrentMonth() {
         #expect(soFarMonth(now: date(2026, 11, 14), calendar: calendar) == nov)
     }

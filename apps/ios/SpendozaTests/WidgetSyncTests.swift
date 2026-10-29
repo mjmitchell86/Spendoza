@@ -48,7 +48,7 @@ struct WidgetSyncTests {
 
     @Test func changedSnapshotSavesAndReloadsOnce_identicalDoesNot() {
         let (sync, widgets, snapshots, _, suite) = parts()
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let scope = AccountScope(userID: "user-a")
         let token = scope.token()
 
@@ -62,7 +62,7 @@ struct WidgetSyncTests {
 
     @Test func staleTokenSavesAndReloadsNothing() {
         let (sync, widgets, snapshots, _, suite) = parts()
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let scope = AccountScope(userID: "user-a")
         let token = scope.token()
         scope.end()
@@ -76,7 +76,7 @@ struct WidgetSyncTests {
     /// until November's report appears.
     @Test func seeingACheckupInTheAppCountsAsNotified() async throws {
         let (sync, widgets, snapshots, defaults, suite) = parts()
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let scope = AccountScope(userID: "user-a")
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sync-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -107,7 +107,7 @@ struct WidgetSyncTests {
 
     @Test func markSeenNeverMovesBackwards() {
         let (sync, _, _, defaults, suite) = parts()
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let scope = AccountScope(userID: "user-a")
         sync.markSeen(oct, token: scope.token(), scope: scope)
         sync.markSeen(sep, token: scope.token(), scope: scope)
@@ -116,7 +116,7 @@ struct WidgetSyncTests {
 
     @Test func markSeenWithStaleTokenWritesNothing() {
         let (sync, _, _, defaults, suite) = parts()
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let scope = AccountScope(userID: "user-a")
         let token = scope.token()
         scope.end()

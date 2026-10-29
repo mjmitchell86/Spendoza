@@ -60,7 +60,7 @@
 
 - [ ] **Step 1:** Write `ThemeContrastTests`: for each text pairing used (ink/paper, soft/paper, ink/card, `amberText`/paper, oxblood/paper, card-on-note text `#F4F7F2`/note) in light **and** dark, `#expect(Theme.contrastRatio(fg, bg) >= 4.5)`; and `#expect(Theme.contrastRatio(.amber, .paper) < 4.5)` documenting why `amberText` exists.
 - [ ] **Step 2:** Run; expect failure.
-- [ ] **Step 3:** Implement tokens (light values from Global Constraints; `amberText` is a darker amber that passes; dark palette: paper `#13241D`, card `#1A2E26`, ink `#E8EFE9`, soft `#A9BDB2`, engraving `#3E5A4D`, note `#7FB89C`, amber `#D6A04A`, oxblood `#E07A72`, adjusted until every pairing passes), fonts registered via `UIAppFonts`, components matching the mockups (hairline `engraving` rules, 4 pt corners, one filled `note` suggestion panel).
+- [ ] **Step 3:** Implement tokens (light values from Global Constraints; `amberText` is a darker amber that passes; dark palette: paper `#13241D`, card `#1A2E26`, ink `#E8EFE9`, soft `#A9BDB2`, engraving `#3E5A4D`, note `#7FB89C`, amber `#D6A04A`, oxblood `#EE9088`, adjusted until every pairing passes), fonts registered via `UIAppFonts`, components matching the mockups (hairline `engraving` rules, 4 pt corners, one filled `note` suggestion panel).
 - [ ] **Step 4:** Run; expect pass.
 - [ ] **Step 5:** Commit `ios: Banknote theme, typography and base components`.
 

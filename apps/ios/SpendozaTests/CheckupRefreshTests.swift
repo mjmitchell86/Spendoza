@@ -117,7 +117,7 @@ struct CheckupRefreshTests {
     @Test func newCheckupPostsTheNoticeStoresTheMonthAndSavesTheSnapshot() async {
         let stub = api()
         let h = harness(stub)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
         h.defaults.set(sep.apiString, forKey: CheckupRefresh.lastNotifiedKey)
 
         let body = await h.refresh.run(api: stub, now: Self.date(2026, 11, 2))
@@ -132,7 +132,7 @@ struct CheckupRefreshTests {
     @Test func aSecondRunPostsNothing() async {
         let stub = api()
         let h = harness(stub)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
 
         let first = await h.refresh.run(api: stub, now: Self.date(2026, 11, 2))
         let second = await h.refresh.run(api: stub, now: Self.date(2026, 11, 3))
@@ -146,7 +146,7 @@ struct CheckupRefreshTests {
     @Test func signedOutDoesNothingAndAsksNothing() async {
         let stub = api()
         let h = harness(stub, signedIn: false)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
 
         let body = await h.refresh.run(api: stub, now: Self.date(2026, 11, 2))
 
@@ -160,7 +160,7 @@ struct CheckupRefreshTests {
     @Test func noReportYetDoesNothing() async {
         let stub = StubAPI()
         let h = harness(stub)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
 
         #expect(await h.refresh.run(api: stub, now: Self.date(2026, 11, 2)) == nil)
         #expect(h.snapshots.load() == nil)
@@ -171,7 +171,7 @@ struct CheckupRefreshTests {
         let stub = api()
         stub.reportError = .offline
         let h = harness(stub)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
 
         #expect(await h.refresh.run(api: stub, now: Self.date(2026, 11, 2)) == nil)
         #expect(h.defaults.string(forKey: CheckupRefresh.lastNotifiedKey) == nil)
@@ -181,7 +181,7 @@ struct CheckupRefreshTests {
         let stub = StubAPI()
         stub.reports = [oct: StubAPI.report(oct, score: 64, previous: 73, points: [20, 20, 9, 10, 5])]
         let h = harness(stub)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
 
         #expect(await h.refresh.run(api: stub, now: Self.date(2026, 10, 20)) == nil)
         #expect(h.snapshots.load() == nil)
@@ -192,7 +192,7 @@ struct CheckupRefreshTests {
         stub.reportDelay = { _ in .milliseconds(50) }
         let scope = AccountScope(userID: "user-a")
         let h = harness(stub, scope: scope)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
 
         let gate = ReportGate()
         stub.reportHook = { _ in await gate.pass() }
@@ -211,7 +211,7 @@ struct CheckupRefreshTests {
     @Test func deniedPermissionRecordsTheMonthWithoutPosting() async {
         let stub = api()
         let h = harness(stub)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
         h.notifier.allowed = false
 
         #expect(await h.refresh.run(api: stub, now: Self.date(2026, 11, 2)) == nil)
@@ -222,7 +222,7 @@ struct CheckupRefreshTests {
 
     @Test func scheduleAsksForTomorrowAtTenLocal() throws {
         let h = harness(StubAPI())
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
 
         h.refresh.schedule(now: Self.date(2026, 11, 2, 15))
 
@@ -236,7 +236,7 @@ struct CheckupRefreshTests {
     /// 11.55: a signed-out phone stops asking for daily runs.
     @Test func aRunWhileSignedOutDoesNotAskForAnother() async {
         let h = harness(api(), signedIn: false)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
         let task = FakeTask()
         h.refresh.handle(task, now: Self.date(2026, 11, 2))
         await task.waitForCompletion()
@@ -246,7 +246,7 @@ struct CheckupRefreshTests {
 
     @Test func aRunWhileSignedInAsksForTomorrow() async {
         let h = harness(api())
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
         let task = FakeTask()
         h.refresh.handle(task, now: Self.date(2026, 11, 2))
         await task.waitForCompletion()
@@ -257,7 +257,7 @@ struct CheckupRefreshTests {
     /// A locked phone (token unreadable) is still signed in: keep the daily run.
     @Test func aLockedPhoneStillAsksForTomorrow() async {
         let h = harness(api(), signedIn: false, storedSession: true)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
         let task = FakeTask()
         h.refresh.handle(task, now: Self.date(2026, 11, 2))
         await task.waitForCompletion()
@@ -270,7 +270,7 @@ struct CheckupRefreshTests {
         let gate = ReportGate()
         stub.reportHook = { _ in await gate.pass() }
         let h = harness(stub)
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
         let task = FakeTask()
         h.refresh.handle(task, now: Self.date(2026, 11, 2))
         while !gate.arrived { await Task.yield() }
@@ -285,14 +285,14 @@ struct CheckupRefreshTests {
 
     @Test func registerRegistersTheCheckupIdentifier() {
         let h = harness(StubAPI())
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
         h.refresh.register()
         #expect(h.scheduler.registered == ["com.gravitaz.spendoza.checkup"])
     }
 
     @Test func permissionIsRequestedOnlyOnce() async {
         let h = harness(StubAPI())
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
 
         await h.refresh.requestPermissionIfNeeded()
         await h.refresh.requestPermissionIfNeeded()
@@ -302,7 +302,7 @@ struct CheckupRefreshTests {
 
     @Test func clearStateForgetsTheLastNotifiedMonth() {
         let h = harness(StubAPI())
-        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        defer { UserDefaults(suiteName: h.suite)?.removePersistentDomain(forName: h.suite) }
         h.defaults.set(oct.apiString, forKey: CheckupRefresh.lastNotifiedKey)
         h.refresh.clearAccountState()
         #expect(h.defaults.string(forKey: CheckupRefresh.lastNotifiedKey) == nil)

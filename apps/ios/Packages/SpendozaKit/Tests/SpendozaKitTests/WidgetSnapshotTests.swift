@@ -15,7 +15,8 @@ struct WidgetSnapshotTests {
         let s = WidgetSnapshot(score: 30, band: .low, previousScore: nil, month: Month(year: 2026, month: 9))
         let data = try JSONEncoder().encode(s)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(Set(object.keys).isSubset(of: ["score", "band", "previousScore", "month"]))
+        // 4.15: exactly the other three; a nil previous score is left out, never written as null.
+        #expect(Set(object.keys) == ["score", "band", "month"])
     }
 
     @Test func bandIsStoredAsPlainString() throws {
@@ -31,7 +32,7 @@ struct WidgetSnapshotTests {
 
     @Test func storeRoundTrips() {
         let suite = "test.spendoza.\(UUID().uuidString)"
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let store = SnapshotStore(appGroup: suite)
         #expect(store.load() == nil)
         store.save(snapshot)

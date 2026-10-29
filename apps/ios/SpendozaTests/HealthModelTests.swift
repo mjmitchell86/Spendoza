@@ -34,7 +34,7 @@ struct HealthModelTests {
         let model = HealthModel(api: api, cache: cache, scope: scope, calendar: Self.calendar, sync: sync)
         return Harness(model: model, cache: cache, snapshots: snapshots, scope: scope, cleanup: {
             try? FileManager.default.removeItem(at: dir)
-            UserDefaults().removePersistentDomain(forName: suite)
+            UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
         })
     }
 

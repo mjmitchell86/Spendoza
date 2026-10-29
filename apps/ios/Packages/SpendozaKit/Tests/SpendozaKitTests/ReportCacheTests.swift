@@ -123,7 +123,7 @@ struct ReportCacheTests {
 
     @Test func snapshotWriteIsDroppedAfterSignOut() {
         let suite = "test.spendoza.\(UUID().uuidString)"
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let scope = AccountScope(userID: "user-a")
         let store = SnapshotStore(appGroup: suite)
         let snapshot = WidgetSnapshot(score: 64, band: .fair, previousScore: 73, month: Month(year: 2026, month: 10))
@@ -156,7 +156,7 @@ struct ProfileCacheTests {
 struct SignOutCleanupTests {
     @Test func snapshotStoreClears() {
         let suite = "test.spendoza.\(UUID().uuidString)"
-        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let scope = AccountScope(userID: "user-a")
         let store = SnapshotStore(appGroup: suite)
         store.save(WidgetSnapshot(score: 64, band: .fair, previousScore: 73, month: Month(year: 2026, month: 10)),
