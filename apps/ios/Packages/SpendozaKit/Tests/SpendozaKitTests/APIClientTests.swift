@@ -150,6 +150,14 @@ struct APIClientTests {
         #expect(log.all.first?.json as? [String: String] == ["ai_category": "Groceries"])
     }
 
+    @Test func setCategoryToUncategorizedSendsAnExplicitNull() async throws {
+        let log = stub()
+        try await client().setCategory(transactionID: "t1", category: nil)
+        let json = try #require(log.all.first?.json)
+        #expect(json.count == 1)
+        #expect(json["ai_category"] is NSNull)
+    }
+
     @Test func createBudgetGoalSendsExactBody() async throws {
         let log = stub(status: 201)
         try await client().createBudgetGoal(name: "Dining out", categoryID: "c3", amount: 200)

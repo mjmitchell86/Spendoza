@@ -37,8 +37,17 @@ struct Endpoint {
         .get("/api/transactions", query: [URLQueryItem(name: "bank_statement_id", value: statementID)])
     }
 
-    static func setCategory(id: String, category: String) -> Endpoint {
-        .json(.put, "/api/transactions/\(id)", ["ai_category": category])
+    static func setCategory(id: String, category: String?) -> Endpoint {
+        struct Body: Encodable {
+            let category: String?
+            enum CodingKeys: String, CodingKey { case category = "ai_category" }
+            // An explicit null clears the category (the web sends the same); the key is never omitted.
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(category, forKey: .category)
+            }
+        }
+        return .json(.put, "/api/transactions/\(id)", Body(category: category))
     }
 
     static func budgetGoal(name: String, categoryID: String, amount: Int) -> Endpoint {

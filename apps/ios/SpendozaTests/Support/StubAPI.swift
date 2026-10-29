@@ -79,8 +79,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         return statementTransactions[statementID] ?? []
     }
 
-    func setCategory(transactionID: String, category: String) async throws {
-        record("setCategory(\(transactionID), \(category))")
+    func setCategory(transactionID: String, category: String?) async throws {
+        record("setCategory(\(transactionID), \(category ?? "nil"))")
         if let setCategoryError { throw setCategoryError }
     }
 

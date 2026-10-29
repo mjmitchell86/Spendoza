@@ -9,7 +9,7 @@ public protocol SpendozaAPI: Sendable {
     func personalReport(_ month: Month) async throws -> Report?
     func categories() async throws -> [BudgetCategory]
     func transactions(from: Date, to: Date) async throws -> [Transaction]
-    func setCategory(transactionID: String, category: String) async throws
+    func setCategory(transactionID: String, category: String?) async throws
     func createBudgetGoal(name: String, categoryID: String, amount: Int) async throws
     /// The transactions extracted from one statement.
     func transactions(statementID: String) async throws -> [Transaction]

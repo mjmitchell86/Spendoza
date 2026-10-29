@@ -25,6 +25,8 @@ final class PartDetailModel {
     private(set) var categories: [BudgetCategory] = []
     private(set) var loadError: String?
     private(set) var suggestion: Suggestion?
+    /// The category a budget was saved for in this visit; its action then gives way to a saved note.
+    private(set) var budgetSavedFor: String?
 
     @ObservationIgnored private let api: any SpendozaAPI
 
@@ -106,6 +108,12 @@ final class PartDetailModel {
     /// destination until the Plan tab. Debt vs. income and Savings rate have none yet.
     var primaryAction: SuggestionAction? { suggestion?.action }
 
+    /// Whether to offer the budget button: there is one, and it hasn't been used yet (a second tap would duplicate the goal).
+    var showsBudgetAction: Bool {
+        guard case .setBudget(_, let name, _)? = primaryAction else { return false }
+        return budgetSavedFor != name
+    }
+
     func load() async {
         loadError = nil
         do {
@@ -130,7 +138,9 @@ final class PartDetailModel {
         }
     }
 
-    func setBudget(categoryID: String, name: String, amount: Int) async -> BudgetResult {
-        await saveBudgetGoal(api: api, categoryID: categoryID, categoryName: name, amount: amount)
+    func setBudget(categoryID: String, categoryName: String, goalName: String, amount: Int) async -> BudgetResult {
+        let result = await saveBudgetGoal(api: api, categoryID: categoryID, goalName: goalName, amount: amount)
+        if result == .saved { budgetSavedFor = categoryName }
+        return result
     }
 }

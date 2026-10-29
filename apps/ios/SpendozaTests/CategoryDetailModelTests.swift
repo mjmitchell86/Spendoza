@@ -137,16 +137,64 @@ struct CategoryDetailModelTests {
     @Test func setBudgetSavesAndNamesTheGoalAfterTheCategory() async {
         let api = api()
         let m = await model(api)
-        #expect(await m.setBudget(amount: 150) == .saved)
+        #expect(await m.setBudget(name: "Dining out budget", amount: 150) == .saved)
         #expect(api.calls.contains("budget(Dining out budget, c3, 150)"))
         #expect(m.budgetSaved)
+    }
+
+    @Test func aCustomGoalNameReachesTheServer() async {
+        let api = api()
+        let m = await model(api)
+        #expect(m.defaultBudgetName == "Dining out budget")
+        #expect(await m.setBudget(name: "  Eat out less ", amount: 150) == .saved)
+        #expect(api.calls.contains("budget(Eat out less, c3, 150)"))
+    }
+
+    @Test func aBlankGoalNameIsRejected() async {
+        let api = api()
+        let m = await model(api)
+        #expect(await m.setBudget(name: "   ", amount: 150) == .failed("Enter a name for the budget."))
+        #expect(!api.calls.contains { $0.hasPrefix("budget") })
+    }
+
+    @Test func recategorizeToUncategorizedSendsNil() async {
+        let api = api()
+        let m = await model(api)
+        await m.recategorize(m.transactions[0], to: nil)
+        #expect(api.calls.contains("setCategory(t3, nil)"))
+        #expect(m.transactions.map(\.id) == ["t1", "t2"])
+        #expect(m.lastMove?.destination == "Uncategorized")
+    }
+
+    @Test func movingARowOutLowersTheTotalAndChangeByItsAmount() async {
+        let m = await model(api())
+        await m.recategorize(m.transactions[1], to: "Groceries")   // t1, $212.40
+        #expect(abs(m.total - (448 - 212.40)) < 0.001)
+        #expect(abs((m.delta ?? 0) - (310 - 212.40)) < 0.001)
+    }
+
+    @Test func undoRestoresTheReportedTotalAndChange() async {
+        let m = await model(api())
+        await m.recategorize(m.transactions[1], to: "Groceries")
+        await m.undoLastMove()
+        #expect(m.total == 448)
+        #expect(m.delta == 310)
+    }
+
+    @Test func aFailedMoveLeavesTheTotalAlone() async {
+        let api = api()
+        api.setCategoryError = .offline
+        let m = await model(api)
+        await m.recategorize(m.transactions[1], to: "Groceries")
+        #expect(m.total == 448)
+        #expect(m.delta == 310)
     }
 
     @Test func notOnPlanIsItsOwnResult() async {
         let api = api()
         api.budgetError = .notOnPlan(requiredTier: "starter")
         let m = await model(api)
-        #expect(await m.setBudget(amount: 150) == .notOnPlan)
+        #expect(await m.setBudget(name: "Dining out budget", amount: 150) == .notOnPlan)
         #expect(!m.budgetSaved)
     }
 
@@ -154,13 +202,13 @@ struct CategoryDetailModelTests {
         let api = api()
         api.budgetError = .message("Nope")
         let m = await model(api)
-        #expect(await m.setBudget(amount: 150) == .failed("Nope"))
+        #expect(await m.setBudget(name: "Dining out budget", amount: 150) == .failed("Nope"))
     }
 
     @Test func aBudgetNeedsAPositiveAmount() async {
         let api = api()
         let m = await model(api)
-        #expect(await m.setBudget(amount: 0) == .failed("Enter an amount above $0."))
+        #expect(await m.setBudget(name: "Dining out budget", amount: 0) == .failed("Enter an amount above $0."))
         #expect(!api.calls.contains { $0.hasPrefix("budget") })
     }
 

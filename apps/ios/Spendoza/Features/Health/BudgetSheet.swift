@@ -4,22 +4,27 @@ import SwiftUI
 struct BudgetSheet: View {
     let categoryName: String
     let suggested: Int
+    let defaultName: String
     /// Saves the goal; the sheet reacts to the result.
-    let save: (Int) async -> BudgetResult
+    let save: (String, Int) async -> BudgetResult
     let onSaved: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var text: String
+    @State private var name: String
     @State private var busy = false
     @State private var error: String?
     @State private var notOnPlan = false
     @FocusState private var focused: Bool
 
-    init(categoryName: String, suggested: Int, save: @escaping (Int) async -> BudgetResult, onSaved: @escaping () -> Void) {
+    init(categoryName: String, suggested: Int, defaultName: String? = nil,
+         save: @escaping (String, Int) async -> BudgetResult, onSaved: @escaping () -> Void) {
         self.categoryName = categoryName
         self.suggested = suggested
+        self.defaultName = defaultName ?? "\(categoryName) budget"
         self.save = save
         self.onSaved = onSaved
         _text = State(initialValue: String(suggested))
+        _name = State(initialValue: defaultName ?? "\(categoryName) budget")
     }
 
     /// "$1,250" or "150" as a whole-dollar amount above zero; nil for anything else.
@@ -66,9 +71,20 @@ struct BudgetSheet: View {
                 .frame(minHeight: 52)
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
                 .overlay(RoundedRectangle(cornerRadius: Theme.corner).strokeBorder(Theme.engraving, lineWidth: Theme.hairline))
+                Text("Name")
+                    .font(.sans(13, relativeTo: .footnote))
+                    .foregroundStyle(Theme.soft)
+                TextField("Budget name", text: $name)
+                    .font(.sans(15, relativeTo: .body))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.corner).strokeBorder(Theme.engraving, lineWidth: Theme.hairline))
+                    .accessibilityLabel("Budget name")
                 if let error { InlineError(message: error) }
                 BusyButton(title: "Save budget", busy: busy) { Task { await submit() } }
-                    .disabled(Self.amount(from: text) == nil)
+                    .disabled(Self.amount(from: text) == nil || name.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button("Cancel") { dismiss() }.buttonStyle(SecondaryButtonStyle())
             }
         }
@@ -81,7 +97,7 @@ struct BudgetSheet: View {
         }
         busy = true
         error = nil
-        let result = await save(amount)
+        let result = await save(name, amount)
         busy = false
         switch result {
         case .saved:

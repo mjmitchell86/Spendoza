@@ -7,7 +7,6 @@ struct PartDetailView: View {
     let snapshot: HealthSnapshot
     let api: any SpendozaAPI
     @State private var budget: BudgetTarget?
-    @State private var budgetSaved = false
 
     struct BudgetTarget: Identifiable {
         let categoryID: String
@@ -38,8 +37,11 @@ struct PartDetailView: View {
             .task { await model.load() }
             .sheet(item: $budget) { target in
                 BudgetSheet(categoryName: target.name, suggested: target.amount,
-                            save: { await model.setBudget(categoryID: target.categoryID, name: target.name, amount: $0) },
-                            onSaved: { budgetSaved = true })
+                            save: { goalName, amount in
+                                await model.setBudget(categoryID: target.categoryID, categoryName: target.name,
+                                                      goalName: goalName, amount: amount)
+                            },
+                            onSaved: {})
             }
     }
 
@@ -170,16 +172,17 @@ struct PartDetailView: View {
     @ViewBuilder private var guidance: some View {
         switch model.primaryAction {
         case .setBudget(let id, let name, let amount):
-            Button("Set a \(Money.whole(Double(amount))) budget for \(name)") {
-                budget = BudgetTarget(categoryID: id, name: name, amount: amount)
-            }
-            .buttonStyle(PrimaryButtonStyle())
-            .padding(.top, 20)
-            if budgetSaved {
+            if model.showsBudgetAction {
+                Button("Set a \(Money.whole(Double(amount))) budget for \(name)") {
+                    budget = BudgetTarget(categoryID: id, name: name, amount: amount)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .padding(.top, 20)
+            } else {
                 Text("Budget set for \(name).")
                     .font(.sans(14, relativeTo: .footnote))
                     .foregroundStyle(Theme.note)
-                    .padding(.top, 8)
+                    .padding(.top, 20)
             }
         case .openEmergencyFund:
             // The Plan tab (where an emergency fund is set up) arrives later, so this is guidance, not a button.

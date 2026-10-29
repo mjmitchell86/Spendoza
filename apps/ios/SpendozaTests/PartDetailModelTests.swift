@@ -101,12 +101,26 @@ struct PartDetailModelTests {
         #expect(savings?.threshold == 20)
     }
 
+    @Test func theBudgetActionIsGoneOnceSaved() async {
+        let api = DrillFixture.api()
+        let m = PartDetailModel(part: .wants, snapshot: DrillFixture.snapshot(), api: api)
+        await m.load()
+        #expect(m.showsBudgetAction)
+        api.budgetError = .notOnPlan(requiredTier: "starter")
+        _ = await m.setBudget(categoryID: "c3", categoryName: "Dining out", goalName: "Dining out budget", amount: 150)
+        #expect(m.showsBudgetAction)   // not saved, so still offered
+        api.budgetError = nil
+        _ = await m.setBudget(categoryID: "c3", categoryName: "Dining out", goalName: "Dining out budget", amount: 150)
+        #expect(!m.showsBudgetAction)
+    }
+
     @Test func settingABudgetSavesOrReportsThePlan() async {
         let api = DrillFixture.api()
         let m = PartDetailModel(part: .wants, snapshot: DrillFixture.snapshot(), api: api)
-        #expect(await m.setBudget(categoryID: "c3", name: "Dining out", amount: 150) == .saved)
+        #expect(await m.setBudget(categoryID: "c3", categoryName: "Dining out", goalName: "Dining out budget", amount: 150) == .saved)
         #expect(api.calls.contains("budget(Dining out budget, c3, 150)"))
+        #expect(m.budgetSavedFor == "Dining out")
         api.budgetError = .notOnPlan(requiredTier: "starter")
-        #expect(await m.setBudget(categoryID: "c3", name: "Dining out", amount: 150) == .notOnPlan)
+        #expect(await m.setBudget(categoryID: "c3", categoryName: "Dining out", goalName: "Dining out budget", amount: 150) == .notOnPlan)
     }
 }

@@ -38,7 +38,7 @@ public final class APIClient: SpendozaAPI {
         try await send(.transactions(from: Self.dayString(from), to: Self.dayString(to)))
     }
 
-    public func setCategory(transactionID: String, category: String) async throws {
+    public func setCategory(transactionID: String, category: String?) async throws {
         try await sendIgnoringBody(.setCategory(id: transactionID, category: category))
     }
 

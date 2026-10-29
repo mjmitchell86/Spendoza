@@ -21,10 +21,12 @@ func userMessage(for error: Error) -> String {
 
 /// Creates the category budget goal the way the web's goal form does (`goal_type: "budget"`).
 /// A 403 for the plan is its own result so the screen can say so; amounts must be above zero.
-func saveBudgetGoal(api: any SpendozaAPI, categoryID: String, categoryName: String, amount: Int) async -> BudgetResult {
+func saveBudgetGoal(api: any SpendozaAPI, categoryID: String, goalName: String, amount: Int) async -> BudgetResult {
+    let name = goalName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty else { return .failed("Enter a name for the budget.") }
     guard amount > 0 else { return .failed("Enter an amount above $0.") }
     do {
-        try await api.createBudgetGoal(name: "\(categoryName) budget", categoryID: categoryID, amount: amount)
+        try await api.createBudgetGoal(name: name, categoryID: categoryID, amount: amount)
         return .saved
     } catch let error as APIError {
         if case .notOnPlan = error { return .notOnPlan }
@@ -41,7 +43,9 @@ final class CategoryDetailModel {
     struct Move: Equatable {
         let transaction: Transaction
         let from: String
-        let to: String
+        /// The new category; nil means Uncategorized.
+        let to: String?
+        var destination: String { to ?? "Uncategorized" }
     }
 
     let category: BudgetCategory
@@ -56,6 +60,9 @@ final class CategoryDetailModel {
     /// The last successful move, for the Undo bar.
     private(set) var lastMove: Move?
     private(set) var budgetSaved = false
+    /// Dollars of this category's debits moved out in this visit, so the total and change stay honest
+    /// (the server never regenerates a finished month's report).
+    private(set) var movedOut = 0.0
 
     @ObservationIgnored private let api: any SpendozaAPI
     @ObservationIgnored private let calendar: Calendar
@@ -76,7 +83,11 @@ final class CategoryDetailModel {
         return rows.isEmpty ? nil : rows.reduce(0) { $0 + $1.amount }
     }
 
-    var total: Double { amount(in: snapshot.report) ?? 0 }
+    /// The report's amount for the category.
+    private var reportedTotal: Double { amount(in: snapshot.report) ?? 0 }
+
+    /// The reported amount less what has been moved out since.
+    var total: Double { reportedTotal - movedOut }
 
     /// Change since the calendar-previous month; nil without that month's report or when the category is new.
     var delta: Double? {
@@ -102,8 +113,11 @@ final class CategoryDetailModel {
         return out
     }
 
+    /// The goal's name, prefilled in the budget sheet.
+    var defaultBudgetName: String { "\(category.name) budget" }
+
     var suggestedBudget: Int {
-        suggestedBudgetAmount(for: category.name, currentAmount: total, history: snapshot.history)
+        suggestedBudgetAmount(for: category.name, currentAmount: reportedTotal, history: snapshot.history)
     }
 
     /// The categories a transaction can move to, by name (the web's list, minus this one).
@@ -145,15 +159,17 @@ final class CategoryDetailModel {
     // MARK: Actions
 
     /// Moves a transaction to another category: the row goes at once and comes back with an error if the call fails.
-    func recategorize(_ transaction: Transaction, to name: String) async {
+    func recategorize(_ transaction: Transaction, to name: String?) async {
         guard let index = transactions.firstIndex(where: { $0.id == transaction.id }) else { return }
         actionError = nil
         transactions.remove(at: index)
+        movedOut += transaction.amount
         do {
             try await api.setCategory(transactionID: transaction.id, category: name)
             lastMove = Move(transaction: transaction, from: category.name, to: name)
         } catch {
             restore(transaction)
+            movedOut -= transaction.amount
             actionError = userMessage(for: error)
         }
     }
@@ -164,10 +180,12 @@ final class CategoryDetailModel {
         actionError = nil
         lastMove = nil
         restore(move.transaction)
+        movedOut -= move.transaction.amount
         do {
             try await api.setCategory(transactionID: move.transaction.id, category: move.from)
         } catch {
             transactions.removeAll { $0.id == move.transaction.id }
+            movedOut += move.transaction.amount
             lastMove = move
             actionError = userMessage(for: error)
         }
@@ -180,8 +198,8 @@ final class CategoryDetailModel {
         transactions = Self.sorted(transactions + [transaction])
     }
 
-    func setBudget(amount: Int) async -> BudgetResult {
-        let result = await saveBudgetGoal(api: api, categoryID: category.id, categoryName: category.name, amount: amount)
+    func setBudget(name: String, amount: Int) async -> BudgetResult {
+        let result = await saveBudgetGoal(api: api, categoryID: category.id, goalName: name, amount: amount)
         if result == .saved { budgetSaved = true }
         return result
     }

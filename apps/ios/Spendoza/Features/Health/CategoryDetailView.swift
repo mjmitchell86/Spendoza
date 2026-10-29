@@ -32,7 +32,8 @@ struct CategoryDetailView: View {
             }
             .sheet(isPresented: $settingBudget) {
                 BudgetSheet(categoryName: model.category.name, suggested: model.suggestedBudget,
-                            save: { await model.setBudget(amount: $0) }, onSaved: {})
+                            defaultName: model.defaultBudgetName,
+                            save: { await model.setBudget(name: $0, amount: $1) }, onSaved: {})
             }
     }
 
@@ -143,7 +144,7 @@ struct CategoryDetailView: View {
     private func undoBar(_ move: CategoryDetailModel.Move) -> some View {
         OutlinedPanel {
             HStack {
-                Text("Moved \(move.transaction.description) to \(move.to).")
+                Text("Moved \(move.transaction.description) to \(move.destination).")
                     .font(.sans(14, relativeTo: .footnote))
                 Spacer(minLength: 8)
                 Button("Undo") { Task { await model.undoLastMove() } }
@@ -187,7 +188,8 @@ struct CategoryPickerSheet: View {
     let transaction: Transaction
     let current: String
     let targets: [BudgetCategory]
-    let choose: (String) -> Void
+    /// nil moves the transaction to Uncategorized.
+    let choose: (String?) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -208,18 +210,9 @@ struct CategoryPickerSheet: View {
                 .padding(.top, 4)
                 .padding(.bottom, 12)
             VStack(spacing: 0) {
+                row("Uncategorized", value: nil)
                 ForEach(targets, id: \.id) { category in
-                    Button {
-                        choose(category.name)
-                        dismiss()
-                    } label: {
-                        RuledRow {
-                            Text(category.name).font(.sans(15, relativeTo: .body)).foregroundStyle(Theme.ink)
-                        }
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    row(category.name, value: category.name)
                 }
             }
             .topRule()
@@ -230,5 +223,19 @@ struct CategoryPickerSheet: View {
         .padding(.horizontal, 20)
         .padding(.top, 24)
         .padding(.bottom, 24)
+    }
+
+    private func row(_ title: String, value: String?) -> some View {
+        Button {
+            choose(value)
+            dismiss()
+        } label: {
+            RuledRow {
+                Text(title).font(.sans(15, relativeTo: .body)).foregroundStyle(Theme.ink)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
