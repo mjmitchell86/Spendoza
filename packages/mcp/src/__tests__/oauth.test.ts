@@ -179,6 +179,23 @@ describe("SpendozaOAuthProvider", () => {
       ).rejects.toThrow("expired");
     });
 
+    it("treats an auth code with no creation time as expired", async () => {
+      mockMaybeSingle.mockResolvedValue({
+        data: {
+          code: "no-timestamp-code",
+          access_token: "token",
+          refresh_token: "refresh",
+          expires_in: 3600,
+          used: false,
+        },
+        error: null,
+      });
+
+      await expect(
+        provider.exchangeAuthorizationCode(TEST_CLIENT as any, "no-timestamp-code")
+      ).rejects.toThrow("expired");
+    });
+
     it("throws for an already-used auth code", async () => {
       mockMaybeSingle.mockResolvedValue({
         data: null,

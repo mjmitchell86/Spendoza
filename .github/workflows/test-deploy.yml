@@ -63,3 +63,19 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_WEB_PROJECT_ID_TEST }}
           vercel-args: '--prod'
           vercel-version: '64.3.1'
+
+  # The MCP server (mcp-test.spendoza.io). Its Vercel project's root directory
+  # and install command are set in the dashboard; the project ID isn't secret.
+  deploy-mcp:
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy MCP to Vercel (test)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: prj_CfqvpdODcCeQni5EilaoGbv6cBS7
+          vercel-args: '--prod'
+          vercel-version: '64.3.1'
