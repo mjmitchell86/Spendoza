@@ -36,6 +36,7 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
+        UIAppFonts: [Newsreader-Variable.ttf, PublicSans-Variable.ttf]
         ITSAppUsesNonExemptEncryption: false
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         APIBaseURL: "$(API_BASE_URL)"
