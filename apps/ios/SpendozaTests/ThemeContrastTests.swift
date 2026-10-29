@@ -33,6 +33,31 @@ struct ThemeContrastTests {
         #expect(Theme.Palette.onNote.light == RGB(hex: 0xF4F7F2))
     }
 
+    /// 2.9: amber is for graphics, which need 3:1 (WCAG 1.4.11) against the surfaces they sit on, in both modes.
+    @Test func amberGraphicsMeetThreeToOne() {
+        for surface in [Theme.Palette.paper, Theme.Palette.card] {
+            for dark in [false, true] {
+                let ratio = Theme.contrastRatio(Theme.Palette.amber.rgb(dark: dark), surface.rgb(dark: dark))
+                #expect(ratio >= 3, "amber (\(dark ? "dark" : "light")) is \(ratio):1")
+            }
+        }
+    }
+
+    /// 2.8: a hairline is one device pixel, not one point.
+    @Test func hairlineIsOneDevicePixel() {
+        #expect(Theme.hairline(displayScale: 3) == 1.0 / 3)
+        #expect(Theme.hairline(displayScale: 2) == 0.5)
+        #expect(Theme.hairline(displayScale: 1) == 1)
+        #expect(Theme.hairline(displayScale: 0) == 1)
+    }
+
+    /// 10.51: a month with no report is a gap, not a $0 bar.
+    @Test func aMissingMonthIsAGapNotAZeroBar() {
+        let slots = EngravedBars.slots(values: [nil, 0, 50, 100], ceiling: nil)
+        #expect(slots == [.gap, .bar(0), .bar(0.5), .bar(1)])
+        #expect(EngravedBars.slots(values: [nil, nil], ceiling: nil) == [.gap, .gap])
+    }
+
     @Test func plainAmberFailsOnPaperInLightMode() {
         // Why `amberText` exists: amber is for graphics and large text only.
         #expect(Theme.contrastRatio(Theme.Palette.amber.light, Theme.Palette.paper.light) < 4.5)

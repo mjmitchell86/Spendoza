@@ -15,6 +15,11 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     /// Months that answer slowly (a cancellable sleep).
     var reportDelay: @Sendable (Month) -> Duration? = { _ in nil }
     var categoryList: [BudgetCategory] = StubAPI.defaultCategories
+    var categoriesError: APIError?
+    /// `categories()` waits (up to a second) for `transactions(from:to:)` to start, and records whether it did.
+    var categoriesWaitForTransactions = false
+    private var _categoriesSawTransactions = false
+    var categoriesSawTransactions: Bool { lock.withLock { _categoriesSawTransactions } }
     var transactionList: [Transaction] = []
     var transactionsError: APIError?
     var setCategoryError: APIError?
@@ -70,6 +75,15 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     }
 
     func categories() async throws -> [BudgetCategory] {
+        if categoriesWaitForTransactions {
+            let deadline = ContinuousClock.now + .seconds(1)
+            while !calls.contains("transactions"), ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            let saw = calls.contains("transactions")
+            lock.withLock { _categoriesSawTransactions = saw }
+        }
+        if let categoriesError { throw categoriesError }
         if let reportError { throw reportError }
         return categoryList
     }

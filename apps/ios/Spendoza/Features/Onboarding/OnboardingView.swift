@@ -178,10 +178,7 @@ struct UploadStep: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 140)
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.corner)
-                        .strokeBorder(Theme.engraving, style: StrokeStyle(lineWidth: Theme.hairline, dash: [5, 4]))
-                )
+                .hairlineBorder(Theme.engraving, dash: [5, 4])
             }
             .disabled(model.isUploading)
 

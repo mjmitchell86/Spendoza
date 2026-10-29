@@ -52,6 +52,8 @@ final class CategoryDetailModel {
     let snapshot: HealthSnapshot
     private(set) var transactions: [Transaction] = []
     private(set) var categories: [BudgetCategory] = []
+    /// Why the category list couldn't load (the picker then offers a retry).
+    private(set) var categoriesError: String?
     private(set) var isLoading = true
     /// Why the transactions couldn't load.
     private(set) var loadError: String?
@@ -133,12 +135,41 @@ final class CategoryDetailModel {
         defer { isLoading = false }
         loadError = nil
         let (start, end) = monthBounds()
-        categories = (try? await api.categories()) ?? []
-        do {
-            let all = try await api.transactions(from: start, to: end)
+        // Both at once (10.50).
+        let api = self.api
+        async let categoryList = Self.categories(api)
+        async let transactionList = Self.transactions(api, from: start, to: end)
+        apply(await categoryList)
+        switch await transactionList {
+        case .success(let all):
             transactions = Self.sorted(all.filter { $0.type == .debit && $0.category == category.name })
-        } catch {
+        case .failure(let error):
             loadError = userMessage(for: error)
+        }
+    }
+
+    /// The picker's "Try again" after the category list failed.
+    func retryCategories() async {
+        apply(await Self.categories(api))
+    }
+
+    private nonisolated static func categories(_ api: any SpendozaAPI) async -> Result<[BudgetCategory], Error> {
+        do { return .success(try await api.categories()) } catch { return .failure(error) }
+    }
+
+    private nonisolated static func transactions(_ api: any SpendozaAPI, from start: Date, to end: Date) async
+        -> Result<[Transaction], Error> {
+        do { return .success(try await api.transactions(from: start, to: end)) } catch { return .failure(error) }
+    }
+
+    private func apply(_ result: Result<[BudgetCategory], Error>) {
+        switch result {
+        case .success(let list):
+            categories = list
+            categoriesError = nil
+        case .failure(let error):
+            categories = []
+            categoriesError = userMessage(for: error)
         }
     }
 
@@ -204,3 +235,4 @@ final class CategoryDetailModel {
         return result
     }
 }
+

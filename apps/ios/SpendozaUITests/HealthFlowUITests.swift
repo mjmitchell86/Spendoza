@@ -41,4 +41,19 @@ final class HealthFlowUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["September check-up"].waitForExistence(timeout: 10))
     }
+
+    /// 10.53: saving a budget on a plan without goals turns the sheet into the plan message.
+    @MainActor func testABudgetOnAPlanWithoutGoalsShowsThePlanMessage() {
+        let app = Launch.stubbed(budgetNotOnPlan: true)
+        app.open(.diningOut)
+        let budget = app.button(startingWith: "Set a $")
+        XCTAssertTrue(budget.waitForExistence(timeout: 10))
+        budget.tap()
+        let save = app.buttons["Save budget"]
+        XCTAssertTrue(save.waitForExistence(timeout: 10))
+        save.tap()
+        XCTAssertTrue(app.staticTexts["Not available on your plan yet"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.links["Plans & billing"].exists || app.buttons["Plans & billing"].exists)
+        XCTAssertFalse(app.buttons["Save budget"].exists)
+    }
 }

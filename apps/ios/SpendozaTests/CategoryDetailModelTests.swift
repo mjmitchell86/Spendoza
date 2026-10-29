@@ -125,6 +125,29 @@ struct CategoryDetailModelTests {
         #expect(m.lastMove == nil)
     }
 
+    /// 10.49: a failed category list says so (with a retry) instead of a picker with nothing to pick.
+    @Test func aFailedCategoryListShowsAnErrorAndCanBeRetried() async {
+        let stub = api()
+        stub.categoriesError = .offline
+        let m = await model(stub)
+        #expect(m.categoriesError == APIError.offline.userMessage)
+        #expect(m.moveTargets.isEmpty)
+        #expect(m.transactions.count == 3)
+
+        stub.categoriesError = nil
+        await m.retryCategories()
+        #expect(m.categoriesError == nil)
+        #expect(!m.moveTargets.isEmpty)
+    }
+
+    /// 10.50: the category list and the transactions are fetched at the same time.
+    @Test func categoriesAndTransactionsLoadTogether() async {
+        let stub = api()
+        stub.categoriesWaitForTransactions = true
+        _ = await model(stub)
+        #expect(stub.categoriesSawTransactions)
+    }
+
     @Test func categoriesToMoveToExcludeTheCurrentOne() async {
         let m = await model(api())
         #expect(m.moveTargets.map(\.name) == ["Entertainment", "Groceries", "Housing", "Personal"])

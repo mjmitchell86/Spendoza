@@ -24,8 +24,24 @@ struct RuledRow<Content: View>: View {
 }
 
 struct HairlineRule: View {
+    @Environment(\.displayScale) private var displayScale
+
     var body: some View {
-        Theme.engraving.frame(height: Theme.hairline)
+        Theme.engraving.frame(height: Theme.hairline(displayScale: displayScale))
+    }
+}
+
+/// A rounded-rectangle border one device pixel wide.
+private struct HairlineBorder: ViewModifier {
+    let color: Color
+    let dash: [CGFloat]
+    @Environment(\.displayScale) private var displayScale
+
+    func body(content: Content) -> some View {
+        content.overlay(
+            RoundedRectangle(cornerRadius: Theme.corner)
+                .strokeBorder(color, style: StrokeStyle(lineWidth: Theme.hairline(displayScale: displayScale), dash: dash))
+        )
     }
 }
 
@@ -33,6 +49,11 @@ extension View {
     /// The hairline above the first row of a ruled list.
     func topRule() -> some View {
         overlay(alignment: .top) { HairlineRule() }
+    }
+
+    /// A hairline border on the panel/button corner radius.
+    func hairlineBorder(_ color: Color, dash: [CGFloat] = []) -> some View {
+        modifier(HairlineBorder(color: color, dash: dash))
     }
 }
 
@@ -63,10 +84,7 @@ struct OutlinedPanel<Content: View>: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.corner)
-                    .strokeBorder(Theme.engraving, lineWidth: Theme.hairline)
-            )
+            .hairlineBorder(Theme.engraving)
     }
 }
 
@@ -89,18 +107,31 @@ struct SecondaryButtonStyle: ButtonStyle {
             .font(.sans(15, weight: .semibold, relativeTo: .callout))
             .foregroundStyle(Theme.note)
             .frame(maxWidth: .infinity, minHeight: 44)
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.corner)
-                    .strokeBorder(Theme.note, lineWidth: Theme.hairline)
-            )
+            .hairlineBorder(Theme.note)
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 
 /// Monthly history bars drawn with an engraved diagonal hatch; the highlighted bar (the current month) is solid amber.
+/// A month with no value (no report) is a gap: a dashed outline, so it never reads as a $0 month.
 struct EngravedBars: View {
-    /// Bar values, oldest first. Heights are relative to the largest value.
-    let values: [Double]
+    enum Slot: Equatable {
+        case gap
+        /// Height as a fraction of the full bar, 0...1.
+        case bar(Double)
+    }
+
+    /// What each value is drawn as; heights are relative to `ceiling`, else to the largest value.
+    nonisolated static func slots(values: [Double?], ceiling: Double?) -> [Slot] {
+        let peak = max(ceiling ?? values.compactMap { $0 }.max() ?? 0, .leastNonzeroMagnitude)
+        return values.map { value in
+            guard let value else { return .gap }
+            return .bar(min(max(value, 0) / peak, 1))
+        }
+    }
+
+    /// Bar values, oldest first; nil for a month with no report.
+    let values: [Double?]
     /// Index drawn solid amber; defaults to the last bar.
     var highlightedIndex: Int?
     var height: CGFloat = 64
@@ -108,20 +139,25 @@ struct EngravedBars: View {
     var ceiling: Double?
 
     var body: some View {
-        let peak = max(ceiling ?? values.max() ?? 0, .leastNonzeroMagnitude)
         let highlighted = highlightedIndex ?? values.count - 1
         HStack(alignment: .bottom, spacing: 6) {
-            ForEach(Array(values.enumerated()), id: \.offset) { index, value in
-                let barHeight = height * CGFloat(min(max(value, 0) / peak, 1))
-                Group {
-                    if index == highlighted {
-                        Theme.amber
-                    } else {
-                        HatchFill()
+            ForEach(Array(Self.slots(values: values, ceiling: ceiling).enumerated()), id: \.offset) { index, slot in
+                switch slot {
+                case .gap:
+                    RoundedRectangle(cornerRadius: 2)
+                        .strokeBorder(Theme.engraving, style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                        .frame(height: height * 0.3)
+                case .bar(let fraction):
+                    Group {
+                        if index == highlighted {
+                            Theme.amber
+                        } else {
+                            HatchFill()
+                        }
                     }
+                    .frame(height: height * CGFloat(fraction))
+                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 2, topTrailingRadius: 2))
                 }
-                .frame(height: barHeight)
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 2, topTrailingRadius: 2))
             }
         }
         .frame(height: height, alignment: .bottom)

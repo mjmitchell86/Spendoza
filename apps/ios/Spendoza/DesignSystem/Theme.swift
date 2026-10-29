@@ -71,8 +71,8 @@ enum Theme {
 
     /// Panel and button corner radius.
     static let corner: CGFloat = 4
-    /// Hairline rule thickness.
-    static let hairline: CGFloat = 1
+    /// Hairline rule thickness: one device pixel (the mockup's 1 px), read from the view's `displayScale`.
+    static func hairline(displayScale: CGFloat) -> CGFloat { 1 / max(displayScale, 1) }
 
     /// WCAG 2 contrast ratio, 1...21.
     static func contrastRatio(_ a: RGB, _ b: RGB) -> Double {

@@ -28,6 +28,10 @@ enum UITestStub {
         if CommandLine.arguments.contains("-uiTestSlowSelect") {
             api.reportDelay = { $0 < DrillFixture.jun ? .seconds(3) : nil }
         }
+        // `-uiTestBudgetNotOnPlan`: saving a budget answers 403 for the plan.
+        if CommandLine.arguments.contains("-uiTestBudgetNotOnPlan") {
+            api.budgetError = .notOnPlan(requiredTier: "starter")
+        }
         api.profileResult = Profile(id: "ui-test-user", displayName: "Test", onboardingCompleted: true,
                                     isAdmin: false, emailReportsEnabled: false, householdID: nil)
         return api

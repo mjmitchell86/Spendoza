@@ -45,7 +45,7 @@ struct TrendChart: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            EngravedBars(values: values.map { $0 ?? 0 }, highlightedIndex: months.count - 1,
+            EngravedBars(values: values, highlightedIndex: months.count - 1,
                          height: 72, ceiling: ceiling)
             HStack(spacing: 2) {
                 ForEach(months, id: \.self) { month in

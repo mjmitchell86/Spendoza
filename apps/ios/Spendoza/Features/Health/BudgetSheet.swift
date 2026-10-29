@@ -70,7 +70,7 @@ struct BudgetSheet: View {
                 .padding(.horizontal, 12)
                 .frame(minHeight: 52)
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
-                .overlay(RoundedRectangle(cornerRadius: Theme.corner).strokeBorder(Theme.engraving, lineWidth: Theme.hairline))
+                .hairlineBorder(Theme.engraving)
                 Text("Name")
                     .font(.sans(13, relativeTo: .footnote))
                     .foregroundStyle(Theme.soft)
@@ -80,7 +80,7 @@ struct BudgetSheet: View {
                     .padding(.horizontal, 12)
                     .frame(minHeight: 44)
                     .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.corner).strokeBorder(Theme.engraving, lineWidth: Theme.hairline))
+                    .hairlineBorder(Theme.engraving)
                     .accessibilityLabel("Budget name")
                 if let error { InlineError(message: error) }
                 BusyButton(title: "Save budget", busy: busy) { Task { await submit() } }

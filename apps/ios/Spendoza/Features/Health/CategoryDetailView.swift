@@ -26,7 +26,8 @@ struct CategoryDetailView: View {
             .toolbar(removing: .title)
             .task { await model.load() }
             .sheet(item: $moving) { transaction in
-                CategoryPickerSheet(transaction: transaction, current: model.category.name, targets: model.moveTargets) { name in
+                CategoryPickerSheet(transaction: transaction, current: model.category.name, targets: model.moveTargets,
+                                    error: model.categoriesError, retry: { await model.retryCategories() }) { name in
                     Task { await model.recategorize(transaction, to: name) }
                 }
             }
@@ -237,9 +238,13 @@ struct CategoryPickerSheet: View {
     let transaction: Transaction
     let current: String
     let targets: [BudgetCategory]
+    /// Why the category list couldn't load; the sheet then offers a retry instead of a list it doesn't have.
+    var error: String?
+    var retry: () async -> Void = {}
     /// nil moves the transaction to Uncategorized.
     let choose: (String?) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var retrying = false
 
     var body: some View {
         ScrollView { content }
@@ -258,6 +263,19 @@ struct CategoryPickerSheet: View {
                 .foregroundStyle(Theme.soft)
                 .padding(.top, 4)
                 .padding(.bottom, 12)
+            if let error {
+                VStack(alignment: .leading, spacing: 12) {
+                    InlineError(message: error)
+                    BusyButton(title: "Try again", busy: retrying) {
+                        Task {
+                            retrying = true
+                            await retry()
+                            retrying = false
+                        }
+                    }
+                }
+                .padding(.bottom, 12)
+            }
             VStack(spacing: 0) {
                 row("Uncategorized", value: nil)
                 ForEach(targets, id: \.id) { category in

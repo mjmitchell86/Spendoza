@@ -83,9 +83,24 @@ struct PartDetailModelTests {
         #expect(m.primaryAction == .setBudget(categoryID: "c3", categoryName: "Dining out", amount: 150))
     }
 
-    @Test func needsPrimaryActionIsNeverAWantsBudget() async {
-        let m = await model(.needs)
-        if case .setBudget(_, let name, _)? = m.primaryAction { #expect(name == "Housing") }
+    /// 10.52: needs lost points and both a need (Groceries) and a want (Dining out) rose; the budget is for the need.
+    @Test func needsPrimaryActionIsANeedsBudgetNeverAWants() async throws {
+        let current = StubAPI.report(oct, score: 60, previous: 70, points: [20, 14, 9, 10, 5],
+                                     categories: [("Housing", 1800), ("Groceries", 700), ("Dining out", 448)])
+        let previous = StubAPI.report(sep, score: 70, previous: nil, points: [20, 20, 15, 10, 5],
+                                      categories: [("Housing", 1800), ("Groceries", 400), ("Dining out", 138)])
+        let health = try #require(current.data.health)
+        let snapshot = HealthSnapshot(report: current, previous: previous, history: [previous],
+                                      parts: partChanges(current: health, previous: previous.data.health),
+                                      suggestion: nil, soFar: nil, isCached: false, updatedAt: .now)
+        let m = await model(.needs, snapshot)
+        let action = try #require(m.primaryAction)
+        guard case .setBudget(let id, let name, _) = action else {
+            Issue.record("expected a budget, got \(action)")
+            return
+        }
+        #expect(name == "Groceries")
+        #expect(id == "c2")
     }
 
     @Test func meterFollowsTheServerThresholds() async {

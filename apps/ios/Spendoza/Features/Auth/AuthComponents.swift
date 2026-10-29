@@ -64,10 +64,7 @@ struct AuthField: View {
             .padding(.horizontal, 12)
             .frame(minHeight: 44)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.corner)
-                    .strokeBorder(Theme.engraving, lineWidth: Theme.hairline)
-            )
+            .hairlineBorder(Theme.engraving)
         }
     }
 }
