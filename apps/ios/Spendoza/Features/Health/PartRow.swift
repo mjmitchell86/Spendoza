@@ -21,31 +21,61 @@ struct PartRow: View {
         return text
     }
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var title: some View {
+        Text(change.part.title)
+            .font(.sans(15, relativeTo: .body))
+            .foregroundStyle(Theme.ink)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var figures: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text("\(change.points)")
+                    .font(.serif(17, relativeTo: .body))
+                    .foregroundStyle(Theme.ink)
+                Text("/\(change.max)")
+                    .font(.sans(14, relativeTo: .body))
+                    .foregroundStyle(Theme.ink)
+            }
+            if let delta = change.delta {
+                Text(Self.deltaText(delta))
+                    .font(.sans(13, relativeTo: .footnote))
+                    .foregroundStyle(delta < 0 ? Theme.oxblood : delta > 0 ? Theme.note : Theme.soft)
+                    .frame(minWidth: 28, alignment: .trailing)
+            }
+        }
+        .fixedSize()
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Theme.soft)
+            .accessibilityHidden(true)
+    }
+
     var body: some View {
         RuledRow(highlighted: highlighted) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(change.part.title)
-                    .font(.sans(15, relativeTo: .body))
-                    .foregroundStyle(Theme.ink)
-                Spacer(minLength: 12)
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text("\(change.points)")
-                        .font(.serif(17, relativeTo: .body))
-                        .foregroundStyle(Theme.ink)
-                    Text("/\(change.max)")
-                        .font(.sans(14, relativeTo: .body))
-                        .foregroundStyle(Theme.ink)
+            // At accessibility sizes the name gets its own line so it never breaks mid-word.
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    title
+                    HStack(alignment: .firstTextBaseline) {
+                        figures
+                        Spacer(minLength: 8)
+                        chevron
+                    }
                 }
-                if let delta = change.delta {
-                    Text(Self.deltaText(delta))
-                        .font(.sans(13, relativeTo: .footnote))
-                        .foregroundStyle(delta < 0 ? Theme.oxblood : delta > 0 ? Theme.note : Theme.soft)
-                        .frame(minWidth: 28, alignment: .trailing)
+            } else {
+                HStack(alignment: .firstTextBaseline) {
+                    title
+                    Spacer(minLength: 12)
+                    figures
+                    chevron
                 }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.soft)
-                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())

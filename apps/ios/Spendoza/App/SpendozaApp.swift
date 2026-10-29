@@ -5,13 +5,13 @@ import SwiftUI
 struct SpendozaApp: App {
     @State private var store: SessionStore
     private let checkup: CheckupRefresh
-    @State private var coordinator = LockCoordinator(lock: AppLock(authenticator: DeviceAuthenticator()))
+    @State private var coordinator = SpendozaApp.makeCoordinator()
     @AppStorage(Appearance.defaultsKey) private var appearance: Appearance = .system
 
     init() {
         let store = Self.makeStore()
         _store = State(initialValue: store)
-        let checkup = CheckupRefresh.live(store: store)
+        let checkup = Self.makeCheckup(store: store)
         // Background task handlers must be registered before launch finishes.
         checkup.register()
         self.checkup = checkup
@@ -24,7 +24,26 @@ struct SpendozaApp: App {
         }
     }
 
+    private static func makeCoordinator() -> LockCoordinator {
+        #if DEBUG
+        if UITestStub.isOn {
+            return LockCoordinator(lock: AppLock(authenticator: UITestStub.PassingAuthenticator(), isEnabled: false))
+        }
+        #endif
+        return LockCoordinator(lock: AppLock(authenticator: DeviceAuthenticator()))
+    }
+
+    private static func makeCheckup(store: SessionStore) -> CheckupRefresh {
+        #if DEBUG
+        if UITestStub.isOn { return UITestStub.checkup(store: store) }
+        #endif
+        return CheckupRefresh.live(store: store)
+    }
+
     private static func makeStore() -> SessionStore {
+        #if DEBUG
+        if UITestStub.isOn { return UITestStub.store() }
+        #endif
         let base = (Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String).flatMap(URL.init(string:))
         let store = SessionStore(config: SupabaseConfig(bundle: .main),
                                  apiBaseURL: base ?? URL(string: "https://api.spendoza.io")!,

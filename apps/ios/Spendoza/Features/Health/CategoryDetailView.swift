@@ -62,19 +62,46 @@ struct CategoryDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var amountText: some View {
+        Text(Money.whole(model.total))
+            .font(.serif(52, relativeTo: .largeTitle))
+            .foregroundStyle(Theme.ink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+    }
+
+    private var monthText: some View {
+        Text("in \(model.month.name)")
+            .font(.sans(15, relativeTo: .subheadline))
+            .foregroundStyle(Theme.soft)
+    }
+
+    @ViewBuilder private var deltaText: some View {
+        if let delta = model.delta {
+            Text(Money.signed(delta))
+                .font(.sans(14, weight: .semibold, relativeTo: .subheadline))
+                .foregroundStyle(delta > 0 ? Theme.oxblood : delta < 0 ? Theme.note : Theme.soft)
+        }
+    }
+
     private var amount: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(Money.whole(model.total))
-                .font(.serif(52, relativeTo: .largeTitle))
-                .foregroundStyle(Theme.ink)
-            Text("in \(model.month.name)")
-                .font(.sans(15, relativeTo: .subheadline))
-                .foregroundStyle(Theme.soft)
-            Spacer(minLength: 8)
-            if let delta = model.delta {
-                Text(Money.signed(delta))
-                    .font(.sans(14, weight: .semibold, relativeTo: .subheadline))
-                    .foregroundStyle(delta > 0 ? Theme.oxblood : delta < 0 ? Theme.note : Theme.soft)
+        // At accessibility sizes the pieces stack, so the amount keeps a line to itself and never breaks.
+        Group {
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    amountText
+                    monthText
+                    deltaText
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    amountText
+                    monthText
+                    Spacer(minLength: 8)
+                    deltaText
+                }
             }
         }
         .accessibilityElement(children: .ignore)
@@ -170,6 +197,7 @@ struct TransactionRow: View {
                 }
                 Spacer(minLength: 12)
                 Text(Money.cents(transaction.amount)).font(.serif(17, relativeTo: .body)).foregroundStyle(Theme.ink)
+                    .fixedSize()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.soft)

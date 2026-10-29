@@ -76,19 +76,45 @@ struct PartDetailView: View {
 
     // MARK: Pieces
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var pointsText: some View {
+        Text("\(model.points)")
+            .font(.serif(52, relativeTo: .largeTitle))
+            .foregroundStyle(Theme.ink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+    }
+
+    private var maxText: some View {
+        Text("of \(model.max)")
+            .font(.sans(15, relativeTo: .subheadline))
+            .foregroundStyle(Theme.soft)
+    }
+
+    @ViewBuilder private var deltaText: some View {
+        if let delta = model.delta {
+            Text("\(PartRow.deltaText(delta)) since \(snapshot.report.month.previous.shortName)")
+                .font(.sans(14, weight: .semibold, relativeTo: .subheadline))
+                .foregroundStyle(delta < 0 ? Theme.oxblood : delta > 0 ? Theme.note : Theme.soft)
+        }
+    }
+
     private var figure: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("\(model.points)")
-                .font(.serif(52, relativeTo: .largeTitle))
-                .foregroundStyle(Theme.ink)
-            Text("of \(model.max)")
-                .font(.sans(15, relativeTo: .subheadline))
-                .foregroundStyle(Theme.soft)
-            Spacer(minLength: 8)
-            if let delta = model.delta {
-                Text("\(PartRow.deltaText(delta)) since \(snapshot.report.month.previous.shortName)")
-                    .font(.sans(14, weight: .semibold, relativeTo: .subheadline))
-                    .foregroundStyle(delta < 0 ? Theme.oxblood : delta > 0 ? Theme.note : Theme.soft)
+        Group {
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    pointsText
+                    maxText
+                    deltaText
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    pointsText
+                    maxText
+                    Spacer(minLength: 8)
+                    deltaText
+                }
             }
         }
         .accessibilityElement(children: .ignore)
@@ -219,6 +245,7 @@ struct MoverRow: View {
                     Text(Money.signed(delta))
                         .font(.sans(13, relativeTo: .footnote))
                         .foregroundStyle(delta > 0 ? Theme.oxblood : delta < 0 ? Theme.note : Theme.soft)
+                        .fixedSize()
                 }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))

@@ -1,6 +1,6 @@
+#if DEBUG
 import Foundation
 import SpendozaKit
-@testable import Spendoza
 
 /// October check-up with Jun to Sep behind it, the numbers on the drill-down mockup:
 /// Wants 9/15 (was 15), Dining out $448 (was $138), typical month $140.
@@ -51,3 +51,4 @@ enum DrillFixture {
         Transaction(id: id, date: date, description: "Place \(id)", amount: amount, type: type, category: category)
     }
 }
+#endif

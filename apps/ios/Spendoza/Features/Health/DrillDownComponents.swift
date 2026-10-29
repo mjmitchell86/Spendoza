@@ -36,6 +36,7 @@ func shortDate(_ apiDate: String) -> String {
 /// Five engraved bars with month labels beneath; the last (the check-up month) is solid amber.
 /// A month with no value is an empty slot, so a gap in the reports shows as a gap.
 struct TrendChart: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let months: [Month]
     let values: [Double?]
     var ceiling: Double?
@@ -46,10 +47,12 @@ struct TrendChart: View {
         VStack(spacing: 6) {
             EngravedBars(values: values.map { $0 ?? 0 }, highlightedIndex: months.count - 1,
                          height: 72, ceiling: ceiling)
-            HStack(spacing: 6) {
+            HStack(spacing: 2) {
                 ForEach(months, id: \.self) { month in
-                    Text(month.shortName)
-                        .font(.sans(11, relativeTo: .caption2))
+                    // Five labels can't share a phone's width at accessibility sizes, so they shrink to initials
+                    // (the chart's spoken summary carries the full month names).
+                    Text(typeSize.isAccessibilitySize ? String(month.shortName.prefix(1)) : month.shortName)
+                        .font(.sans(12, relativeTo: .caption))
                         .foregroundStyle(Theme.soft)
                         .frame(maxWidth: .infinity)
                 }
@@ -64,6 +67,7 @@ struct TrendChart: View {
 /// A thin track with the value filled and the rule's line marked, labelled "0%", "30% line", "50%".
 struct ScoreMeter: View {
     let meter: PartDetailModel.Meter
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private func fraction(_ value: Double) -> CGFloat {
         CGFloat(min(max(value / meter.upperBound, 0), 1))
@@ -83,19 +87,28 @@ struct ScoreMeter: View {
                 .frame(maxHeight: .infinity)
             }
             .frame(height: 16)
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                ZStack(alignment: .topLeading) {
-                    Text(meter.lowLabel).frame(maxWidth: .infinity, alignment: .leading)
-                    Text(meter.upperLabel).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text(meter.thresholdLabel)
-                        .fixedSize()
-                        .position(x: min(max(width * fraction(meter.threshold), 30), width - 50), y: 6.5)
+            if typeSize.isAccessibilitySize {
+                // The three labels can't sit side by side at this size; one wrapping line keeps them legible.
+                Text("\(meter.lowLabel) · \(meter.thresholdLabel) · \(meter.upperLabel)")
+                    .font(.sans(12, relativeTo: .caption))
+                    .foregroundStyle(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    ZStack(alignment: .topLeading) {
+                        Text(meter.lowLabel).frame(maxWidth: .infinity, alignment: .leading)
+                        Text(meter.upperLabel).frame(maxWidth: .infinity, alignment: .trailing)
+                        Text(meter.thresholdLabel)
+                            .fixedSize()
+                            .position(x: min(max(width * fraction(meter.threshold), 30), width - 50), y: 6.5)
+                    }
                 }
+                .frame(height: 16)
+                .font(.sans(12, relativeTo: .caption))
+                .foregroundStyle(Theme.soft)
             }
-            .frame(height: 16)
-            .font(.sans(11, relativeTo: .caption2))
-            .foregroundStyle(Theme.soft)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(

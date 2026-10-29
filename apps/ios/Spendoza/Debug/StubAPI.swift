@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import SpendozaKit
 
@@ -43,7 +44,13 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     // MARK: SpendozaAPI
 
-    func profile() async throws -> Profile { throw APIError.offline }
+    /// What `profile()` answers; nil throws `.offline`.
+    var profileResult: Profile?
+
+    func profile() async throws -> Profile {
+        guard let profileResult else { throw APIError.offline }
+        return profileResult
+    }
 
     func completeOnboarding() async throws { record("completeOnboarding") }
 
@@ -169,3 +176,4 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         ]
     }
 }
+#endif

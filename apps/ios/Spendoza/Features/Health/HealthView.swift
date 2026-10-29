@@ -21,19 +21,19 @@ struct HealthView: View {
     var body: some View {
         NavigationStack {
             ScrollView { page }
-                .refreshable { await model.load(now: .now) }
+                .refreshable { await model.load(now: AppClock.now) }
                 .background(Theme.paper.ignoresSafeArea())
                 // The title only labels the back button on the screens pushed from here.
                 .navigationTitle("Health")
                 .toolbar(.hidden, for: .navigationBar)
         }
         // Reload unless there's something on screen: a load that was cancelled leaves the state as it was.
-        .task { if !model.isLoaded { await model.load(now: .now) } }
+        .task { if !model.isLoaded { await model.load(now: AppClock.now) } }
         .onDisappear { model.cancel() }
         .fullScreenCover(isPresented: $addingStatement) {
             OnboardingView(api: api, mode: .addStatement) {
                 addingStatement = false
-                Task { await model.load(now: .now) }
+                Task { await model.load(now: AppClock.now) }
             }
         }
     }
@@ -64,7 +64,7 @@ struct HealthView: View {
         case .failed(let message):
             VStack(alignment: .leading, spacing: 16) {
                 InlineError(message: message).padding(.top, 16)
-                Button("Try again") { Task { await model.load(now: .now) } }
+                Button("Try again") { Task { await model.load(now: AppClock.now) } }
                     .buttonStyle(SecondaryButtonStyle())
             }
         case .loaded(let snapshot):
