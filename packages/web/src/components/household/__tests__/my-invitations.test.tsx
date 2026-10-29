@@ -88,6 +88,20 @@ describe("MyInvitations", () => {
     await waitFor(() => expect(screen.getByText("This invitation has expired")).toBeTruthy());
   });
 
+  it("does not prefill when there are several invitations", async () => {
+    apiClient.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/household/invitations/mine"
+          ? [invitation, { ...invitation, id: "i2", household_name: "The Joneses" }]
+          : undefined,
+      ),
+    );
+    renderIt("/household?invitation=ABCDE-FGHJK");
+    const inputs = (await screen.findAllByLabelText("Invitation code")) as HTMLInputElement[];
+    expect(inputs).toHaveLength(2);
+    expect(inputs.map((i) => i.value)).toEqual(["", ""]);
+  });
+
   it("renders nothing when there are no invitations", async () => {
     apiClient.mockResolvedValue([]);
     const { container } = renderIt();

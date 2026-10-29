@@ -87,7 +87,7 @@ export function MyInvitations({ onAccepted }: { onAccepted?: () => void }) {
         <InvitationRow
           key={invitation.id}
           invitation={invitation}
-          initialCode={prefill}
+          initialCode={invitations.length === 1 ? prefill : ""}
           onAccepted={onAccepted}
         />
       ))}
