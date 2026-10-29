@@ -128,19 +128,37 @@ async function inviteHandler(req: Request, res: Response) {
 }
 
 async function joinHandler(req: Request, res: Response) {
-  const { user } = req as AuthenticatedRequest;
-  const householdId = req.params.id;
-
-  // Validate invite code matches household
   const { data: household } = await supabaseAdmin
     .from("households")
     .select("*")
-    .eq("id", householdId)
+    .eq("id", req.params.id)
     .single();
 
+  return joinHousehold(req, res, household);
+}
+
+async function joinByCodeHandler(req: Request, res: Response) {
+  const { data: household } = await supabaseAdmin
+    .from("households")
+    .select("*")
+    .eq("invite_code", req.body.invite_code)
+    .maybeSingle();
+
+  return joinHousehold(req, res, household);
+}
+
+async function joinHousehold(
+  req: Request,
+  res: Response,
+  household: { id: string; invite_code: string } | null
+) {
+  const { user } = req as AuthenticatedRequest;
+
+  // Validate invite code matches household
   if (!household || household.invite_code !== req.body.invite_code) {
     return res.status(400).json({ error: "Invalid invite code" });
   }
+  const householdId = household.id;
 
   // Check user is not already in a household
   const { data: profile } = await supabaseAdmin
@@ -378,6 +396,7 @@ router.post("/", validate(createHouseholdSchema), async (req, res: Response) => 
 router.put("/sharing", resolveHousehold, validate(updateSharingSchema), updateSharingHandler);
 router.post("/invite", resolveHousehold, validate(inviteToHouseholdSchema), inviteHandler);
 router.post("/leave", resolveHousehold, leaveHandler);
+router.post("/join", validate(joinHouseholdSchema), joinByCodeHandler);
 router.post("/transfer", resolveHousehold, validate(transferOwnershipSchema), transferOwnershipHandler);
 router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 

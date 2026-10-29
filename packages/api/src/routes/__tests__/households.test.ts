@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, mock } from "bun:test";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  mock,
+} from "bun:test";
 import type { Server } from "http";
 import type { Router } from "express";
 
@@ -65,22 +73,35 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
       select: (...selectArgs: any[]) => {
         calls.push({ table, op: "select", args: selectArgs });
         return {
-          eq: (...eqArgs: any[]) => ({
-            single: () =>
-              Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-            eq: () => ({
+          eq: (...eqArgs: any[]) => {
+            calls.push({ table, op: "select.eq", args: eqArgs });
+            return {
               single: () =>
-                Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-            }),
-            // For member list: .select("...").eq("household_id", id)
-            ...(cfg.selectList
-              ? Promise.resolve(cfg.selectList)
-              : Promise.resolve({ data: [], error: null })),
-            then: (cfg.selectList ?? { data: [], error: null }).then
-              ? undefined
-              : (resolve: any) =>
-                  resolve(cfg.selectList ?? { data: [], error: null }),
-          }),
+                Promise.resolve(
+                  cfg.selectSingle ?? { data: null, error: null }
+                ),
+              maybeSingle: () =>
+                Promise.resolve(
+                  "selectMaybeSingle" in cfg
+                    ? cfg.selectMaybeSingle
+                    : (cfg.selectSingle ?? { data: null, error: null })
+                ),
+              eq: () => ({
+                single: () =>
+                  Promise.resolve(
+                    cfg.selectSingle ?? { data: null, error: null }
+                  ),
+              }),
+              // For member list: .select("...").eq("household_id", id)
+              ...(cfg.selectList
+                ? Promise.resolve(cfg.selectList)
+                : Promise.resolve({ data: [], error: null })),
+              then: (cfg.selectList ?? { data: [], error: null }).then
+                ? undefined
+                : (resolve: any) =>
+                    resolve(cfg.selectList ?? { data: [], error: null }),
+            };
+          },
           single: () =>
             Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
         };
@@ -106,9 +127,7 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
           eq: () => makeEq(),
           select: () => ({
             single: () =>
-              Promise.resolve(
-                cfg.updateSingle ?? { data: null, error: null }
-              ),
+              Promise.resolve(cfg.updateSingle ?? { data: null, error: null }),
           }),
           then: (resolve: any, reject?: any) => {
             const result = cfg.updateResult ?? { data: null, error: null };
@@ -445,6 +464,97 @@ describe("POST /api/households/:id/join", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("Already a member of a household");
+  });
+});
+
+// ===========================================================================
+// POST /api/households/join — join with only the invite code
+// ===========================================================================
+describe("POST /api/households/join", () => {
+  const post = (body: unknown) =>
+    fetch(`${baseUrl}/api/households/join`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+  it("adds the caller to the household whose code matches", async () => {
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+
+    const res = await post({ invite_code: INVITE_CODE });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.message).toBe("Joined household successfully");
+    expect(adminCalls).toContainEqual({
+      table: "households",
+      op: "select.eq",
+      args: ["invite_code", INVITE_CODE],
+    });
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "update",
+      args: { household_id: HOUSEHOLD_ID },
+    });
+  });
+
+  it("returns 400 Invalid invite code when no household has that code", async () => {
+    adminResults.households.selectMaybeSingle = { data: null, error: null };
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+
+    const res = await post({ invite_code: "nomatch1" });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid invite code" });
+    expect(adminCalls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("returns 400 when the caller is already in a household", async () => {
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: "other-household" },
+      error: null,
+    };
+
+    const res = await post({ invite_code: INVITE_CODE });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "Already a member of a household",
+    });
+  });
+
+  it("returns 400 when the household has 10 members", async () => {
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+    adminResults.profiles.selectList = {
+      data: Array.from({ length: 10 }, (_, i) => ({ id: `user-${i}` })),
+      error: null,
+    };
+
+    const res = await post({ invite_code: INVITE_CODE });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "Household has reached the 10-member limit",
+    });
+  });
+
+  it("validates the body", async () => {
+    const res = await post({});
+
+    expect(res.status).toBe(400);
+    expect(adminCalls.some((c) => c.table === "households")).toBe(false);
   });
 });
 
