@@ -2,6 +2,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { logLlmUsage } from "./llm-usage-logger";
 import type { ReportData } from "./report-insights";
+import { OPENAI_MODEL } from "./model";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -137,7 +138,7 @@ export async function generateFinancialAdvice(
   );
 
   const model = new ChatOpenAI({
-    modelName: "gpt-5-mini",
+    modelName: OPENAI_MODEL,
     timeout: 60_000,
   });
 
@@ -192,7 +193,7 @@ export async function generateFinancialAdvice(
     void logLlmUsage({
       user_id: userId,
       call_type: "financial_advice",
-      model: "gpt-5-mini",
+      model: OPENAI_MODEL,
       input_tokens: usage.input_tokens ?? 0,
       output_tokens: usage.output_tokens ?? 0,
       total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),

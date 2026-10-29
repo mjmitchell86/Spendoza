@@ -3,6 +3,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { OPENAI_FAST_MODEL } from "./model";
 
 // Point pdfjs worker to the bundled file (copied by the build script).
 // In serverless, __dirname resolves to the function directory where
@@ -111,7 +112,7 @@ export async function extractTransactions(
   const text = pdfText;
 
   const model = new ChatOpenAI({
-    modelName: "gpt-5-mini",
+    modelName: OPENAI_FAST_MODEL,
     timeout: 300_000,
     modelKwargs: { max_completion_tokens: 16_384 },
   });
