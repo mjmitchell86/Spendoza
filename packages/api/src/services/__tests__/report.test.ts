@@ -576,3 +576,78 @@ describe("generateAllReports", () => {
     expect(profileSelects.length).toBeGreaterThan(0);
   });
 });
+
+// ===========================================================================
+// Monthly job: don't invent check-ups for months with no data
+// ===========================================================================
+describe("skipIfEmpty", () => {
+  const noTransactions = { data: [], error: null };
+  const reportWrites = () =>
+    adminCalls.filter(
+      (c) => c.table === "reports" && (c.op === "upsert" || c.op === "insert")
+    );
+
+  it("generateUserReport returns null and writes nothing when the month has no transactions and no report", async () => {
+    adminResults.transactions.selectList = noTransactions;
+
+    const result = await generateUserReport(
+      TEST_USER_ID,
+      REPORT_MONTH,
+      false,
+      undefined,
+      { skipIfEmpty: true }
+    );
+
+    expect(result).toBeNull();
+    expect(reportWrites()).toHaveLength(0);
+    expect(mockGenerateInsights).not.toHaveBeenCalled();
+  });
+
+  it("generateUserReport still generates when the month has transactions", async () => {
+    const result = await generateUserReport(
+      TEST_USER_ID,
+      REPORT_MONTH,
+      false,
+      undefined,
+      { skipIfEmpty: true }
+    );
+
+    expect(result.report_data.total_income).toBe(3000);
+    expect(reportWrites().length).toBeGreaterThan(0);
+  });
+
+  it("generateHouseholdReport returns null and writes nothing when no member shared a transaction", async () => {
+    adminResults.profiles.selectList = {
+      data: [
+        {
+          id: TEST_USER_ID,
+          income_sharing_mode: "all",
+          expense_sharing_mode: "all",
+        },
+      ],
+      error: null,
+    };
+    adminResults.transactions.selectList = noTransactions;
+
+    const result = await generateHouseholdReport(
+      TEST_HOUSEHOLD_ID,
+      REPORT_MONTH,
+      false,
+      undefined,
+      { skipIfEmpty: true }
+    );
+
+    expect(result).toBeNull();
+    expect(reportWrites()).toHaveLength(0);
+    expect(mockGenerateInsights).not.toHaveBeenCalled();
+  });
+
+  it("generateAllReports writes no reports for a month nobody has data for", async () => {
+    adminResults.transactions.selectList = noTransactions;
+
+    await generateAllReports(REPORT_MONTH);
+
+    expect(reportWrites()).toHaveLength(0);
+    expect(mockGenerateInsights).not.toHaveBeenCalled();
+  });
+});

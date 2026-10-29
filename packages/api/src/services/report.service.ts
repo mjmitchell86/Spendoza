@@ -140,11 +140,17 @@ async function getEmergencyFundMonths(
 // generateUserReport
 // ---------------------------------------------------------------------------
 
+export interface GenerateReportOptions {
+  /** Return null instead of creating a report for a month with no transactions. */
+  skipIfEmpty?: boolean;
+}
+
 export async function generateUserReport(
   userId: string,
   month: Date,
   force = false,
-  client?: SupabaseClient
+  client?: SupabaseClient,
+  options: GenerateReportOptions = {}
 ): Promise<any> {
   const db = client ?? supabaseAdmin;
   const monthStart = startOfMonth(month);
@@ -176,6 +182,10 @@ export async function generateUserReport(
     .lt("date", toDateStr(nextMonthDate));
 
   const txns = transactions ?? [];
+
+  if (options.skipIfEmpty && !existingReport && txns.length === 0) {
+    return null;
+  }
 
   let totalIncome: number;
   let totalExpenses: number;
@@ -334,7 +344,8 @@ export async function generateHouseholdReport(
   householdId: string,
   month: Date,
   force = false,
-  client?: SupabaseClient
+  client?: SupabaseClient,
+  options: GenerateReportOptions = {}
 ): Promise<any> {
   const db = client ?? supabaseAdmin;
   const monthStart = startOfMonth(month);
@@ -369,6 +380,7 @@ export async function generateHouseholdReport(
 
   let totalIncome = 0;
   let totalExpenses = 0;
+  let sharedTransactionCount = 0;
   const categoryMap = new Map<string, number>();
   for (const member of members ?? []) {
     const includeIncome = member.income_sharing_mode === "all";
@@ -386,13 +398,19 @@ export async function generateHouseholdReport(
     for (const t of txns) {
       if (t.type === "credit" && includeIncome) {
         totalIncome += t.amount ?? 0;
+        sharedTransactionCount++;
       }
       if (t.type === "debit" && includeExpenses) {
         totalExpenses += t.amount ?? 0;
         const cat = t.ai_category ?? "Uncategorized";
         categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
+        sharedTransactionCount++;
       }
     }
+  }
+
+  if (options.skipIfEmpty && !existingReport && sharedTransactionCount === 0) {
+    return null;
   }
 
   // 4. Build category breakdown
@@ -547,7 +565,9 @@ export async function generateAllReports(month: Date): Promise<void> {
   // 2. Generate user reports (sequential to avoid overwhelming the AI API)
   for (const profile of profiles ?? []) {
     try {
-      await generateUserReport(profile.id, month);
+      await generateUserReport(profile.id, month, false, undefined, {
+        skipIfEmpty: true,
+      });
     } catch (err) {
       console.error(`Failed to generate report for user ${profile.id}:`, err);
     }
@@ -561,7 +581,9 @@ export async function generateAllReports(month: Date): Promise<void> {
   // 4. Generate household reports
   for (const household of households ?? []) {
     try {
-      await generateHouseholdReport(household.id, month);
+      await generateHouseholdReport(household.id, month, false, undefined, {
+        skipIfEmpty: true,
+      });
     } catch (err) {
       console.error(
         `Failed to generate report for household ${household.id}:`,
