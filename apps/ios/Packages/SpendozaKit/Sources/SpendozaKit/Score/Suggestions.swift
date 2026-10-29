@@ -118,6 +118,11 @@ private func budgetSuggestion(
         action: .setBudget(categoryID: category.id, categoryName: category.name, amount: amount))
 }
 
+/// The budget a category's screen offers: the same rule as the suggestion above.
+public func suggestedBudgetAmount(for category: String, currentAmount: Double, history: [Report]) -> Int {
+    budgetAmount(for: category, currentAmount: currentAmount, history: history)
+}
+
 private func budgetAmount(for category: String, currentAmount: Double, history: [Report]) -> Int {
     let average: Double
     if history.isEmpty {

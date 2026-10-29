@@ -19,9 +19,14 @@ struct HealthView: View {
     }
 
     var body: some View {
-        ScrollView { page }
-        .refreshable { await model.load(now: .now) }
-        .background(Theme.paper.ignoresSafeArea())
+        NavigationStack {
+            ScrollView { page }
+                .refreshable { await model.load(now: .now) }
+                .background(Theme.paper.ignoresSafeArea())
+                // The title only labels the back button on the screens pushed from here.
+                .navigationTitle("Health")
+                .toolbar(.hidden, for: .navigationBar)
+        }
         // Reload unless there's something on screen: a load that was cancelled leaves the state as it was.
         .task { if !model.isLoaded { await model.load(now: .now) } }
         .onDisappear { model.cancel() }
@@ -101,7 +106,12 @@ struct HealthView: View {
             }
             VStack(spacing: 0) {
                 ForEach(snapshot.parts, id: \.part) { change in
-                    PartRow(change: change, highlighted: change.part == Self.mostLost(snapshot.parts))
+                    NavigationLink {
+                        PartDetailView(part: change.part, snapshot: snapshot, api: api)
+                    } label: {
+                        PartRow(change: change, highlighted: change.part == Self.mostLost(snapshot.parts))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .topRule()
@@ -112,7 +122,10 @@ struct HealthView: View {
                 .padding(.top, 16)
         }
 
-        if let soFar = snapshot.soFar { soFarRow(soFar) }
+        if let soFar = snapshot.soFar {
+            NavigationLink { SoFarView(report: soFar) } label: { soFarRow(soFar) }
+                .buttonStyle(.plain)
+        }
 
         if let suggestion = snapshot.suggestion {
             SuggestionPanel {
@@ -183,8 +196,13 @@ struct HealthView: View {
                     }
                     .foregroundStyle(Theme.ink)
                 }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.soft)
+                    .accessibilityHidden(true)
             }
         }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(soFarAccessibility(report))
     }

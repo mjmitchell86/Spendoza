@@ -16,6 +16,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     var categoryList: [BudgetCategory] = StubAPI.defaultCategories
     var transactionList: [Transaction] = []
     var transactionsError: APIError?
+    var setCategoryError: APIError?
+    var budgetError: APIError?
     var statementTransactions: [String: [Transaction]] = [:]
 
     var uploadResults: [Result<Statement, APIError>] = []
@@ -77,8 +79,15 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         return statementTransactions[statementID] ?? []
     }
 
-    func setCategory(transactionID: String, category: String) async throws {}
-    func createBudgetGoal(name: String, categoryID: String, amount: Int) async throws {}
+    func setCategory(transactionID: String, category: String) async throws {
+        record("setCategory(\(transactionID), \(category))")
+        if let setCategoryError { throw setCategoryError }
+    }
+
+    func createBudgetGoal(name: String, categoryID: String, amount: Int) async throws {
+        record("budget(\(name), \(categoryID), \(amount))")
+        if let budgetError { throw budgetError }
+    }
 
     func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement {
         record("upload(\(fileURL.lastPathComponent), \(mimeType))" + (bankName.map { " bank=\($0)" } ?? ""))

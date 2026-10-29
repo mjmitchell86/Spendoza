@@ -2,7 +2,7 @@ import SpendozaKit
 import SwiftUI
 
 /// One part of the score: name on the left, "points/max" and the change since last month on the right.
-/// Not yet tappable; the drill-down arrives with Task 10.
+/// The screen wraps it in a link to the part's drill-down.
 struct PartRow: View {
     let change: PartChange
     /// The row that moved most, given a faint amber wash.
@@ -42,9 +42,15 @@ struct PartRow: View {
                         .foregroundStyle(delta < 0 ? Theme.oxblood : delta > 0 ? Theme.note : Theme.soft)
                         .frame(minWidth: 28, alignment: .trailing)
                 }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.soft)
+                    .accessibilityHidden(true)
             }
         }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.accessibilityText(change))
+        .accessibilityHint("Shows what moved it")
     }
 }

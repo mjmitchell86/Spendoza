@@ -104,13 +104,15 @@ struct EngravedBars: View {
     /// Index drawn solid amber; defaults to the last bar.
     var highlightedIndex: Int?
     var height: CGFloat = 64
+    /// The value a full-height bar stands for; defaults to the largest value.
+    var ceiling: Double?
 
     var body: some View {
-        let peak = max(values.max() ?? 0, .leastNonzeroMagnitude)
+        let peak = max(ceiling ?? values.max() ?? 0, .leastNonzeroMagnitude)
         let highlighted = highlightedIndex ?? values.count - 1
         HStack(alignment: .bottom, spacing: 6) {
             ForEach(Array(values.enumerated()), id: \.offset) { index, value in
-                let barHeight = height * CGFloat(max(value, 0) / peak)
+                let barHeight = height * CGFloat(min(max(value, 0) / peak, 1))
                 Group {
                     if index == highlighted {
                         Theme.amber

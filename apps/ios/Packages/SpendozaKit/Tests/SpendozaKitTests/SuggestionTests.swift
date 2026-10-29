@@ -113,4 +113,10 @@ import Testing
         // The average still uses the history that exists: 260 -> $300.
         #expect(budget.action == .setBudget(categoryID: "c3", categoryName: "Dining out", amount: 300))
     }
+
+    @Test func suggestedBudgetAmountIsExposedForTheCategoryScreen() throws {
+        #expect(suggestedBudgetAmount(for: "Dining out", currentAmount: 448, history: try history()) == 250)
+        // No history: the current amount, rounded up to 50.
+        #expect(suggestedBudgetAmount(for: "Dining out", currentAmount: 448, history: []) == 450)
+    }
 }
