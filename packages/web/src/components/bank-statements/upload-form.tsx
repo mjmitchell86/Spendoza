@@ -249,8 +249,8 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
 
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-            Your bank statement is deleted after processing. We only store the
-            extracted transaction data, never the original file.
+            Your bank statement file is deleted once processing finishes (or when
+            you remove a failed upload). We keep the extracted transactions, not the file.
           </p>
 
           {/* File list */}

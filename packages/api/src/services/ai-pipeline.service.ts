@@ -10,20 +10,43 @@ import { detectRecurringIncome } from "./income-detection.service";
 import { linkPaymentsToDebts } from "./debt-payment-linker.service";
 import { generateUserReport, generateHouseholdReport } from "./report.service";
 import { splitCsvByMonth } from "./csv-splitter";
+import {
+  downloadStatementFile,
+  isStatementFileNeeded,
+  removeStatementFile,
+} from "./statement-file.service";
 
 /** Normalize a transaction description for dedup comparison. */
 function normalizeDescription(desc: string): string {
   return desc.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-/** Delete the raw PDF from Supabase Storage after processing completes. */
-async function deleteRawFile(statementId: string, filePath: string): Promise<void> {
-  const { error } = await supabaseAdmin.storage
-    .from("bank-statements")
-    .remove([filePath]);
+/**
+ * Delete the raw statement file from Supabase Storage once processing is done
+ * with it. Child statements from a multi-month CSV split share the parent's
+ * file, so it's kept while any statement using it is still processing or has
+ * failed (failed statements keep it for Retry). Call after updating the
+ * statement's own status, so the last statement to finish sees all siblings done.
+ */
+async function deleteRawFile(
+  statement: { id: string; user_id: string; file_path: string }
+): Promise<void> {
+  const { id: statementId, file_path: filePath } = statement;
+
+  try {
+    if (await isStatementFileNeeded(statement.user_id, filePath, [statementId])) {
+      console.log(`[ai-pipeline] [${statementId}] raw file still needed by another statement, keeping: ${filePath}`);
+      return;
+    }
+  } catch (err) {
+    console.error(`[ai-pipeline] [${statementId}] keeping raw file, reference check failed:`, err);
+    return;
+  }
+
+  const { error } = await removeStatementFile(statement.user_id, filePath);
 
   if (error) {
-    console.error(`[ai-pipeline] [${statementId}] failed to delete raw file: ${error.message}`);
+    console.error(`[ai-pipeline] [${statementId}] failed to delete raw file: ${error}`);
   } else {
     console.log(`[ai-pipeline] [${statementId}] deleted raw file: ${filePath}`);
   }
@@ -41,6 +64,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [5_000, 20_000];
+
+// The function has a 300s maxDuration. Retry backoff (up to 20s) plus an AI
+// call must finish inside it, so a slow call times out and is retried / marked
+// failed instead of the function being killed mid-step, which would leave the
+// statement stuck in "processing".
+const AI_CALL_TIMEOUT_MS = 260_000;
 
 const STEPS = [
   "extract_text",
@@ -154,13 +183,14 @@ async function stepExtractText(statementId: string): Promise<void> {
   const statement = await getStatement(statementId);
   const { file_path } = statement;
 
-  // Download file from Supabase Storage
-  const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-    .from("bank-statements")
-    .download(file_path);
+  // Download file from Supabase Storage (only from the owner's statements folder)
+  const { data: fileData, error: downloadError } = await downloadStatementFile(
+    statement.user_id,
+    file_path
+  );
 
   if (downloadError || !fileData) {
-    throw new Error(`Failed to download file: ${downloadError?.message}`);
+    throw new Error(`Failed to download file: ${downloadError}`);
   }
 
   const arrayBuffer = await fileData.arrayBuffer();
@@ -182,9 +212,21 @@ async function stepExtractText(statementId: string): Promise<void> {
     throw new Error(`No text could be extracted from the ${statement.file_type === "csv" ? "CSV" : "PDF"}`);
   }
 
-  // For CSVs, check if the file spans multiple months and split if so.
-  // Each child gets its own pipeline run, avoiding AI timeouts on large files.
-  if (statement.file_type === "csv") {
+  // A retried child of a multi-month split shares the parent's whole file, so
+  // keep only its own month's rows (its file_hash is "<parentHash>:<YYYY-MM>").
+  const childMonth = statement.file_type === "csv" ? statement.file_hash?.split(":")[1] : undefined;
+
+  if (childMonth) {
+    const splitResult = splitCsvByMonth(extractedText);
+    const chunk = splitResult.isMultiMonth ? splitResult.monthChunks.get(childMonth) : undefined;
+    if (!chunk) {
+      throw new Error(`No rows for ${childMonth} found in the CSV`);
+    }
+    extractedText = chunk;
+    console.log(`[ai-pipeline] [${statementId}] split child: using ${childMonth} rows (${chunk.length} chars)`);
+  } else if (statement.file_type === "csv") {
+    // For CSVs, check if the file spans multiple months and split if so.
+    // Each child gets its own pipeline run, avoiding AI timeouts on large files.
     const splitResult = splitCsvByMonth(extractedText);
 
     if (splitResult.isMultiMonth) {
@@ -244,6 +286,10 @@ async function stepExtractText(statementId: string): Promise<void> {
         })
         .eq("id", statementId);
 
+      // Children normally delete the shared file when the last one finishes;
+      // this covers them all finishing before the parent was marked parsed.
+      await deleteRawFile(statement);
+
       return; // Children auto-trigger via DB trigger
     }
   }
@@ -274,7 +320,7 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
 
   const { transactions: parsedTransactions, detectedBankName, accountLast4 } = await withTimeout(
     extractTransactions(pdfText, statement.bank_name ?? undefined),
-    300_000,
+    AI_CALL_TIMEOUT_MS,
     "OpenAI transaction extraction"
   );
 
@@ -331,8 +377,8 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
       })
       .eq("id", statementId);
 
-    // Clean up raw PDF from storage
-    await deleteRawFile(statementId, statement.file_path);
+    // Clean up raw file from storage (kept if split siblings still need it)
+    await deleteRawFile(statement);
     return;
   }
 
@@ -379,7 +425,7 @@ async function stepClassifyTransactions(statementId: string): Promise<void> {
   } else {
     classifiedTransactions = await withTimeout(
       classifyTransactions(rawTransactions, categoryNames),
-      280_000,
+      AI_CALL_TIMEOUT_MS,
       "OpenAI transaction classification"
     );
   }
@@ -675,12 +721,9 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     );
   }
 
-  // Clean up raw file from storage — but not for child statements (they share
-  // the parent's file, which may still be needed by sibling children).
-  const isChildStatement = statement.file_hash?.includes(":");
-  if (!isChildStatement) {
-    await deleteRawFile(statementId, statement.file_path);
-  }
+  // Clean up raw file from storage — for child statements of a split, only once
+  // no sibling still needs the shared file.
+  await deleteRawFile(statement);
 
   // Detect recurring bills from transaction patterns (non-fatal)
   try {
