@@ -20,7 +20,7 @@ export function registerDashboardTools(
   if (allowed.has("get_dashboard")) {
     server.tool(
       "get_dashboard",
-      "Get the personal financial dashboard showing income, expenses, savings rate, and spending by category. Provide a month for a specific month view, or from/to dates for a custom range. Defaults to the current month.",
+      "Get the personal financial dashboard showing income, expenses, savings rate, and spending by category. Provide a month for a specific month view, or from/to dates for a custom range. Defaults to the current month. summary.savings_rate is a percentage (e.g. 21.1 means 21.1%).",
       {
         month: z
           .string()
@@ -58,7 +58,7 @@ export function registerDashboardTools(
   if (allowed.has("get_household_dashboard")) {
     server.tool(
       "get_household_dashboard",
-      "Get the household financial dashboard showing combined income, expenses, savings rate, spending by category, and individual member contributions. Requires Pro tier and household membership. Provide a month for a specific month view, or from/to dates for a custom range. Defaults to the current month.",
+      "Get the household financial dashboard showing combined income, expenses, savings rate, spending by category, and individual member contributions. Requires Pro tier and household membership. Provide a month for a specific month view, or from/to dates for a custom range. Defaults to the current month. summary.savings_rate is a percentage (e.g. 21.1 means 21.1%).",
       {
         month: z
           .string()

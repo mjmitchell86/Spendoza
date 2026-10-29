@@ -1,4 +1,8 @@
-import type { CreateGoalInput, UpdateGoalInput } from "@spendoza/shared";
+import type {
+  CreateGoalInput,
+  GoalSuggestion,
+  UpdateGoalInput,
+} from "@spendoza/shared";
 import type { ServiceContext } from "./context";
 import { resolveEntity } from "./household.service";
 import { generateGoalSuggestions } from "../ai/goal-suggestions";
@@ -161,11 +165,18 @@ export async function deleteGoal(
 // ---------------------------------------------------------------------------
 // getGoalSuggestions
 // ---------------------------------------------------------------------------
+export const GOAL_SUGGESTIONS_UNAVAILABLE_MESSAGE =
+  "Goal suggestions are temporarily unavailable. Please try again later.";
+
 export async function getGoalSuggestions(
   ctx: ServiceContext,
   entityType?: string
 ): Promise<{
-  data: { suggestions: any[]; report_month: string | null } | null;
+  data: {
+    suggestions: any[];
+    report_month: string | null;
+    message?: string;
+  } | null;
   error: { message: string } | null;
 }> {
   const resolved = await resolveEntity(ctx, entityType);
@@ -212,11 +223,30 @@ export async function getGoalSuggestions(
     goal_type: g.goal_type as string,
   }));
 
-  const suggestions = await generateGoalSuggestions(
-    reportData,
-    eType,
-    existingGoalList
-  );
+  let suggestions: GoalSuggestion[];
+  try {
+    suggestions = await generateGoalSuggestions(
+      reportData,
+      eType,
+      existingGoalList
+    );
+  } catch (err) {
+    // Suggestions are optional: an OpenAI error, timeout or missing key should
+    // degrade to "no suggestions", not fail the request (or the Goals page).
+    // Nothing is cached, so the next request retries.
+    console.error(
+      `[goal-suggestions] Generation failed for ${eType} ${entityId}:`,
+      err
+    );
+    return {
+      data: {
+        suggestions: [],
+        report_month: report.report_month,
+        message: GOAL_SUGGESTIONS_UNAVAILABLE_MESSAGE,
+      },
+      error: null,
+    };
+  }
 
   // Cache suggestions in report_data using admin client
   if (suggestions.length > 0) {

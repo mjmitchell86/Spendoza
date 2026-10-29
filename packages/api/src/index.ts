@@ -24,6 +24,16 @@ import adviceRouter from "./routes/advice";
 import { requireAuth } from "./middleware/auth";
 import { requireTier } from "./middleware/require-tier";
 import { errorHandler } from "./middleware/error-handler";
+import {
+  installAsyncErrorHandling,
+  registerProcessErrorHandlers,
+} from "./lib/async-errors";
+
+// Forward rejected promises from async handlers/middleware (on every router)
+// to errorHandler, and log stray rejections, so one failing request can't
+// crash the API process.
+installAsyncErrorHandling();
+registerProcessErrorHandlers();
 
 const app: Express = express();
 const PORT = process.env.PORT || 3001;

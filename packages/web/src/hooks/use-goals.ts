@@ -73,6 +73,8 @@ export function useDeleteGoal() {
 export interface GoalSuggestionsResponse {
   suggestions: GoalSuggestion[];
   report_month: string | null;
+  /** Set when suggestions couldn't be generated (e.g. AI unavailable). */
+  message?: string;
 }
 
 export function useGoalSuggestions(entityType: "user" | "household" = "user", enabled = true) {
