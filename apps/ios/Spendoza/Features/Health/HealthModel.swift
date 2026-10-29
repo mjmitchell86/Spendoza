@@ -64,7 +64,7 @@ final class HealthModel {
 
     @ObservationIgnored private let api: any SpendozaAPI
     @ObservationIgnored private let cache: ReportCache
-    @ObservationIgnored private let snapshots: SnapshotStore
+    @ObservationIgnored private let sync: WidgetSync
     @ObservationIgnored private let scope: AccountScope
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private var now = Date()
@@ -82,10 +82,10 @@ final class HealthModel {
     @ObservationIgnored private var selectTask: Task<Void, Never>?
 
     init(api: any SpendozaAPI, cache: ReportCache, snapshots: SnapshotStore, scope: AccountScope,
-         calendar: Calendar = .current) {
+         calendar: Calendar = .current, sync: WidgetSync? = nil) {
         self.api = api
         self.cache = cache
-        self.snapshots = snapshots
+        self.sync = sync ?? WidgetSync(snapshots: snapshots)
         self.scope = scope
         self.calendar = calendar
     }
@@ -256,9 +256,10 @@ final class HealthModel {
             updatedAt: isCached ? report.generatedAt : now))
 
         if saveWidget, !isCached, let health = report.data.health {
-            snapshots.save(WidgetSnapshot(score: health.score, band: ScoreBand(score: health.score),
-                                          previousScore: health.previousScore, month: month),
-                           token: token, scope: scope)
+            sync.save(WidgetSnapshot(score: health.score, band: ScoreBand(score: health.score),
+                                     previousScore: health.previousScore, month: month),
+                      token: token, scope: scope)
+            sync.markSeen(month, token: token, scope: scope)
         }
     }
 

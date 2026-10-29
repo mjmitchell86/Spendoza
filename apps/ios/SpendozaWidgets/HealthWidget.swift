@@ -2,7 +2,7 @@ import SpendozaKit
 import SwiftUI
 import WidgetKit
 
-/// The timeline holds one entry. The app reloads timelines whenever the snapshot changes
+/// The timeline holds one entry. The app reloads timelines whenever the snapshot changes (WidgetSync)
 /// (a new check-up, a sign-out), so the widget never needs to poll.
 struct HealthEntry: TimelineEntry {
     let date: Date

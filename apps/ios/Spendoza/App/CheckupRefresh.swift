@@ -46,6 +46,7 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
     private let notifier: any CheckupNotifying
     private let scheduler: any CheckupScheduling
     private let widgets: any WidgetReloading
+    private let sync: WidgetSync
 
     /// - Parameter hasSession: true when a session token is readable right now; it also points `scope` at that user.
     init(scope: AccountScope, snapshots: SnapshotStore, defaults: UserDefaults = .standard,
@@ -64,6 +65,7 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
         self.notifier = notifier
         self.scheduler = scheduler
         self.widgets = widgets
+        self.sync = WidgetSync(snapshots: snapshots, widgets: widgets, defaults: defaults)
     }
 
     /// The app's instance, wired to the session store.
@@ -125,10 +127,7 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
 
         let snapshot = WidgetSnapshot(score: health.score, band: ScoreBand(score: health.score),
                                       previousScore: health.previousScore, month: report.month)
-        if snapshots.load() != snapshot {
-            snapshots.save(snapshot, token: token, scope: scope)
-            if scope.isCurrent(token) { widgets.reloadAll() }
-        }
+        sync.save(snapshot, token: token, scope: scope)
 
         let lastNotified = defaults.string(forKey: Self.lastNotifiedKey).flatMap(Month.init(apiString:))
         guard let body = checkupNotice(latestCheckup: report.month, lastNotified: lastNotified),
@@ -162,6 +161,36 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
             month = month.previous
         }
         return nil
+    }
+}
+
+/// Keeps the widget in step with what the app has seen. Used by the foreground Health load and the background run.
+final class WidgetSync: @unchecked Sendable {  // UserDefaults is thread-safe
+    private let snapshots: SnapshotStore
+    private let widgets: any WidgetReloading
+    private let defaults: UserDefaults
+
+    init(snapshots: SnapshotStore, widgets: any WidgetReloading = SystemWidgetReloader(),
+         defaults: UserDefaults = .standard) {
+        self.snapshots = snapshots
+        self.widgets = widgets
+        self.defaults = defaults
+    }
+
+    /// Saves under the scope token and reloads widget timelines, only when the snapshot changed
+    /// and no sign-out or account change happened meanwhile.
+    func save(_ snapshot: WidgetSnapshot, token: AccountScope.Token, scope: AccountScope) {
+        guard scope.isCurrent(token), snapshots.load() != snapshot else { return }
+        snapshots.save(snapshot, token: token, scope: scope)
+        if scope.isCurrent(token) { widgets.reloadAll() }
+    }
+
+    /// The app has shown this check-up, so the "ready" notice for it would be stale.
+    func markSeen(_ month: Month, token: AccountScope.Token, scope: AccountScope) {
+        guard scope.isCurrent(token) else { return }
+        let stored = defaults.string(forKey: CheckupRefresh.lastNotifiedKey).flatMap(Month.init(apiString:))
+        if let stored, stored >= month { return }
+        defaults.set(month.apiString, forKey: CheckupRefresh.lastNotifiedKey)
     }
 }
 
