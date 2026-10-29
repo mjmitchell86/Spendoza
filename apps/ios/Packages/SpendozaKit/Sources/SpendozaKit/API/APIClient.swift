@@ -1,8 +1,9 @@
 import Foundation
 
 public final class APIClient: SpendozaAPI {
-    /// Provisional (R15): under Vercel's 4.5 MB request-body limit, leaving room for multipart framing. Task 6 measures it.
-    public static let maxStatementBytes = 4_400_000
+    /// Measured (Task 6): the largest unauthenticated multipart body test-api accepted was 4,493,164 bytes (4,494,140 got 413).
+    /// The file limit leaves 13 KB for multipart framing and the optional bank_name/account_label fields, 8 KB more than they need.
+    public static let maxStatementBytes = 4_480_000
     /// The limit in whole megabytes, rounded down. Uses MiB (the larger unit) so the figure never overstates the limit.
     public static let maxStatementMB = max(1, maxStatementBytes / 1_048_576)
 
