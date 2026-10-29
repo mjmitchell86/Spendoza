@@ -53,6 +53,7 @@ function createChain(result: { data: unknown; error: unknown }) {
   chain.update = handler;
   chain.eq = handler;
   chain.is = handler;
+  chain.gt = handler;
   chain.single = () => Promise.resolve(result);
   // For update chains that don't end with .single()
   chain.then = (resolve: (v: unknown) => void) => resolve(result);

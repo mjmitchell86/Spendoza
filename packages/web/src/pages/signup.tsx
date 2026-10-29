@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,13 +14,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+// The signed-in user's household name, for the "You've joined" notice.
+async function joinedHouseholdName(): Promise<string> {
+  try {
+    const data = (await apiClient("/household")) as { household?: { name?: string } } | null;
+    return data?.household?.name || "the household";
+  } catch {
+    return "the household";
+  }
+}
+
 export function SignupPage() {
   const { signUp } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [mode, setMode] = useState<"signup" | "waitlist">("signup");
-  const [inviteCode, setInviteCode] = useState("");
-  const [email, setEmail] = useState("");
+  const [inviteCode, setInviteCode] = useState(searchParams.get("invitation") ?? "");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [waitlistName, setWaitlistName] = useState("");
@@ -28,6 +39,7 @@ export function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -35,8 +47,18 @@ export function SignupPage() {
     setLoading(true);
 
     try {
-      await signUp(email, password, displayName, inviteCode);
-      navigate("/onboarding", { replace: true });
+      const result = await signUp(email, password, displayName, inviteCode);
+      if (result?.joined_household) {
+        // A new account goes through onboarding first (the auth guard sends
+        // every page there), so say they joined before continuing.
+        setNotice(`You've joined ${await joinedHouseholdName()}`);
+      } else if (result?.household_full) {
+        setNotice("That household is full now");
+      } else if (result?.household_not_on_plan) {
+        setNotice("That household isn't available on your plan yet");
+      } else {
+        navigate("/onboarding", { replace: true });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create account");
     } finally {
@@ -65,6 +87,27 @@ export function SignupPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (notice) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl">Your account is ready</CardTitle>
+            <CardDescription>{notice}</CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button
+              className="w-full"
+              onClick={() => navigate("/onboarding", { replace: true })}
+            >
+              Continue
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
   }
 
   if (waitlistSuccess) {
@@ -174,11 +217,11 @@ export function SignupPage() {
               </div>
             )}
             <div className="flex flex-col gap-2">
-              <Label htmlFor="inviteCode">Invite Code</Label>
+              <Label htmlFor="inviteCode">Invite code or invitation code</Label>
               <Input
                 id="inviteCode"
                 type="text"
-                placeholder="Enter your invite code"
+                placeholder="Enter your invite or invitation code"
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value)}
                 required

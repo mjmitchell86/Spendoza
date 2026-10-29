@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { buildHouseholdInvitationEmail } from "../emails/household-invitation";
 
 const FROM_ADDRESS = "Spendoza <reports@spendoza.io>";
 
@@ -39,4 +40,31 @@ export async function sendReportEmail(
   }
 
   return { success: true, emailId: data?.id };
+}
+
+export async function sendHouseholdInvitationEmail(
+  to: string,
+  inviterName: string,
+  householdName: string,
+  invitationCode: string
+): Promise<void> {
+  const { subject, html, text } = buildHouseholdInvitationEmail({
+    inviterName,
+    householdName,
+    invitationCode,
+    recipientEmail: to,
+  });
+
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const { error } = await resend.emails.send({
+    from: FROM_ADDRESS,
+    to,
+    subject,
+    html,
+    text,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }

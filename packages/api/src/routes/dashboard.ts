@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { requireHouseholdPlan } from "../middleware/require-household-plan";
 import { toServiceContext } from "../services/context";
 import {
   currentMonthStr,
@@ -33,7 +34,7 @@ router.get("/personal", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 // GET /household — household dashboard data
 // ---------------------------------------------------------------------------
-router.get("/household", async (req: Request, res: Response) => {
+router.get("/household", requireHouseholdPlan("callerOrHead"), async (req: Request, res: Response) => {
   const ctx = toServiceContext(req as AuthenticatedRequest);
   const fromDate = req.query.from_date as string | undefined;
   const toDate = req.query.to_date as string | undefined;

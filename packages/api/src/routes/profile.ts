@@ -97,9 +97,11 @@ router.post("/sign-out-others", async (req, res: Response) => {
 // PUT /onboarding — mark onboarding complete
 // ---------------------------------------------------------------------------
 router.put("/onboarding", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { user } = req as AuthenticatedRequest;
 
-  const { data, error } = await db
+  // onboarding_completed is server-owned (clients have no UPDATE grant on it),
+  // so it is set with the service role, scoped to the caller's own row.
+  const { data, error } = await supabaseAdmin
     .from("profiles")
     .update({ onboarding_completed: true })
     .eq("id", user.id)

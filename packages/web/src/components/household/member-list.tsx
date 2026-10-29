@@ -27,6 +27,14 @@ const SHARING_LABELS: Record<string, string> = {
   category: "By Category",
 };
 
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      {message}
+    </div>
+  );
+}
+
 interface MemberListProps {
   members: HouseholdMember[];
   headId: string;
@@ -45,27 +53,30 @@ export function MemberList({
   const [removeTarget, setRemoveTarget] = useState<HouseholdMember | null>(
     null
   );
+  const [actionError, setActionError] = useState<string | null>(null);
   const [transferTarget, setTransferTarget] = useState<HouseholdMember | null>(
     null
   );
 
   async function handleRemove() {
     if (!removeTarget) return;
+    setActionError(null);
     try {
       await removeMember.mutateAsync(removeTarget.id);
       setRemoveTarget(null);
-    } catch {
-      // Error handled by mutation
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to remove member");
     }
   }
 
   async function handleTransfer() {
     if (!transferTarget) return;
+    setActionError(null);
     try {
       await transferOwnership.mutateAsync({ new_head_id: transferTarget.id });
       setTransferTarget(null);
-    } catch {
-      // Error handled by mutation
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to transfer");
     }
   }
 
@@ -112,19 +123,26 @@ export function MemberList({
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => setTransferTarget(member)}
-                        title="Transfer ownership"
+                        onClick={() => {
+                          setActionError(null);
+                          setTransferTarget(member);
+                        }}
+                        title="Make head of household"
                       >
                         <ShieldCheck className="size-4" />
-                        <span className="sr-only">Transfer ownership</span>
+                        <span className="sr-only">Make head of household</span>
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => setRemoveTarget(member)}
+                        onClick={() => {
+                          setActionError(null);
+                          setRemoveTarget(member);
+                        }}
+                        title="Remove from household"
                       >
                         <Trash2 className="size-4" />
-                        <span className="sr-only">Remove</span>
+                        <span className="sr-only">Remove from household</span>
                       </Button>
                     </div>
                   )}
@@ -144,12 +162,13 @@ export function MemberList({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove Member</DialogTitle>
+            <DialogTitle>Remove from household</DialogTitle>
             <DialogDescription>
-              Are you sure you want to remove {removeTarget?.display_name} from
-              the household? This action cannot be undone.
+              Remove {removeTarget?.display_name} from the household? Your invite
+              code will change.
             </DialogDescription>
           </DialogHeader>
+          {actionError && <ErrorBanner message={actionError} />}
           <DialogFooter>
             <Button variant="outline" onClick={() => setRemoveTarget(null)}>
               Cancel
@@ -159,7 +178,7 @@ export function MemberList({
               onClick={handleRemove}
               disabled={removeMember.isPending}
             >
-              {removeMember.isPending ? "Removing..." : "Remove"}
+              {removeMember.isPending ? "Removing..." : "Remove from household"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -173,12 +192,13 @@ export function MemberList({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Transfer Ownership</DialogTitle>
+            <DialogTitle>Make head of household</DialogTitle>
             <DialogDescription>
-              Transfer ownership to {transferTarget?.display_name}? You will no
-              longer be the head of household.
+              Make {transferTarget?.display_name} the head of household? You will
+              no longer be the head of household.
             </DialogDescription>
           </DialogHeader>
+          {actionError && <ErrorBanner message={actionError} />}
           <DialogFooter>
             <Button variant="outline" onClick={() => setTransferTarget(null)}>
               Cancel
@@ -187,7 +207,7 @@ export function MemberList({
               onClick={handleTransfer}
               disabled={transferOwnership.isPending}
             >
-              {transferOwnership.isPending ? "Transferring..." : "Transfer"}
+              {transferOwnership.isPending ? "Transferring..." : "Make head of household"}
             </Button>
           </DialogFooter>
         </DialogContent>

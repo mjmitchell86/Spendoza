@@ -73,6 +73,11 @@ const mockFrom = mock(() => ({
   }),
 }));
 
+// Per-client wrappers so tests can tell the RLS (user JWT) client from the
+// service-role client; both share the same query-builder mocks.
+const mockRlsFrom = mock((...args: any[]) => (mockFrom as any)(...args));
+const mockAdminFrom = mock((...args: any[]) => (mockFrom as any)(...args));
+
 // Storage mocks for avatar upload
 const mockStorageUpload = mock(() =>
   Promise.resolve({ data: { path: `${TEST_USER_ID}/avatar.jpg` }, error: null })
@@ -138,7 +143,7 @@ mock.module("@langchain/core/messages", () => ({
 mock.module("@supabase/supabase-js", () => ({
   createClient: (_url: string, _key: string, options?: any) => {
     if (options?.global?.headers?.Authorization) {
-      return { from: mockFrom, storage: { from: mockStorageFrom } };
+      return { from: mockRlsFrom, storage: { from: mockStorageFrom } };
     }
     // Admin client — used by routes (supabaseAdmin) and auth middleware (getUser)
     return {
@@ -147,7 +152,7 @@ mock.module("@supabase/supabase-js", () => ({
         signInWithPassword: mock(),
         getUser: mockGetUser,
       },
-      from: mockFrom,
+      from: mockAdminFrom,
       storage: { from: mockStorageFrom },
     };
   },
@@ -251,6 +256,8 @@ beforeEach(() => {
   mockUpdateSelect.mockClear();
   mockUpdateSingle.mockClear();
   mockFrom.mockClear();
+  mockRlsFrom.mockClear();
+  mockAdminFrom.mockClear();
   mockGetUser.mockClear();
   mockStorageUpload.mockClear();
   mockGetPublicUrl.mockClear();
@@ -466,6 +473,22 @@ describe("PUT /api/profile/onboarding", () => {
       // A new account with no statements must not get an all-zero report (it would read as a real score).
       expect(call[4]).toEqual({ skipIfEmpty: true });
     }
+  });
+
+  // onboarding_completed is server-owned: clients have no UPDATE grant on it,
+  // so the route sets it with the service role.
+  it("sets onboarding_completed with the service-role client", async () => {
+    const res = await fetch(url(), {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockAdminFrom).toHaveBeenCalledWith("profiles");
+    expect(mockUpdate).toHaveBeenCalledWith({ onboarding_completed: true });
+    expect(mockRlsFrom).not.toHaveBeenCalledWith("profiles");
   });
 
   it("returns 401 without auth token", async () => {

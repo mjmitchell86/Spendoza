@@ -89,7 +89,7 @@ erDiagram
         uuid id PK
         string name
         uuid head_of_household_id FK
-        string invite_code
+        string invite_code "optional; API response for the head only (stored in household_invite_codes)"
     }
 
     CATEGORY {

@@ -595,6 +595,7 @@ erDiagram
     reports }o--|| profiles : "for user"
     reports }o--|| households : "for household"
     households ||--o{ household_invitations : "has"
+    households ||--o| household_invite_codes : "join code (head only)"
     goals }o--o| debts : "pays off"
 
     profiles {
@@ -617,7 +618,12 @@ erDiagram
         uuid id PK
         string name
         uuid head_of_household_id FK
-        string invite_code
+    }
+
+    household_invite_codes {
+        uuid household_id PK, FK
+        string code UK
+        timestamp updated_at
     }
 
     categories {

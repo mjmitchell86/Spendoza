@@ -250,7 +250,7 @@ export async function deleteAccount(userId: string): Promise<void> {
     supabaseAdmin.from("household_invitations").delete().eq("invited_by", userId));
   if (email) {
     await run(userId, "delete received invitations",
-      supabaseAdmin.from("household_invitations").delete().eq("email", email));
+      supabaseAdmin.from("household_invitations").delete().eq("email", email.toLowerCase()));
   }
 
   await run(userId, "clear income attribution",
