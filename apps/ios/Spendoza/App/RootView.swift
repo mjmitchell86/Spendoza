@@ -22,15 +22,20 @@ struct RootView: View {
                 case .onboarding:
                     PlaceholderView(title: "Onboarding", store: store)
                 case .ready:
-                    MainTabs(store: store, lock: lock)
-                        .overlay {
-                            if lock.isLocked {
-                                LockView(lock: lock)
-                            } else if scenePhase != .active {
-                                LockView(lock: lock, offersUnlock: false)
-                            }
+                    // Locked content is not built at all, so VoiceOver can't reach it.
+                    Group {
+                        if lock.isLocked {
+                            LockView(lock: lock)
+                        } else {
+                            MainTabs(store: store, lock: lock)
                         }
-                        .task { await lock.appDidBecomeActive() }
+                    }
+                    .overlay {
+                        if !lock.isLocked && scenePhase != .active {
+                            LockView(lock: lock, offersUnlock: false)
+                        }
+                    }
+                    .task { await lock.appDidBecomeActive() }
                 }
             }
         }
@@ -39,8 +44,16 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background: lock.appDidEnterBackground()
-            case .active: Task { await lock.appDidBecomeActive() }
+            case .active where store.phase.isReady: Task { await lock.appDidBecomeActive() }
             default: break
+            }
+        }
+        .onChange(of: store.phase) { old, new in
+            // A restored session also moves off .signedOut, but while the store is still restoring.
+            if new == .signedOut {
+                lock.sessionEnded()
+            } else if old == .signedOut, !store.isRestoring {
+                lock.sessionStartedFresh()
             }
         }
     }
@@ -76,5 +89,12 @@ private struct LoadFailedView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+}
+
+private extension AppPhase {
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
     }
 }

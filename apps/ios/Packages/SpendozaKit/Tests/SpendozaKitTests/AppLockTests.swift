@@ -35,8 +35,64 @@ private final class FakeAuthenticator: Authenticator, @unchecked Sendable {
         let lock = AppLock(authenticator: auth, isEnabled: true, defaults: defaults())
         await lock.appDidBecomeActive()
         #expect(lock.isLocked)
-        await lock.appDidBecomeActive()
+        await lock.unlockTapped()
         #expect(!lock.isLocked)
+    }
+
+    @Test func failedAttemptIsNotRepromptedByActiveCycles() async {
+        let auth = FakeAuthenticator([false, true])
+        let lock = AppLock(authenticator: auth, isEnabled: true, defaults: defaults())
+        await lock.appDidBecomeActive()
+        // The Face ID sheet toggles inactive -> active; that must not prompt again.
+        await lock.appDidBecomeActive()
+        await lock.appDidBecomeActive()
+        #expect(auth.calls == 1)
+        #expect(lock.isLocked)
+        lock.appDidEnterBackground()
+        await lock.appDidBecomeActive()
+        #expect(auth.calls == 2)
+        #expect(!lock.isLocked)
+    }
+
+    @Test func freshSignInStartsUnlockedWithoutPrompt() async {
+        let auth = FakeAuthenticator([])
+        let lock = AppLock(authenticator: auth, isEnabled: true, defaults: defaults())
+        lock.sessionStartedFresh()
+        #expect(!lock.isLocked)
+        await lock.appDidBecomeActive()
+        #expect(auth.calls == 0)
+    }
+
+    @Test func restoredSessionAtLaunchIsLocked() {
+        let lock = AppLock(authenticator: FakeAuthenticator([]), isEnabled: true, defaults: defaults())
+        #expect(lock.isLocked)
+    }
+
+    @Test func backgroundWhileSignedOutThenFreshSignInIsUnlocked() async {
+        let auth = FakeAuthenticator([])
+        let lock = AppLock(authenticator: auth, isEnabled: true, defaults: defaults())
+        lock.sessionEnded()
+        lock.appDidEnterBackground()
+        lock.sessionStartedFresh()
+        #expect(!lock.isLocked)
+        await lock.appDidBecomeActive()
+        #expect(auth.calls == 0)
+    }
+
+    @Test func turningOffRequiresAuthentication() async {
+        let d = defaults()
+        let auth = FakeAuthenticator([false, true])
+        let lock = AppLock(authenticator: auth, isEnabled: true, defaults: d)
+        lock.sessionStartedFresh()
+        await lock.setEnabled(false)
+        #expect(lock.isEnabled)
+        #expect(AppLock.storedIsEnabled(in: d))
+        await lock.setEnabled(false)
+        #expect(!lock.isEnabled)
+        #expect(!AppLock.storedIsEnabled(in: d))
+        await lock.setEnabled(true)
+        #expect(lock.isEnabled)
+        #expect(auth.calls == 2)
     }
 
     @Test func disabledIsNeverLocked() async {
@@ -70,14 +126,6 @@ private final class FakeAuthenticator: Authenticator, @unchecked Sendable {
         #expect(auth.calls == 1)
     }
 
-    @Test func turningOffUnlocksAndPersists() {
-        let d = defaults()
-        let lock = AppLock(authenticator: FakeAuthenticator([]), isEnabled: true, defaults: d)
-        lock.isEnabled = false
-        #expect(!lock.isLocked)
-        #expect(AppLock.storedIsEnabled(in: d) == false)
-    }
-
     @Test func storedDefaultIsEnabled() {
         #expect(AppLock.storedIsEnabled(in: defaults()))
     }
@@ -91,5 +139,14 @@ private final class FakeAuthenticator: Authenticator, @unchecked Sendable {
         #expect(Appearance.stored(in: d) == .dark)
         d.set("bogus", forKey: Appearance.defaultsKey)
         #expect(Appearance.stored(in: d) == .system)
+    }
+}
+
+@Suite struct DeviceAuthenticatorDecisionTests {
+    @Test func onlyPasscodeNotSetMayPassWithoutAuthentication() {
+        #expect(allowsWithoutAuthentication(NSError(domain: "com.apple.LocalAuthentication", code: -5)))
+        #expect(!allowsWithoutAuthentication(NSError(domain: "com.apple.LocalAuthentication", code: -6)))
+        #expect(!allowsWithoutAuthentication(NSError(domain: "com.apple.LocalAuthentication", code: -7)))
+        #expect(!allowsWithoutAuthentication(nil))
     }
 }

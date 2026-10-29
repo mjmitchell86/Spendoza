@@ -4,7 +4,7 @@ import SwiftUI
 /// The minimal Me tab: Appearance & Face ID, and Sign out.
 struct MeView: View {
     let store: SessionStore
-    @Bindable var lock: AppLock
+    let lock: AppLock
     @AppStorage(Appearance.defaultsKey) private var appearance: Appearance = .system
 
     var body: some View {
@@ -24,7 +24,9 @@ struct MeView: View {
                             .padding(.bottom, 10)
                         VStack(spacing: 0) {
                             RuledRow {
-                                Toggle("Lock with Face ID", isOn: $lock.isEnabled)
+                                Toggle("Lock with Face ID", isOn: Binding(
+                                    get: { lock.isEnabled },
+                                    set: { on in Task { await lock.setEnabled(on) } }))
                                     .font(.sans(16, relativeTo: .body))
                                     .foregroundStyle(Theme.ink)
                                     .tint(Theme.note)

@@ -7,15 +7,23 @@ public protocol Authenticator: Sendable {
     func authenticate(reason: String) async -> Bool
 }
 
+/// Whether a failure to evaluate the policy means there is nothing to prove: only "no passcode set".
+/// Every other error keeps the app locked.
+public func allowsWithoutAuthentication(_ error: NSError?) -> Bool {
+    guard let error else { return false }
+    return error.domain == LAError.errorDomain && error.code == LAError.passcodeNotSet.rawValue
+}
+
 /// Face ID / Touch ID with passcode fallback (`.deviceOwnerAuthentication`).
-/// A device with no passcode or biometrics set up can't be locked, so it counts as authenticated.
 public struct DeviceAuthenticator: Authenticator {
     public init() {}
 
     public func authenticate(reason: String) async -> Bool {
         let context = LAContext()
         var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { return true }
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            return allowsWithoutAuthentication(error)
+        }
         do {
             return try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)
         } catch {
@@ -24,24 +32,22 @@ public struct DeviceAuthenticator: Authenticator {
     }
 }
 
-/// The app lock: locked on launch and after the app goes to the background, until the person authenticates.
+/// The app lock. A launch with a restored session and every return from the background start locked;
+/// a fresh sign-in in this process starts unlocked. The system prompt appears automatically once per
+/// lock; after a failed or cancelled attempt the person taps Unlock.
 @MainActor @Observable
 public final class AppLock {
     public nonisolated static let defaultsKey = "faceIDLockEnabled"
     public nonisolated static let reason = "Unlock Spendoza."
 
     public private(set) var isLocked: Bool
-    /// Whether the lock is on. Persisted; turning it off unlocks.
-    public var isEnabled: Bool {
-        didSet {
-            defaults.set(isEnabled, forKey: Self.defaultsKey)
-            if !isEnabled { isLocked = false }
-        }
-    }
+    /// Whether the lock is on. Persisted; change it with `setEnabled`.
+    public private(set) var isEnabled: Bool
 
     @ObservationIgnored private let authenticator: Authenticator
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var isAuthenticating = false
+    @ObservationIgnored private var autoPromptPending: Bool
 
     public init(authenticator: Authenticator, isEnabled: Bool = AppLock.storedIsEnabled(in: .standard),
                 defaults: UserDefaults = .standard) {
@@ -49,6 +55,7 @@ public final class AppLock {
         self.defaults = defaults
         self.isEnabled = isEnabled
         isLocked = isEnabled
+        autoPromptPending = isEnabled
     }
 
     /// The saved setting; on by default.
@@ -56,17 +63,54 @@ public final class AppLock {
         defaults.object(forKey: defaultsKey) as? Bool ?? true
     }
 
-    /// Prompts to unlock when locked. Safe to call repeatedly; one prompt runs at a time.
+    /// Prompts automatically, once per lock (launch or return from background). Later calls, such as the
+    /// inactive -> active cycle the Face ID sheet causes, do nothing until the Unlock button.
     public func appDidBecomeActive() async {
+        guard autoPromptPending else { return }
+        autoPromptPending = false
+        await attempt()
+    }
+
+    /// The Unlock button.
+    public func unlockTapped() async { await attempt() }
+
+    public func appDidEnterBackground() {
+        guard isEnabled else { return }
+        isLocked = true
+        autoPromptPending = true
+    }
+
+    /// The person signed in during this process: nothing to protect yet.
+    public func sessionStartedFresh() {
+        isLocked = false
+        autoPromptPending = false
+    }
+
+    /// Signed out: reset so the next sign-in starts unlocked too.
+    public func sessionEnded() { sessionStartedFresh() }
+
+    /// Turning the lock off needs a successful authentication; turning it on does not.
+    public func setEnabled(_ on: Bool) async {
+        if on {
+            isEnabled = true
+        } else {
+            guard !isAuthenticating else { return }
+            isAuthenticating = true
+            let ok = await authenticator.authenticate(reason: Self.reason)
+            isAuthenticating = false
+            guard ok else { return }
+            isEnabled = false
+            isLocked = false
+        }
+        defaults.set(isEnabled, forKey: Self.defaultsKey)
+    }
+
+    private func attempt() async {
         guard isEnabled, isLocked, !isAuthenticating else { return }
         isAuthenticating = true
         let ok = await authenticator.authenticate(reason: Self.reason)
         isAuthenticating = false
         if ok { isLocked = false }
-    }
-
-    public func appDidEnterBackground() {
-        if isEnabled { isLocked = true }
     }
 }
 
