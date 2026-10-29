@@ -52,3 +52,4 @@ cd packages/web && bun run dev    # Start web frontend only
 - **Shared Zod schemas** live in `packages/shared` and are imported by both `api` and `web`.
 - **API validation** uses Zod middleware to validate request bodies, params, and query strings.
 - **TDD for backend**: Write tests first for API routes and business logic.
+- **Feature parity across interfaces**: every user-facing feature ships to the web app and the iPhone app (`apps/ios`, once it exists) with the same actions and wording; the MCP server gets it too when it is something an AI assistant would do. A plan or PR for a feature covers every interface, or says when the missing one follows (see `docs/superpowers/plans/2026-10-29-ios-app-roadmap.md`).
