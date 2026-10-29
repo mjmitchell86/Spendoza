@@ -20,7 +20,8 @@ enum Launch {
         let app = XCUIApplication()
         // The launch argument `-AppleInterfaceStyle` doesn't change an iOS app's scheme; the device setting does.
         XCUIDevice.shared.appearance = appearance == .dark ? .dark : .light
-        var arguments = ["-uiTestStubAPI", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        var arguments = ["-uiTestStubAPI", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                         "-uiTestColorScheme", appearance == .dark ? "dark" : "light"]
         if let textSize { arguments += ["-UIPreferredContentSizeCategoryName", textSize] }
         if hideTabBar { arguments.append("-uiTestHideTabBar") }
         if slowSelect { arguments.append("-uiTestSlowSelect") }

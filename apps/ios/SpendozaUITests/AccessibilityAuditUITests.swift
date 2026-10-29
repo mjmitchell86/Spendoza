@@ -48,6 +48,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         print("AUDIT-PAGES \(screen.rawValue) \(appearance.rawValue): \(pages) pages")
     }
 
+    @MainActor
     private func attach(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name

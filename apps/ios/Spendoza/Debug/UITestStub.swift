@@ -10,6 +10,15 @@ enum UITestStub {
     static let argument = "-uiTestStubAPI"
     static var isOn: Bool { CommandLine.arguments.contains(argument) }
 
+    /// `-uiTestColorScheme dark|light`: sets the app's own Appearance preference at launch, so the root's
+    /// `.preferredColorScheme` applies it whatever the simulator's setting (the device API differs by Xcode).
+    static func applyColorScheme(to defaults: UserDefaults = .standard) {
+        guard isOn, let index = CommandLine.arguments.firstIndex(of: "-uiTestColorScheme"),
+              CommandLine.arguments.indices.contains(index + 1),
+              let scheme = Appearance(rawValue: CommandLine.arguments[index + 1]) else { return }
+        scheme.store(in: defaults)
+    }
+
     /// A day in November 2026, so October is the check-up month whatever the simulator's clock says.
     static let now = Date(timeIntervalSince1970: 1_794_000_000)
 

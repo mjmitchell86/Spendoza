@@ -9,6 +9,9 @@ struct SpendozaApp: App {
     @AppStorage(Appearance.defaultsKey) private var appearance: Appearance = .system
 
     init() {
+        #if DEBUG
+        UITestStub.applyColorScheme()
+        #endif
         let store = Self.makeStore()
         _store = State(initialValue: store)
         let checkup = Self.makeCheckup(store: store)
