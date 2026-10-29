@@ -26,17 +26,46 @@ const ROUTES: Record<string, string> = {
   "/revoke": "revoke",
 };
 
+// Each handler runs inside a small Express app mounted at its public path.
+// The MCP SDK's OAuth handlers are Express routers that only match "/", so
+// mounting strips the path; the app also gives req/res the Express methods
+// (res.status().json(), res.redirect) the handlers use, and parses JSON and
+// form bodies for /mcp and /callback.
+function wrapperSource(name: string, publicPath: string): string {
+  return `import express from "express";
+import handler from ${JSON.stringify(join(ROOT, "handlers", `${name}.ts`))};
+
+const app = express();
+app.disable("x-powered-by");
+app.set("trust proxy", true);
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false }));
+app.use([${JSON.stringify(publicPath)}, ${JSON.stringify(`/api/${name}`)}], (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
+});
+
+export default app;
+`;
+}
+
 rmSync(OUT, { recursive: true, force: true });
+const WRAPPERS = join(ROOT, ".vercel/entries");
+mkdirSync(WRAPPERS, { recursive: true });
 
 const entries = readdirSync(join(ROOT, "handlers")).filter((f) => f.endsWith(".ts"));
 
 for (const file of entries) {
   const name = file.replace(/\.ts$/, "");
+  const publicPath = Object.keys(ROUTES).find((path) => ROUTES[path] === name);
+  if (!publicPath) throw new Error(`No public route for handlers/${file}`);
   const funcDir = join(OUT, "functions/api", `${name}.func`);
   mkdirSync(funcDir, { recursive: true });
 
+  const wrapper = join(WRAPPERS, `${name}.ts`);
+  writeFileSync(wrapper, wrapperSource(name, publicPath));
+
   const result = await Bun.build({
-    entrypoints: [join(ROOT, "handlers", file)],
+    entrypoints: [wrapper],
     target: "node",
     format: "esm",
     naming: "index.mjs",
@@ -53,7 +82,7 @@ for (const file of entries) {
       runtime: RUNTIME,
       handler: "index.mjs",
       launcherType: "Nodejs",
-      shouldAddHelpers: true,
+      shouldAddHelpers: false,
       maxDuration: 60,
     }),
   );
