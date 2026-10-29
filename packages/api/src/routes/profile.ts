@@ -69,6 +69,31 @@ router.delete("/", validate(deleteAccountSchema), async (req, res: Response) => 
 });
 
 // ---------------------------------------------------------------------------
+// POST /sign-out-others — end every session except the caller's
+//
+// Backs "Disconnect AI assistants": connected MCP clients hold ordinary
+// Supabase sessions for this user, so revoking the other sessions (scope
+// "others") disconnects them along with any other signed-in devices. Their
+// refresh tokens stop working immediately; access tokens they already hold
+// stay valid until they expire (one hour by default).
+// ---------------------------------------------------------------------------
+router.post("/sign-out-others", async (req, res: Response) => {
+  const { user, accessToken } = req as AuthenticatedRequest;
+
+  const { error } = await supabaseAdmin.auth.admin.signOut(accessToken, "others");
+
+  if (error) {
+    if (error.status === 401 || error.status === 403) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    console.error(`[profile] sign-out-others failed for ${user.id}: ${error.message}`);
+    return res.status(500).json({ error: "Could not sign out other sessions. Please try again." });
+  }
+
+  return res.status(200).json({ signed_out_others: true });
+});
+
+// ---------------------------------------------------------------------------
 // PUT /onboarding — mark onboarding complete
 // ---------------------------------------------------------------------------
 router.put("/onboarding", async (req, res: Response) => {
