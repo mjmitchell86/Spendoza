@@ -10,13 +10,17 @@ enum Launch {
     }
 
     @MainActor
-    static func stubbed(appearance: Appearance = .light, textSize: String? = nil) -> XCUIApplication {
+    static func stubbed(appearance: Appearance = .light, textSize: String? = nil,
+                        hideTabBar: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        var arguments = ["-uiTestStubAPI", "-AppleInterfaceStyle", appearance.rawValue,
-                         "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        // The launch argument `-AppleInterfaceStyle` doesn't change an iOS app's scheme; the device setting does.
+        XCUIDevice.shared.appearance = appearance == .dark ? .dark : .light
+        var arguments = ["-uiTestStubAPI", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         if let textSize { arguments += ["-UIPreferredContentSizeCategoryName", textSize] }
+        if hideTabBar { arguments.append("-uiTestHideTabBar") }
         app.launchArguments = arguments
         app.launch()
+        XCUIDevice.shared.appearance = appearance == .dark ? .dark : .light
         return app
     }
 }
@@ -45,5 +49,36 @@ extension XCUIApplication {
         XCTAssertTrue(dining.waitForExistence(timeout: timeout), "No Dining out row")
         dining.tap()
         XCTAssertTrue(staticTexts["Transactions"].waitForExistence(timeout: timeout), "Dining out didn't open")
+    }
+
+    /// Brightness (0 dark ... 1 light) of the page background, read from a screenshot pixel beside the content.
+    @MainActor
+    func backgroundBrightness() -> Double {
+        guard let cg = screenshot().image.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data)
+        else { return -1 }
+        let bytesPerPixel = cg.bitsPerPixel / 8
+        let x = 4, y = cg.height / 2
+        let offset = y * cg.bytesPerRow + x * bytesPerPixel
+        let r = Double(bytes[offset]), g = Double(bytes[offset + 1]), b = Double(bytes[offset + 2])
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    }
+
+    /// Waits until the screen stops changing (two identical screenshots in a row), so scrolling and blurs have settled.
+    @MainActor
+    func settle(timeout: TimeInterval = 10) {
+        var last = screenshot().pngRepresentation
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+            let now = screenshot().pngRepresentation
+            if now == last { return }
+            last = now
+        }
+    }
+
+    /// A slow swipe of about a page, which doesn't fling.
+    @MainActor
+    func scrollDownOnePage() {
+        windows.firstMatch.swipeUp(velocity: .slow)
     }
 }

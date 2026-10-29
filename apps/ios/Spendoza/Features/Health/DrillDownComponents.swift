@@ -59,7 +59,7 @@ struct TrendChart: View {
             }
             .padding(.horizontal, 2)
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(summary)
     }
 }
@@ -110,7 +110,7 @@ struct ScoreMeter: View {
                 .foregroundStyle(Theme.soft)
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "\(Self.format(meter.value)) against a line at \(meter.thresholdLabel.replacingOccurrences(of: " line", with: "")), "
             + (meter.meets ? "within the rule" : "outside the rule"))

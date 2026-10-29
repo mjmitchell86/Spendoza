@@ -79,7 +79,7 @@ struct PartRow: View {
             }
         }
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(Self.accessibilityText(change))
         .accessibilityHint("Shows what moved it")
     }

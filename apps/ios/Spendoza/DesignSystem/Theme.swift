@@ -55,7 +55,7 @@ enum Theme {
         static let amber = Pair(light: 0xA8701A, dark: 0xD6A04A)
         /// Small amber text.
         static let amberText = Pair(light: 0x7A5010, dark: 0xD6A04A)
-        static let oxblood = Pair(light: 0x8E2B2B, dark: 0xE07A72)
+        static let oxblood = Pair(light: 0x8E2B2B, dark: 0xEE9088)
     }
 
     static let paper = Palette.paper.color

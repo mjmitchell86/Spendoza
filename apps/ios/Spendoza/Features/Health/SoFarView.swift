@@ -32,7 +32,7 @@ struct SoFarView: View {
                 }
                 .foregroundStyle(Theme.ink)
                 .padding(.top, 8)
-                .accessibilityElement(children: .ignore)
+                .accessibilityElement(children: .combine)
                 .accessibilityLabel("Health score \(health.score) of 100 so far")
                 section("Score so far")
                 VStack(spacing: 0) {
@@ -84,7 +84,7 @@ struct SoFarView: View {
                 .foregroundStyle(Theme.ink)
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(part.title), \(score.points) of \(score.max)")
     }
 
@@ -96,7 +96,7 @@ struct SoFarView: View {
                 Text(Money.whole(value)).font(.serif(17, relativeTo: .body)).foregroundStyle(Theme.ink)
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(Money.whole(value))")
     }
 }

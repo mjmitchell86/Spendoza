@@ -1,7 +1,7 @@
 import XCTest
 
 /// Xcode's accessibility audit on Health, Wants and Dining out, at the largest accessibility text size, in light
-/// and dark. Each screen is audited at the top and, in light, scrolled to its end.
+/// and dark. Each screen is audited at the top and after every page of scrolling down to its end.
 final class AccessibilityAuditUITests: XCTestCase {
     override func setUp() { continueAfterFailure = true }
 
@@ -11,43 +11,65 @@ final class AccessibilityAuditUITests: XCTestCase {
     @MainActor func testWantsDark() throws { try audit(.wants, .dark) }
     @MainActor func testDiningOutLight() throws { try audit(.diningOut, .light) }
     @MainActor func testDiningOutDark() throws { try audit(.diningOut, .dark) }
-    @MainActor func testHealthScrolledToEnd() throws { try audit(.health, .light, scrolled: true) }
-    @MainActor func testWantsScrolledToEnd() throws { try audit(.wants, .light, scrolled: true) }
-    @MainActor func testDiningOutScrolledToEnd() throws { try audit(.diningOut, .light, scrolled: true) }
 
     @MainActor
-    private func audit(_ screen: Screen, _ appearance: Launch.Appearance, scrolled: Bool = false) throws {
-        let app = Launch.stubbed(appearance: appearance, textSize: Launch.largestText)
+    private func audit(_ screen: Screen, _ appearance: Launch.Appearance) throws {
+        let app = Launch.stubbed(appearance: appearance, textSize: Launch.largestText, hideTabBar: true)
         app.open(screen)
-        if scrolled {
-            for _ in 0..<3 { app.swipeUp(velocity: .fast) }
-            // Let the scrolling and the scroll-edge blur settle before looking.
-            _ = XCTWaiter.wait(for: [expectation(description: "settle")], timeout: 1.5)
+        app.settle()
+        // Prove the run really is in the scheme it claims: the page background is light or dark paper.
+        let brightness = app.backgroundBrightness()
+        switch appearance {
+        case .light: XCTAssertGreaterThan(brightness, 0.8, "Expected light paper")
+        case .dark: XCTAssertLessThan(brightness, 0.3, "Expected dark paper")
         }
-        saveScreenshot(of: app, named: "\(screen.rawValue)-\(appearance.rawValue)\(scrolled ? "-end" : "")")
 
-        let window = app.windows.firstMatch.frame
-        let tabBar = app.tabBars.firstMatch.frame
-        let statusBar = CGRect(x: window.minX, y: window.minY, width: window.width, height: 62)
-        var unnamed = 0
-        try app.performAccessibilityAudit { issue in
-            // The only issue skipped: a contrast failure for text that sits under the system tab bar or status bar,
-            // or past the screen edge, while the page scrolls. The audit samples the blurred glass or the clipped
-            // edge as that text's background, so the reading is meaningless; the same text passes when scrolled
-            // clear of the bars (see the scrolled-to-end tests). A contrast failure for any element in the open
-            // part of the screen still fails. The audit can't always name the element (rows are read as one), so
-            // an unnamed one is allowed too, but at most four a screen (which one varies with where the scroll settles). The colour pairs themselves are
-            // checked by ThemeContrastTests.
-            guard issue.auditType == .contrast else { return false }
-            if let frame = issue.element?.frame {
-                return frame.intersects(tabBar) || frame.intersects(statusBar) || !window.contains(frame)
-            }
-            unnamed += 1
-            return unnamed <= 4
+        var previous = app.screenshot().pngRepresentation
+        for page in 0..<10 {
+            attach(app, "\(screen.rawValue)-\(appearance.rawValue)-p\(page)")
+            try auditCurrentPage(app, "\(screen.rawValue) \(appearance.rawValue) page \(page)")
+            app.scrollDownOnePage()
+            app.settle()
+            let now = app.screenshot().pngRepresentation
+            if now == previous { break }  // the end of the page
+            previous = now
         }
     }
 
-    private func saveScreenshot(of app: XCUIApplication, named name: String) {
+    /// Audits what is on screen. The audit's contrast sampling is occasionally wrong for a single run (it has flagged
+    /// plain soft-grey text mid-screen that passes the next time), so a finding must repeat in all three runs to fail.
+    @MainActor
+    private func auditCurrentPage(_ app: XCUIApplication, _ label: String) throws {
+        var findings: [String] = []
+        for _ in 0..<3 {
+            findings = try runAudit(app)
+            if findings.isEmpty { return }
+        }
+        XCTFail("\(label): \(findings.joined(separator: "; "))")
+    }
+
+    @MainActor
+    private func runAudit(_ app: XCUIApplication) throws -> [String] {
+        let window = app.windows.firstMatch.frame
+        let statusBar = CGRect(x: window.minX, y: window.minY, width: window.width, height: 62)
+        var findings: [String] = []
+        try app.performAccessibilityAudit { issue in
+            // The tab bar is hidden for these runs (its glass made the audit report contrast for text beneath it,
+            // sometimes without naming the element), so the page is read unobstructed. The only issue still
+            // skipped: a contrast failure for a NAMED element whose frame meets the status bar or the screen edge,
+            // where the scrolling page is blurred or clipped; the same text is audited clear of the edge on
+            // another page. Anything else, including a contrast failure with no element, is a finding.
+            if issue.auditType == .contrast, let frame = issue.element?.frame,
+               frame.intersects(statusBar) || !window.contains(frame) {
+                return true
+            }
+            findings.append("\(issue.compactDescription): \(issue.element?.label ?? "no element")")
+            return true  // collected here, reported by the caller
+        }
+        return findings
+    }
+
+    private func attach(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways

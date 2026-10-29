@@ -117,7 +117,7 @@ struct PartDetailView: View {
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(Self.figureAccessibility(model))
     }
 
@@ -149,7 +149,7 @@ struct PartDetailView: View {
                     .font(.serif(17, relativeTo: .body)).foregroundStyle(Theme.ink)
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title) \(Money.whole(value))")
     }
 
@@ -231,30 +231,51 @@ struct PartDetailView: View {
 struct MoverRow: View {
     let mover: CategoryChange
     var highlighted = false
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(mover.category).font(.sans(15, relativeTo: .body)).foregroundStyle(Theme.ink)
+            Text("\(Money.whole(mover.amount)) this month")
+                .font(.sans(12, relativeTo: .caption)).foregroundStyle(Theme.soft)
+        }
+    }
+
+    @ViewBuilder private var change: some View {
+        if let delta = mover.delta {
+            Text(Money.signed(delta))
+                .font(.sans(13, relativeTo: .footnote))
+                .foregroundStyle(delta > 0 ? Theme.oxblood : delta < 0 ? Theme.note : Theme.soft)
+                .fixedSize()
+        }
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Theme.soft)
+            .accessibilityHidden(true)
+    }
 
     var body: some View {
         RuledRow(highlighted: highlighted) {
-            HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mover.category).font(.sans(15, relativeTo: .body)).foregroundStyle(Theme.ink)
-                    Text("\(Money.whole(mover.amount)) this month")
-                        .font(.sans(12, relativeTo: .caption)).foregroundStyle(Theme.soft)
+            // At accessibility sizes the change goes under the name, so the name keeps the full width.
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    details
+                    HStack { change; Spacer(minLength: 8); chevron }
                 }
-                Spacer(minLength: 12)
-                if let delta = mover.delta {
-                    Text(Money.signed(delta))
-                        .font(.sans(13, relativeTo: .footnote))
-                        .foregroundStyle(delta > 0 ? Theme.oxblood : delta < 0 ? Theme.note : Theme.soft)
-                        .fixedSize()
+            } else {
+                HStack(alignment: .center, spacing: 8) {
+                    details
+                    Spacer(minLength: 12)
+                    change
+                    chevron
                 }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.soft)
-                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(Self.accessibilityText(mover))
     }
 

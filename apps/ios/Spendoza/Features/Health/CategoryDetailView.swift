@@ -104,7 +104,7 @@ struct CategoryDetailView: View {
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(Self.amountAccessibility(model))
     }
 
@@ -187,25 +187,46 @@ struct CategoryDetailView: View {
 /// A transaction: description and date on the left, the amount and a chevron on the right.
 struct TransactionRow: View {
     let transaction: Transaction
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(transaction.description).font(.sans(15, relativeTo: .body)).foregroundStyle(Theme.ink)
+            Text(shortDate(transaction.date)).font(.sans(12, relativeTo: .caption)).foregroundStyle(Theme.soft)
+        }
+    }
+
+    private var amount: some View {
+        Text(Money.cents(transaction.amount)).font(.serif(17, relativeTo: .body)).foregroundStyle(Theme.ink)
+            .fixedSize()
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Theme.soft)
+            .accessibilityHidden(true)
+    }
 
     var body: some View {
         RuledRow {
-            HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(transaction.description).font(.sans(15, relativeTo: .body)).foregroundStyle(Theme.ink)
-                    Text(shortDate(transaction.date)).font(.sans(12, relativeTo: .caption)).foregroundStyle(Theme.soft)
+            // At accessibility sizes the amount goes under the description, so the description keeps the full width.
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    details
+                    HStack { amount; Spacer(minLength: 8); chevron }
                 }
-                Spacer(minLength: 12)
-                Text(Money.cents(transaction.amount)).font(.serif(17, relativeTo: .body)).foregroundStyle(Theme.ink)
-                    .fixedSize()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.soft)
-                    .accessibilityHidden(true)
+            } else {
+                HStack(alignment: .center, spacing: 8) {
+                    details
+                    Spacer(minLength: 12)
+                    amount
+                    chevron
+                }
             }
         }
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(transaction.description), \(Money.cents(transaction.amount)), \(shortDate(transaction.date))")
         .accessibilityHint("Choose another category")
     }

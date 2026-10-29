@@ -203,7 +203,7 @@ struct HealthView: View {
             }
         }
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(soFarAccessibility(report))
     }
 

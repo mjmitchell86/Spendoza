@@ -64,7 +64,7 @@ struct EngravedDial: View {
             Self.draw(&ctx, metrics: m, score: shownScore, previous: previousScore.map { min(max($0, 0), 100) })
         }
         .aspectRatio(m.canvas.width / m.canvas.height, contentMode: .fit)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(dialAccessibilityLabel(score: score, previous: previousScore, month: month))
     }
 
