@@ -26,73 +26,77 @@ beforeEach(() => {
 });
 
 describe("sendHouseholdInvitationEmail", () => {
-  it("sends from the Spendoza address with the invite subject", async () => {
-    await sendHouseholdInvitationEmail(
+  const send = (
+    inviter = "Matt",
+    household = "The Smiths",
+    code = "abcdefghjk"
+  ) =>
+    sendHouseholdInvitationEmail(
       "invitee@example.com",
-      "Matt",
-      "The Smiths",
-      ""
+      inviter,
+      household,
+      code
     );
+
+  it("sends from the Spendoza address with a fixed subject", async () => {
+    await send();
     expect(sent).toHaveLength(1);
     expect(sent[0].from).toBe("Spendoza <reports@spendoza.io>");
     expect(sent[0].to).toBe("invitee@example.com");
-    expect(sent[0].subject).toBe("Matt invited you to The Smiths on Spendoza");
+    expect(sent[0].subject).toBe(
+      "You've been invited to a household on Spendoza"
+    );
   });
 
-  it("links to the household page and never contains a household code", async () => {
-    await sendHouseholdInvitationEmail(
-      "invitee@example.com",
-      "Matt",
-      "The Smiths",
-      ""
-    );
+  it("keeps names out of the subject and quotes them in the body", async () => {
+    await send("Matt", "The Smiths");
+    expect(sent[0].subject).not.toContain("Matt");
+    expect(sent[0].subject).not.toContain("Smiths");
+    expect(sent[0].text).toContain('"Matt"');
+    expect(sent[0].text).toContain('"The Smiths"');
+    expect(sent[0].html).toContain("&quot;Matt&quot;");
+  });
+
+  it("shows the invitation code and links to the household page with it", async () => {
+    await send();
     for (const body of [sent[0].html, sent[0].text]) {
-      expect(body).toContain("https://www.spendoza.io/household");
+      expect(body).toContain("Your invitation code: ");
+      expect(body).toContain("ABCDE-FGHJK");
+      expect(body).toContain(
+        "https://www.spendoza.io/household?invitation=ABCDE-FGHJK"
+      );
       expect(body).not.toContain(INVITE_CODE);
-      expect(body).not.toContain("New to Spendoza?");
     }
   });
 
-  it("adds the new-account paragraph when an invitation code is given", async () => {
-    await sendHouseholdInvitationEmail(
-      "a+b@example.com",
-      "Matt",
-      "The Smiths",
-      "ABCDE-FGHJK"
-    );
-    const link =
-      "https://www.spendoza.io/signup?invitation=ABCDE-FGHJK&email=a%2Bb%40example.com";
-    expect(sent[0].text).toContain("New to Spendoza?");
-    expect(sent[0].text).toContain("ABCDE-FGHJK");
-    expect(sent[0].text).toContain(link);
-    expect(sent[0].html).toContain("New to Spendoza?");
-    expect(sent[0].html).toContain(link.replace("&", "&amp;"));
-  });
-
-  it("escapes inviter and household names in the HTML", async () => {
-    await sendHouseholdInvitationEmail(
-      "invitee@example.com",
-      '<script>alert("x")</script>',
-      "Tom & <b>Jerry</b>",
-      ""
-    );
+  it("escapes names in the HTML", async () => {
+    await send('<script>alert("x")</script>', "Tom & <b>Jerry</b>");
     expect(sent[0].html).not.toContain("<script>");
     expect(sent[0].html).not.toContain("<b>Jerry</b>");
     expect(sent[0].html).toContain("&lt;script&gt;");
     expect(sent[0].html).toContain("Tom &amp; &lt;b&gt;Jerry&lt;/b&gt;");
   });
 
+  it("strips newlines and truncates names to 60 characters", async () => {
+    await send("Matt\r\nBcc: evil@example.com", "x".repeat(100));
+    expect(sent[0].text).not.toContain("\nBcc");
+    expect(sent[0].text).toContain("Matt Bcc: evil@example.com");
+    expect(sent[0].text).toContain('"' + "x".repeat(60) + '"');
+    expect(sent[0].text).not.toContain("x".repeat(61));
+    expect(sent[0].html).not.toContain("x".repeat(61));
+  });
+
   it("throws when Resend returns an error", async () => {
     sendResult = { data: null, error: { message: "domain not verified" } };
     await expect(
-      sendHouseholdInvitationEmail("a@example.com", "Matt", "HH", "")
+      sendHouseholdInvitationEmail("a@example.com", "Matt", "HH", "abcdefghjk")
     ).rejects.toThrow("domain not verified");
   });
 
   it("throws when the request itself fails", async () => {
     sendThrows = true;
     await expect(
-      sendHouseholdInvitationEmail("a@example.com", "Matt", "HH", "")
+      sendHouseholdInvitationEmail("a@example.com", "Matt", "HH", "abcdefghjk")
     ).rejects.toThrow("network down");
   });
 });

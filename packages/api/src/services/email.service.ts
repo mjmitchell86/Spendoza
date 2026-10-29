@@ -49,7 +49,6 @@ export async function sendHouseholdInvitationEmail(
   invitationCode: string
 ): Promise<void> {
   const { subject, html, text } = buildHouseholdInvitationEmail({
-    to,
     inviterName,
     householdName,
     invitationCode,

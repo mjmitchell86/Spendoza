@@ -101,6 +101,9 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
                     ),
                   gt: () => leaf,
                   ilike: () => leaf,
+                  eq: () => leaf,
+                  order: () => leaf,
+                  limit: () => leaf,
                 };
                 return leaf;
               },

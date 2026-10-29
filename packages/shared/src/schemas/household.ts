@@ -52,6 +52,15 @@ export const joinHouseholdSchema = z.object({
 export type JoinHouseholdInput = z.infer<typeof joinHouseholdSchema>;
 
 // ---------------------------------------------------------------------------
+// Accept or decline an invitation (the code from the invitation email)
+// ---------------------------------------------------------------------------
+export const invitationCodeSchema = z.object({
+  code: z.string().min(1).max(64),
+});
+
+export type InvitationCodeInput = z.infer<typeof invitationCodeSchema>;
+
+// ---------------------------------------------------------------------------
 // Update sharing preferences
 // ---------------------------------------------------------------------------
 export const updateSharingSchema = z.object({

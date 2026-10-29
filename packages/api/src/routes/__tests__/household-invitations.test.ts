@@ -62,6 +62,7 @@ function makeFrom(results: () => Record<string, Result>, calls: () => Call[]) {
       "upsert",
       "eq",
       "ilike",
+      "limit",
       "gt",
       "order",
       "in",
@@ -196,56 +197,189 @@ beforeEach(() => {
     },
     "profiles.select": {
       single: { data: { household_id: null }, error: null },
+      list: { data: [], error: null },
     },
   };
 });
+
+function asUser(id: string, email: string = TEST_USER_EMAIL) {
+  mockGetUser.mockImplementation(() =>
+    Promise.resolve({ data: { user: { id, email } }, error: null })
+  );
+}
+
+const noHeadHousehold = () => {
+  rlsResults["households.select"] = {
+    single: {
+      data: { ...householdData, head_of_household_id: "someone-else" },
+      error: null,
+    },
+  };
+};
 
 // ===========================================================================
 // POST /invite
 // ===========================================================================
 describe("POST /api/household/invite", () => {
-  it("inserts a new invitation, emails it and returns 201", async () => {
-    const res = await call("POST", "/invite", { email: "new@example.com" });
+  const existingRow = (over: Record<string, unknown> = {}) => ({
+    id: INVITATION_ID,
+    code: "abcdefghjk",
+    expires_at: future(),
+    last_sent_at: past(),
+    ...over,
+  });
+  const setExisting = (row: unknown) => {
+    adminResults["household_invitations.select"] = {
+      ...adminResults["household_invitations.select"],
+      single: { data: row, error: null },
+    };
+  };
+  const invite = (email = "new@example.com") =>
+    call("POST", "/invite", { email });
+
+  it("inserts a lowercased invitation with its own code, emails it, 201", async () => {
+    const res = await invite("New@Example.com");
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ message: "Invitation sent" });
-    expect(
-      adminOps("household_invitations", "insert")[0].args[0]
-    ).toMatchObject({
+    const row = adminOps("household_invitations", "insert")[0].args[0];
+    expect(row).toMatchObject({
       household_id: HOUSEHOLD_ID,
       email: "new@example.com",
       invited_by: TEST_USER_ID,
       status: "pending",
     });
-    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    expect(row.code).toBe("k3m9p2x7qz");
     expect(mockSendEmail).toHaveBeenCalledWith(
       "new@example.com",
       "Test User",
       "Test Household",
-      ""
+      "k3m9p2x7qz"
     );
     expect(mockSendEmail.mock.calls[0]).not.toContain(INVITE_CODE);
   });
 
-  it("extends an existing pending invitation and resends (200, no insert)", async () => {
-    adminResults["household_invitations.select"] = {
-      list: { data: [{ id: INVITATION_ID }], error: null },
-      single: { data: { id: INVITATION_ID }, error: null },
+  it("falls back to 'A Spendoza member' when the inviter has no name", async () => {
+    rlsResults["profiles.select"] = {
+      single: { data: { ...memberProfile, display_name: "" }, error: null },
     };
+    await invite();
+    expect(mockSendEmail.mock.calls[0][1]).toBe("A Spendoza member");
+  });
+
+  it("matches the existing invitation by lowercased email with eq", async () => {
+    await invite("New@Example.com");
+    const eqs = adminOps("household_invitations", "eq").map((c) => c.args);
+    expect(eqs).toContainEqual(["email", "new@example.com"]);
+    expect(adminOps("household_invitations", "ilike")).toHaveLength(0);
+  });
+
+  it("extends a pending invitation and resends it with the same code (200)", async () => {
+    setExisting(existingRow());
     const before = Date.now();
-    const res = await call("POST", "/invite", { email: "again@example.com" });
+    const res = await invite("again@example.com");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ message: "Invitation sent" });
     expect(adminOps("household_invitations", "insert")).toHaveLength(0);
-    const update = adminOps("household_invitations", "update")[0];
-    const expires = new Date(update.args[0].expires_at).getTime();
+    const update = adminOps("household_invitations", "update")[0].args[0];
+    const expires = new Date(update.expires_at).getTime();
     expect(expires).toBeGreaterThanOrEqual(before + 7 * 86400_000 - 5000);
     expect(expires).toBeLessThanOrEqual(Date.now() + 7 * 86400_000 + 5000);
-    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    expect(update.last_sent_at).toBeDefined();
+    expect("code" in update).toBe(false);
+    expect(mockSendEmail.mock.calls[0][3]).toBe("abcdefghjk");
+  });
+
+  it("refreshes an expired pending invitation instead of inserting another", async () => {
+    setExisting(existingRow({ expires_at: past(), last_sent_at: new Date() }));
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(200);
+    expect(adminOps("household_invitations", "insert")).toHaveLength(0);
+    const update = adminOps("household_invitations", "update")[0].args[0];
+    expect(new Date(update.expires_at).getTime()).toBeGreaterThan(Date.now());
+    expect(mockSendEmail.mock.calls[0][3]).toBe("abcdefghjk");
+  });
+
+  it("gives a legacy pending invitation without a code one on resend", async () => {
+    setExisting(existingRow({ code: null }));
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(200);
+    const update = adminOps("household_invitations", "update")[0].args[0];
+    expect(update.code).toBe("k3m9p2x7qz");
+    expect(mockSendEmail.mock.calls[0][3]).toBe("k3m9p2x7qz");
+  });
+
+  it("refuses to resend within 10 minutes (429)", async () => {
+    setExisting(
+      existingRow({ last_sent_at: new Date(Date.now() - 60_000).toISOString() })
+    );
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "You just sent this invitation. Try again in a few minutes.",
+    });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(adminOps("household_invitations", "update")).toHaveLength(0);
+  });
+
+  it("counts members and live pending invitations with the admin client", async () => {
+    adminResults["profiles.select"] = {
+      ...adminResults["profiles.select"],
+      list: {
+        data: Array.from({ length: 8 }, (_, i) => ({ id: `u${i}` })),
+        error: null,
+      },
+    };
+    adminResults["household_invitations.select"] = {
+      ...adminResults["household_invitations.select"],
+      list: { data: [{ id: "a" }, { id: "b" }], error: null },
+    };
+    const res = await invite();
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "Household has reached the 10-member limit",
+    });
+    expect(rlsCalls.some((c) => c.table === "household_invitations")).toBe(
+      false
+    );
+    const gts = adminOps("household_invitations", "gt");
+    expect(gts.length).toBeGreaterThan(0);
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("still applies the member limit to a resend", async () => {
+    setExisting(existingRow());
+    adminResults["profiles.select"] = {
+      ...adminResults["profiles.select"],
+      list: {
+        data: Array.from({ length: 10 }, (_, i) => ({ id: `u${i}` })),
+        error: null,
+      },
+    };
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(400);
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("does not count the invitation being resent against the limit", async () => {
+    setExisting(existingRow());
+    adminResults["profiles.select"] = {
+      ...adminResults["profiles.select"],
+      list: {
+        data: Array.from({ length: 9 }, (_, i) => ({ id: `u${i}` })),
+        error: null,
+      },
+    };
+    adminResults["household_invitations.select"] = {
+      ...adminResults["household_invitations.select"],
+      list: { data: [{ id: INVITATION_ID }], error: null },
+    };
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(200);
   });
 
   it("answers 502 and keeps the invitation when the email fails", async () => {
     mockSendEmail.mockImplementation(() => Promise.reject(new Error("boom")));
-    const res = await call("POST", "/invite", { email: "new@example.com" });
+    const res = await invite();
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({
       error: "Couldn't send the invitation email. Try again.",
@@ -255,26 +389,42 @@ describe("POST /api/household/invite", () => {
   });
 
   it("answers 502 when a resend fails, keeping the row", async () => {
-    adminResults["household_invitations.select"] = {
-      single: { data: { id: INVITATION_ID }, error: null },
-      list: { data: [{ id: INVITATION_ID }], error: null },
-    };
+    setExisting(existingRow());
     mockSendEmail.mockImplementation(() => Promise.reject(new Error("boom")));
-    const res = await call("POST", "/invite", { email: "again@example.com" });
+    const res = await invite("again@example.com");
     expect(res.status).toBe(502);
     expect(adminOps("household_invitations", "delete")).toHaveLength(0);
   });
 
   it("rejects non-heads without sending", async () => {
+    noHeadHousehold();
+    const res = await invite();
+    expect(res.status).toBe(403);
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("limits each head to 20 invitations per hour (429)", async () => {
+    asUser("busy-head");
     rlsResults["households.select"] = {
       single: {
-        data: { ...householdData, head_of_household_id: "someone-else" },
+        data: { ...householdData, head_of_household_id: "busy-head" },
         error: null,
       },
     };
-    const res = await call("POST", "/invite", { email: "new@example.com" });
-    expect(res.status).toBe(403);
-    expect(mockSendEmail).not.toHaveBeenCalled();
+    for (let i = 0; i < 20; i++) {
+      expect((await invite(`p${i}@example.com`)).status).toBe(201);
+    }
+    const res = await invite("one-too-many@example.com");
+    expect(res.status).toBe(429);
+    // another head is unaffected
+    asUser("calm-head");
+    rlsResults["households.select"] = {
+      single: {
+        data: { ...householdData, head_of_household_id: "calm-head" },
+        error: null,
+      },
+    };
+    expect((await invite("fine@example.com")).status).toBe(201);
   });
 });
 
@@ -304,15 +454,14 @@ describe("GET /api/household/invitations", () => {
     expect(adminOps("household_invitations", "gt")[0].args[0]).toBe(
       "expires_at"
     );
+    // the code is never sent to the head's client
+    expect(adminOps("household_invitations", "select")[0].args[0]).not.toMatch(
+      /code/
+    );
   });
 
   it("is head-only", async () => {
-    rlsResults["households.select"] = {
-      single: {
-        data: { ...householdData, head_of_household_id: "someone-else" },
-        error: null,
-      },
-    };
+    noHeadHousehold();
     const res = await call("GET", "/invitations");
     expect(res.status).toBe(403);
   });
@@ -340,12 +489,7 @@ describe("DELETE /api/household/invitations/:id", () => {
   });
 
   it("is head-only", async () => {
-    rlsResults["households.select"] = {
-      single: {
-        data: { ...householdData, head_of_household_id: "someone-else" },
-        error: null,
-      },
-    };
+    noHeadHousehold();
     const res = await call("DELETE", `/invitations/${INVITATION_ID}`);
     expect(res.status).toBe(403);
     expect(adminOps("household_invitations", "delete")).toHaveLength(0);
@@ -356,7 +500,7 @@ describe("DELETE /api/household/invitations/:id", () => {
 // GET /invitations/mine
 // ===========================================================================
 describe("GET /api/household/invitations/mine", () => {
-  it("lists the caller's pending, unexpired invitations by email", async () => {
+  it("lists the caller's pending invitations by lowercased email, without the code", async () => {
     const exp = future();
     adminResults["household_invitations.select"] = {
       list: {
@@ -364,6 +508,7 @@ describe("GET /api/household/invitations/mine", () => {
           {
             id: INVITATION_ID,
             expires_at: exp,
+            code: "abcdefghjk",
             households: { name: "The Smiths" },
             inviter: { display_name: "Matt" },
           },
@@ -373,7 +518,8 @@ describe("GET /api/household/invitations/mine", () => {
     };
     const res = await call("GET", "/invitations/mine");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([
+    const body = await res.json();
+    expect(body).toEqual([
       {
         id: INVITATION_ID,
         household_name: "The Smiths",
@@ -381,28 +527,15 @@ describe("GET /api/household/invitations/mine", () => {
         expires_at: exp,
       },
     ]);
-    // case-insensitive match against the auth email, no user-id scoping needed
-    expect(adminOps("household_invitations", "ilike")[0].args).toEqual([
-      "email",
-      "Test@Example.com",
-    ]);
+    expect(JSON.stringify(body)).not.toContain("abcdefghjk");
+    const select = adminOps("household_invitations", "select")[0].args[0];
+    expect(select).not.toMatch(/\bcode\b/);
     const eqs = adminOps("household_invitations", "eq").map((c) => c.args);
+    expect(eqs).toContainEqual(["email", "test@example.com"]);
     expect(eqs).toContainEqual(["status", "pending"]);
+    expect(adminOps("household_invitations", "ilike")).toHaveLength(0);
     expect(adminOps("household_invitations", "gt")[0].args[0]).toBe(
       "expires_at"
-    );
-  });
-
-  it("escapes LIKE wildcards in the caller's email", async () => {
-    mockGetUser.mockImplementation(() =>
-      Promise.resolve({
-        data: { user: { id: TEST_USER_ID, email: "a_b%c@example.com" } },
-        error: null,
-      })
-    );
-    await call("GET", "/invitations/mine");
-    expect(adminOps("household_invitations", "ilike")[0].args[1]).toBe(
-      "a\\_b\\%c@example.com"
     );
   });
 
@@ -420,11 +553,17 @@ describe("GET /api/household/invitations/mine", () => {
 // POST /invitations/:id/accept
 // ===========================================================================
 describe("POST /api/household/invitations/:id/accept", () => {
+  let n = 0;
+  beforeEach(() => {
+    // each test gets its own user so the failed-attempt limiter doesn't bleed
+    asUser(`invitee-${++n}`);
+  });
   const pending = (over: Record<string, unknown> = {}) => ({
     id: INVITATION_ID,
     household_id: HOUSEHOLD_ID,
     email: "test@example.com",
     status: "pending",
+    code: "abcdefghjk",
     expires_at: future(),
     ...over,
   });
@@ -433,15 +572,16 @@ describe("POST /api/household/invitations/:id/accept", () => {
       single: { data: row, error: null },
     };
   };
-  const accept = () => call("POST", `/invitations/${INVITATION_ID}/accept`);
+  const accept = (body: unknown = { code: "ABCDE-FGHJK" }) =>
+    call("POST", `/invitations/${INVITATION_ID}/accept`, body);
 
-  it("joins the household and marks the invitation accepted (case-insensitive email)", async () => {
+  it("joins the household with the right code (normalized) and marks it accepted", async () => {
     setInvitation(pending());
     adminResults["profiles.select"] = {
       single: { data: { household_id: null }, error: null },
       list: { data: [{ id: "u1" }], error: null },
     };
-    const res = await accept();
+    const res = await accept({ code: " abcde fghjk " });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       message: "Joined household successfully",
@@ -453,6 +593,26 @@ describe("POST /api/household/invitations/:id/accept", () => {
     expect(updates.some((u) => u.args[0].status === "accepted")).toBe(true);
   });
 
+  for (const [name, body] of [
+    ["a wrong code", { code: "ZZZZZ-ZZZZZ" }],
+    ["no code", {}],
+    ["a non-string code", { code: 12345 }],
+    ["an empty code", { code: "" }],
+  ] as const) {
+    it(`answers 404 for ${name}`, async () => {
+      setInvitation(pending());
+      const res = await accept(body);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Invitation not found" });
+      expect(adminOps("profiles", "update")).toHaveLength(0);
+    });
+  }
+
+  it("answers 404 for an invitation without a code (legacy row)", async () => {
+    setInvitation(pending({ code: null }));
+    expect((await accept()).status).toBe(404);
+  });
+
   it("answers 404 for a missing invitation", async () => {
     setInvitation(null);
     const res = await accept();
@@ -460,7 +620,7 @@ describe("POST /api/household/invitations/:id/accept", () => {
     expect(await res.json()).toEqual({ error: "Invitation not found" });
   });
 
-  it("answers 404 for another email", async () => {
+  it("answers 404 for another email even with the right code", async () => {
     setInvitation(pending({ email: "someone-else@example.com" }));
     const res = await accept();
     expect(res.status).toBe(404);
@@ -468,12 +628,9 @@ describe("POST /api/household/invitations/:id/accept", () => {
     expect(adminOps("profiles", "update")).toHaveLength(0);
   });
 
-  it("answers 404 for a declined invitation", async () => {
+  it("answers 404 for declined and revoked invitations", async () => {
     setInvitation(pending({ status: "declined" }));
     expect((await accept()).status).toBe(404);
-  });
-
-  it("answers 404 for a revoked invitation (row gone or status revoked)", async () => {
     setInvitation(pending({ status: "revoked" }));
     expect((await accept()).status).toBe(404);
   });
@@ -482,16 +639,20 @@ describe("POST /api/household/invitations/:id/accept", () => {
     setInvitation(
       pending({ email: "someone-else@example.com", expires_at: past() })
     );
-    const res = await accept();
-    expect(res.status).toBe(404);
+    expect((await accept()).status).toBe(404);
   });
 
-  it("answers 400 for the caller's own expired invitation", async () => {
+  it("answers 400 for the caller's own expired invitation with the right code", async () => {
     setInvitation(pending({ expires_at: past() }));
     const res = await accept();
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "This invitation has expired" });
     expect(adminOps("profiles", "update")).toHaveLength(0);
+  });
+
+  it("answers 404, not 400, for an expired invitation with a wrong code", async () => {
+    setInvitation(pending({ expires_at: past() }));
+    expect((await accept({ code: "ZZZZZ-ZZZZZ" })).status).toBe(404);
   });
 
   it("refuses when already in a household", async () => {
@@ -521,27 +682,59 @@ describe("POST /api/household/invitations/:id/accept", () => {
       error: "Household has reached the 10-member limit",
     });
   });
+
+  it("blocks a user after 5 failed attempts in 15 minutes (429)", async () => {
+    setInvitation(pending());
+    for (let i = 0; i < 5; i++) {
+      expect((await accept({ code: `guess${i}` })).status).toBe(404);
+    }
+    const res = await accept({ code: "ABCDE-FGHJK" });
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Too many attempts. Try again in 15 minutes.",
+    });
+    expect(adminOps("profiles", "update")).toHaveLength(0);
+  });
+
+  it("does not count successful accepts against the limit", async () => {
+    setInvitation(pending());
+    adminResults["profiles.select"] = {
+      single: { data: { household_id: null }, error: null },
+      list: { data: [{ id: "u1" }], error: null },
+    };
+    for (let i = 0; i < 7; i++) {
+      expect((await accept()).status).toBe(200);
+    }
+  });
 });
 
 // ===========================================================================
 // POST /invitations/:id/decline
 // ===========================================================================
 describe("POST /api/household/invitations/:id/decline", () => {
-  const decline = () => call("POST", `/invitations/${INVITATION_ID}/decline`);
-  const setInvitation = (row: unknown) => {
+  let n = 0;
+  beforeEach(() => {
+    asUser(`decliner-${++n}`);
+  });
+  const decline = (body: unknown = { code: "abcdefghjk" }) =>
+    call("POST", `/invitations/${INVITATION_ID}/decline`, body);
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: INVITATION_ID,
+    household_id: HOUSEHOLD_ID,
+    email: "test@example.com",
+    status: "pending",
+    code: "abcdefghjk",
+    expires_at: future(),
+    ...over,
+  });
+  const setInvitation = (r: unknown) => {
     adminResults["household_invitations.select"] = {
-      single: { data: row, error: null },
+      single: { data: r, error: null },
     };
   };
 
-  it("marks the invitation declined and returns 204", async () => {
-    setInvitation({
-      id: INVITATION_ID,
-      household_id: HOUSEHOLD_ID,
-      email: "TEST@example.com",
-      status: "pending",
-      expires_at: future(),
-    });
+  it("marks the invitation declined with the right code and returns 204", async () => {
+    setInvitation(row());
     const res = await decline();
     expect(res.status).toBe(204);
     expect(adminOps("household_invitations", "update")[0].args[0]).toEqual({
@@ -549,14 +742,15 @@ describe("POST /api/household/invitations/:id/decline", () => {
     });
   });
 
+  it("answers 404 for a wrong or missing code", async () => {
+    setInvitation(row());
+    expect((await decline({ code: "nope" })).status).toBe(404);
+    expect((await decline({})).status).toBe(404);
+    expect(adminOps("household_invitations", "update")).toHaveLength(0);
+  });
+
   it("answers 404 for another email", async () => {
-    setInvitation({
-      id: INVITATION_ID,
-      household_id: HOUSEHOLD_ID,
-      email: "other@example.com",
-      status: "pending",
-      expires_at: future(),
-    });
+    setInvitation(row({ email: "other@example.com" }));
     const res = await decline();
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Invitation not found" });
@@ -566,5 +760,13 @@ describe("POST /api/household/invitations/:id/decline", () => {
   it("answers 404 for a missing invitation", async () => {
     setInvitation(null);
     expect((await decline()).status).toBe(404);
+  });
+
+  it("shares the failed-attempt limit with accept (429)", async () => {
+    setInvitation(row());
+    for (let i = 0; i < 5; i++) {
+      expect((await decline({ code: `guess${i}` })).status).toBe(404);
+    }
+    expect((await decline()).status).toBe(429);
   });
 });

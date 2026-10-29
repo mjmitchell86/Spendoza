@@ -14,6 +14,7 @@ import {
   updateSharingSchema,
   transferOwnershipSchema,
   normalizeInviteCode,
+  invitationCodeSchema,
 } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
@@ -161,11 +162,8 @@ async function rotateInviteCodeHandler(req: Request, res: Response) {
 }
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-// Emails are matched case-insensitively with ilike, so escape its wildcards.
-function escapeLike(value: string) {
-  return value.replace(/[\\%_]/g, "\\$&");
-}
+const RESEND_COOLDOWN_MS = 10 * 60 * 1000;
+const MEMBER_LIMIT = 10;
 
 async function inviteHandler(req: Request, res: Response) {
   const { user, supabase: db } = req as AuthenticatedRequest;
@@ -184,61 +182,96 @@ async function inviteHandler(req: Request, res: Response) {
       .json({ error: "Only the head of household can invite members" });
   }
 
-  const email: string = req.body.email;
+  // Emails are stored and matched lowercased
+  const email = String(req.body.email).toLowerCase();
+  const now = Date.now();
 
-  // Inviting someone who already has a live invitation resends it with a
-  // fresh 7 days instead of stacking a second row.
+  // An invitation already pending for this email is refreshed and resent
+  // (keeping its code), live or expired, instead of stacking a second row.
   const { data: existing } = await supabaseAdmin
+    .from("household_invitations")
+    .select("id, code, expires_at, last_sent_at")
+    .eq("household_id", householdId)
+    .eq("email", email)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const existingIsLive =
+    !!existing && new Date(existing.expires_at).getTime() > now;
+
+  if (
+    existingIsLive &&
+    now - new Date(existing.last_sent_at).getTime() < RESEND_COOLDOWN_MS
+  ) {
+    return res.status(429).json({
+      error: "You just sent this invitation. Try again in a few minutes.",
+    });
+  }
+
+  // Check 10-member limit (members + live pending invitations). Admin client:
+  // the RLS client under-counts after a head transfer. An invitation being
+  // resent is not counted against itself.
+  const { data: members } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("household_id", householdId);
+
+  const { data: pendingInvites } = await supabaseAdmin
     .from("household_invitations")
     .select("id")
     .eq("household_id", householdId)
     .eq("status", "pending")
-    .gt("expires_at", new Date().toISOString())
-    .ilike("email", escapeLike(email))
-    .maybeSingle();
+    .gt("expires_at", new Date(now).toISOString());
 
+  const memberCount =
+    (members?.length ?? 0) +
+    (pendingInvites?.filter((i) => i.id !== existing?.id).length ?? 0);
+  if (memberCount >= MEMBER_LIMIT) {
+    return res
+      .status(400)
+      .json({ error: "Household has reached the 10-member limit" });
+  }
+
+  const timing = {
+    expires_at: new Date(now + INVITATION_TTL_MS).toISOString(),
+    last_sent_at: new Date(now).toISOString(),
+  };
+
+  let code: string;
   let created = false;
   if (existing) {
+    code = existing.code ?? generateHouseholdCode();
     const { error } = await supabaseAdmin
       .from("household_invitations")
-      .update({
-        expires_at: new Date(Date.now() + INVITATION_TTL_MS).toISOString(),
-      })
+      .update(existing.code ? timing : { ...timing, code })
       .eq("id", existing.id);
 
     if (error) {
       return res.status(400).json({ error: error.message });
     }
   } else {
-    // Check 10-member limit (current members + pending invitations)
-    const { data: members } = await db
-      .from("profiles")
-      .select("id")
-      .eq("household_id", householdId);
-
-    const { data: pendingInvites } = await db
-      .from("household_invitations")
-      .select("id")
-      .eq("household_id", householdId)
-      .eq("status", "pending");
-
-    const memberCount = (members?.length ?? 0) + (pendingInvites?.length ?? 0);
-    if (memberCount >= 10) {
-      return res
-        .status(400)
-        .json({ error: "Household has reached the 10-member limit" });
+    // Insert invitation (admin client: the head was verified above)
+    code = "";
+    let insertError: { code?: string; message: string } | null = null;
+    for (let attempt = 0; attempt < ROTATE_ATTEMPTS; attempt++) {
+      code = generateHouseholdCode();
+      const { error } = await supabaseAdmin
+        .from("household_invitations")
+        .insert({
+          household_id: householdId,
+          email,
+          invited_by: user.id,
+          status: "pending",
+          code,
+          ...timing,
+        });
+      insertError = error;
+      if (!error || error.code !== UNIQUE_VIOLATION) break;
     }
 
-    // Insert invitation (admin client: the head was verified above)
-    const { error } = await supabaseAdmin.from("household_invitations").insert({
-      household_id: householdId,
-      email,
-      invited_by: user.id,
-      status: "pending",
-    });
-
-    if (error) {
-      return res.status(400).json({ error: error.message });
+    if (insertError) {
+      return res.status(400).json({ error: insertError.message });
     }
     created = true;
   }
@@ -253,9 +286,9 @@ async function inviteHandler(req: Request, res: Response) {
   try {
     await sendHouseholdInvitationEmail(
       email,
-      inviter?.display_name || user.email || "A Spendoza member",
+      inviter?.display_name || "A Spendoza member",
       household.name,
-      ""
+      code
     );
   } catch (err) {
     console.error("[households] invitation email failed:", err);
@@ -435,7 +468,7 @@ async function myInvitationsHandler(req: Request, res: Response) {
     )
     .eq("status", "pending")
     .gt("expires_at", new Date().toISOString())
-    .ilike("email", escapeLike(user.email))
+    .eq("email", user.email.toLowerCase())
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -458,18 +491,23 @@ async function myInvitationsHandler(req: Request, res: Response) {
   );
 }
 
-// The caller's own pending invitation, or null. Missing, revoked, declined and
-// someone else's all look the same, so invitations can't be probed.
+// The caller's own pending invitation, or null. Missing, revoked, declined,
+// someone else's and a wrong code all look the same, so invitations can't be probed.
 async function findMyInvitation(req: Request) {
   const { user } = req as AuthenticatedRequest;
   const { data } = await supabaseAdmin
     .from("household_invitations")
-    .select("id, household_id, email, status, expires_at")
+    .select("id, household_id, email, status, code, expires_at")
     .eq("id", req.params.invitationId)
     .maybeSingle();
 
+  // A bad or missing code looks exactly like a missing invitation
+  const parsed = invitationCodeSchema.safeParse(req.body);
   if (
     !data ||
+    !parsed.success ||
+    !data.code ||
+    normalizeInviteCode(parsed.data.code) !== data.code ||
     data.status !== "pending" ||
     !user.email ||
     data.email.toLowerCase() !== user.email.toLowerCase()
@@ -777,6 +815,14 @@ async function transferOwnershipHandler(req: Request, res: Response) {
   return res.status(200).json(await householdForCaller(db, updated, user.id));
 }
 
+// Each invite sends an email, so cap how many a head can send.
+const inviteLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 20,
+  keyGenerator: (req) => (req as AuthenticatedRequest).user.id,
+  message: { error: "Too many invitations. Try again later." },
+});
+
 // ---------------------------------------------------------------------------
 // Routes without household ID (resolve from user's profile)
 // These MUST be registered before /:id routes to avoid path conflicts.
@@ -843,6 +889,7 @@ router.put(
 );
 router.post(
   "/invite",
+  inviteLimiter,
   resolveHousehold,
   validate(inviteToHouseholdSchema),
   inviteHandler
@@ -861,11 +908,28 @@ router.delete(
   deleteHouseholdHandler
 );
 router.post("/leave", resolveHousehold, leaveHandler);
+// Invitation codes are guessable credentials, so cap failed attempts per user
+// (accept and decline share the budget).
+const invitationAttemptLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => (req as AuthenticatedRequest).user.id,
+  message: { error: "Too many attempts. Try again in 15 minutes." },
+});
 router.get("/invitations", resolveHousehold, listInvitationsHandler);
 // The invitee routes act on the caller's own email, not a household
 router.get("/invitations/mine", myInvitationsHandler);
-router.post("/invitations/:invitationId/accept", acceptInvitationHandler);
-router.post("/invitations/:invitationId/decline", declineInvitationHandler);
+router.post(
+  "/invitations/:invitationId/accept",
+  invitationAttemptLimiter,
+  acceptInvitationHandler
+);
+router.post(
+  "/invitations/:invitationId/decline",
+  invitationAttemptLimiter,
+  declineInvitationHandler
+);
 router.delete(
   "/invitations/:invitationId",
   resolveHousehold,
@@ -899,7 +963,12 @@ router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 router.get("/:id", getHouseholdHandler);
 router.patch("/:id", validate(renameHouseholdSchema), renameHandler);
 router.delete("/:id", validate(deleteHouseholdSchema), deleteHouseholdHandler);
-router.post("/:id/invite", validate(inviteToHouseholdSchema), inviteHandler);
+router.post(
+  "/:id/invite",
+  inviteLimiter,
+  validate(inviteToHouseholdSchema),
+  inviteHandler
+);
 router.post("/:id/invite-code", rotateInviteCodeHandler);
 router.post("/:id/join", validate(joinHouseholdSchema), joinHandler);
 router.post(
