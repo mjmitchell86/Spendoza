@@ -50,6 +50,8 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
 
     const makeEqChain = (): any => ({
       eq: () => makeEqChain(),
+      gt: () => makeEqChain(),
+      ilike: () => makeEqChain(),
       gte: () => makeEqChain(),
       lte: () => makeEqChain(),
       or: () => makeEqChain(),
@@ -161,6 +163,10 @@ const mockAdminFrom = mock((...args: any[]) =>
 // ---------------------------------------------------------------------------
 // Mock the household service for deterministic invite code
 // ---------------------------------------------------------------------------
+mock.module("../../services/email.service", () => ({
+  sendHouseholdInvitationEmail: () => Promise.resolve(),
+  sendReportEmail: () => Promise.resolve({ success: true }),
+}));
 mock.module("../../services/household.service", () => ({
   generateInviteCode: () => INVITE_CODE,
   generateHouseholdCode: () => INVITE_CODE,
@@ -279,7 +285,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     currentUserEmail = HEAD_EMAIL;
     resetResults();
 
-    // POST /:id/invite uses req.supabase (RLS client) for all queries
+    // POST /:id/invite checks the head and counts members with the RLS client
     rlsResults = {
       households: {
         selectSingle: { data: householdData, error: null },

@@ -88,7 +88,7 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
                 ),
               eq: (...eq2Args: any[]) => {
                 calls.push({ table, op: "select.eq.eq", args: eq2Args });
-                return {
+                const leaf: any = {
                   single: () =>
                     Promise.resolve(
                       cfg.selectSingle ?? { data: null, error: null }
@@ -99,7 +99,10 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
                         ? cfg.selectMaybeSingle
                         : (cfg.selectSingle ?? { data: null, error: null })
                     ),
+                  gt: () => leaf,
+                  ilike: () => leaf,
                 };
+                return leaf;
               },
               // For member list: .select("...").eq("household_id", id)
               ...(cfg.selectList
@@ -202,6 +205,10 @@ const mockGetUser = mock(() =>
 // Mock the household service to return a deterministic invite code
 // ---------------------------------------------------------------------------
 const mockDeleteHousehold = mock((_householdId: string) => Promise.resolve());
+mock.module("../../services/email.service", () => ({
+  sendHouseholdInvitationEmail: () => Promise.resolve(),
+  sendReportEmail: () => Promise.resolve({ success: true }),
+}));
 mock.module("../../services/household.service", () => ({
   generateInviteCode: () => INVITE_CODE,
   generateHouseholdCode: () => NEW_HOUSEHOLD_CODE,
