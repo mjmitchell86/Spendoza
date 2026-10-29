@@ -1,0 +1,35 @@
+{
+  "id": "5b1c2f0e-1111-4a6e-9a55-000000000010",
+  "entity_type": "user",
+  "entity_id": "8f0d3c1a-2222-4b7e-8c11-0000000000aa",
+  "report_month": "2026-10-01",
+  "report_data": {
+    "total_income": 5000,
+    "total_expenses": 4200,
+    "savings_rate": 16.0,
+    "expense_to_income_ratio": 0.84,
+    "by_category": [
+      { "category": "Housing", "amount": 1800, "percentage": 42.9 },
+      { "category": "Groceries", "amount": 600, "percentage": 14.3 },
+      { "category": "Dining out", "amount": 430, "percentage": 10.2 },
+      { "category": "Streaming", "amount": 30, "percentage": 0.7 },
+      { "category": "Gym", "amount": 50, "percentage": 1.2 }
+    ],
+    "top_categories": ["Housing", "Groceries", "Dining out"],
+    "month_over_month": { "income_change": 0, "expense_change": 12.5 },
+    "financial_health_score": {
+      "score": 64,
+      "previous_score": 73,
+      "factors": {
+        "savings_rate": { "value": 16.0, "points": 20, "max": 25, "rating": "ok" },
+        "needs_ratio": { "value": 48.0, "points": 20, "max": 20, "rating": "good" },
+        "wants_ratio": { "value": 34.0, "points": 9, "max": 15, "rating": "warning" },
+        "emergency_fund": { "value": 1.5, "points": 10, "max": 20, "rating": "warning" },
+        "debt_to_income": { "value": 0.45, "points": 5, "max": 20, "rating": "critical" }
+      }
+    }
+  },
+  "ai_insights": "- Dining out rose sharply this month.\n- Your wants are over 30% of income.\n\n* Build your emergency fund toward 3 months.",
+  "generated_at": "2026-10-28T09:30:00.000Z",
+  "has_new_data": false
+}

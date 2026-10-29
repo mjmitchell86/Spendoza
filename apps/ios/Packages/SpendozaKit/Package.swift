@@ -13,6 +13,7 @@ let package = Package(
             name: "SpendozaKit",
             dependencies: [.product(name: "Auth", package: "supabase-swift")]
         ),
-        .testTarget(name: "SpendozaKitTests", dependencies: ["SpendozaKit"]),
+        .testTarget(name: "SpendozaKitTests", dependencies: ["SpendozaKit"],
+                    resources: [.copy("Fixtures")]),
     ]
 )
