@@ -104,7 +104,7 @@ enum UITestStub {
 
     @MainActor static func checkup(store: SessionStore) -> CheckupRefresh {
         CheckupRefresh(scope: AppServices.accountScope, snapshots: AppServices.snapshots,
-                       hasSession: { false }, makeAPI: { await store.api },
+                       hasSession: { false }, hasStoredSession: { false }, makeAPI: { await store.api },
                        notifier: QuietNotifier(), scheduler: QuietScheduler(), widgets: QuietWidgets())
     }
 }

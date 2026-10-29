@@ -17,6 +17,12 @@ protocol WidgetReloading: Sendable {
     func reloadAll()
 }
 
+/// The parts of a background task the refresh uses (`SystemBackgroundTask` wraps `BGTask`; tests use a fake).
+protocol BackgroundTaskHandle: Sendable {
+    func setExpirationHandler(_ handler: @escaping @Sendable () -> Void)
+    func setTaskCompleted(success: Bool)
+}
+
 protocol CheckupScheduling: Sendable {
     func register(identifier: String, handler: @escaping @Sendable (BGAppRefreshTask) -> Void)
     func submit(_ request: BGAppRefreshTaskRequest) throws
@@ -42,16 +48,21 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
     private let defaults: UserDefaults
     private let calendar: Calendar
     private let hasSession: @Sendable () async -> Bool
+    private let hasStoredSession: @Sendable () async -> Bool
     private let makeAPI: @Sendable () async -> any SpendozaAPI
     private let notifier: any CheckupNotifying
     private let scheduler: any CheckupScheduling
     private let widgets: any WidgetReloading
     private let sync: WidgetSync
 
-    /// - Parameter hasSession: true when a session token is readable right now; it also points `scope` at that user.
+    /// - Parameters:
+    ///   - hasSession: true when a session token is readable right now; it also points `scope` at that user.
+    ///   - hasStoredSession: true when this phone is signed in at all (even if the keychain is locked right now);
+    ///     a signed-out phone stops asking for daily runs.
     init(scope: AccountScope, snapshots: SnapshotStore, defaults: UserDefaults = .standard,
          calendar: Calendar = .current,
          hasSession: @escaping @Sendable () async -> Bool,
+         hasStoredSession: @escaping @Sendable () async -> Bool,
          makeAPI: @escaping @Sendable () async -> any SpendozaAPI,
          notifier: any CheckupNotifying = SystemCheckupNotifier(),
          scheduler: any CheckupScheduling = SystemCheckupScheduler(),
@@ -61,6 +72,7 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
         self.defaults = defaults
         self.calendar = calendar
         self.hasSession = hasSession
+        self.hasStoredSession = hasStoredSession
         self.makeAPI = makeAPI
         self.notifier = notifier
         self.scheduler = scheduler
@@ -76,6 +88,7 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
                 guard await store.accessToken != nil else { return false }
                 return await store.activateStoredSessionScope()
             },
+            hasStoredSession: { await store.activateStoredSessionScope() },
             makeAPI: { await store.api })
     }
 
@@ -84,14 +97,23 @@ final class CheckupRefresh: @unchecked Sendable {  // UserDefaults is thread-saf
     /// Call once at launch, before the app finishes launching.
     func register() {
         scheduler.register(identifier: Self.taskIdentifier) { [self] task in
-            nonisolated(unsafe) let task = task
-            let work = Task {
-                let api = await makeAPI()
-                _ = await run(api: api, now: Date())
-                schedule()
-                task.setTaskCompleted(success: !Task.isCancelled)
-            }
-            task.expirationHandler = { work.cancel() }
+            handle(SystemBackgroundTask(task))
+        }
+    }
+
+    /// One background run: look for a check-up, ask for tomorrow's run while signed in, complete the task.
+    /// When the system expires the task, the handler completes it (as failed) at once and cancels the work.
+    func handle(_ task: any BackgroundTaskHandle, now: Date = Date()) {
+        let completion = OnceCompletion(task)
+        let work = Task {
+            let api = await makeAPI()
+            _ = await run(api: api, now: now)
+            if await hasStoredSession() { schedule(now: now) }
+            completion.finish(success: !Task.isCancelled)
+        }
+        task.setExpirationHandler {
+            work.cancel()
+            completion.finish(success: false)
         }
     }
 
@@ -194,7 +216,32 @@ final class WidgetSync: @unchecked Sendable {  // UserDefaults is thread-safe
     }
 }
 
+/// Completes a background task exactly once, whichever of the work and the expiration handler gets there first.
+private final class OnceCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private let task: any BackgroundTaskHandle
+    private var done = false
+
+    init(_ task: any BackgroundTaskHandle) { self.task = task }
+
+    func finish(success: Bool) {
+        let first = lock.withLock { () -> Bool in
+            guard !done else { return false }
+            done = true
+            return true
+        }
+        if first { task.setTaskCompleted(success: success) }
+    }
+}
+
 // MARK: System implementations
+
+final class SystemBackgroundTask: BackgroundTaskHandle, @unchecked Sendable {  // BGTask is thread-safe for these
+    private let task: BGTask
+    init(_ task: BGTask) { self.task = task }
+    func setExpirationHandler(_ handler: @escaping @Sendable () -> Void) { task.expirationHandler = handler }
+    func setTaskCompleted(success: Bool) { task.setTaskCompleted(success: success) }
+}
 
 struct SystemCheckupNotifier: CheckupNotifying {
     func canPost() async -> Bool {

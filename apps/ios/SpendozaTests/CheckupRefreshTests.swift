@@ -37,6 +37,35 @@ private final class FakeScheduler: CheckupScheduling, @unchecked Sendable {
     func submit(_ request: BGAppRefreshTaskRequest) throws { lock.withLock { _submitted.append(request) } }
 }
 
+/// A background task the tests can expire and inspect.
+private final class FakeTask: BackgroundTaskHandle, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _completions: [Bool] = []
+    private var _handler: (@Sendable () -> Void)?
+    var completions: [Bool] { lock.withLock { _completions } }
+    var expirationHandler: (@Sendable () -> Void)? { lock.withLock { _handler } }
+    func setExpirationHandler(_ handler: @escaping @Sendable () -> Void) { lock.withLock { _handler = handler } }
+    func setTaskCompleted(success: Bool) { lock.withLock { _completions.append(success) } }
+
+    func waitForCompletion() async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while completions.isEmpty, ContinuousClock.now < deadline { await Task.yield() }
+    }
+}
+
+/// Holds `personalReport` open until the test lets it go (11.56: no timing guesses).
+private final class ReportGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _arrived = false
+    private var _open = false
+    var arrived: Bool { lock.withLock { _arrived } }
+    func pass() async {
+        lock.withLock { _arrived = true }
+        while !lock.withLock({ _open }) { await Task.yield() }
+    }
+    func open() { lock.withLock { _open = true } }
+}
+
 @MainActor
 struct CheckupRefreshTests {
     private static let utc: Calendar = {
@@ -61,7 +90,8 @@ struct CheckupRefreshTests {
         let suite: String
     }
 
-    private func harness(_ api: StubAPI, signedIn: Bool = true, scope: AccountScope? = nil) -> Harness {
+    private func harness(_ api: StubAPI, signedIn: Bool = true, scope: AccountScope? = nil,
+                         storedSession: Bool? = nil) -> Harness {
         let suite = "test.spendoza.checkup.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         let scope = scope ?? AccountScope(userID: signedIn ? "user-a" : nil)
@@ -69,7 +99,7 @@ struct CheckupRefreshTests {
         let notifier = FakeNotifier(), widgets = FakeWidgets(), scheduler = FakeScheduler()
         let refresh = CheckupRefresh(
             scope: scope, snapshots: snapshots, defaults: defaults, calendar: Self.utc,
-            hasSession: { signedIn }, makeAPI: { api },
+            hasSession: { signedIn }, hasStoredSession: { storedSession ?? signedIn }, makeAPI: { api },
             notifier: notifier, scheduler: scheduler, widgets: widgets)
         return Harness(refresh: refresh, notifier: notifier, widgets: widgets, scheduler: scheduler,
                        snapshots: snapshots, defaults: defaults, scope: scope, suite: suite)
@@ -164,10 +194,13 @@ struct CheckupRefreshTests {
         let h = harness(stub, scope: scope)
         defer { UserDefaults().removePersistentDomain(forName: h.suite) }
 
+        let gate = ReportGate()
+        stub.reportHook = { _ in await gate.pass() }
         let refresh = h.refresh, now = Self.date(2026, 11, 2)
         let task = Task { await refresh.run(api: stub, now: now) }
-        try? await Task.sleep(for: .milliseconds(10))
+        while !gate.arrived { await Task.yield() }
         scope.end()
+        gate.open()
 
         #expect(await task.value == nil)
         #expect(h.notifier.posted.isEmpty)
@@ -196,6 +229,58 @@ struct CheckupRefreshTests {
         let request = try #require(h.scheduler.submitted.first)
         #expect(request.identifier == "com.gravitaz.spendoza.checkup")
         #expect(request.earliestBeginDate == Self.date(2026, 11, 3, 10))
+    }
+
+    // MARK: The background task
+
+    /// 11.55: a signed-out phone stops asking for daily runs.
+    @Test func aRunWhileSignedOutDoesNotAskForAnother() async {
+        let h = harness(api(), signedIn: false)
+        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        let task = FakeTask()
+        h.refresh.handle(task, now: Self.date(2026, 11, 2))
+        await task.waitForCompletion()
+        #expect(h.scheduler.submitted.isEmpty)
+        #expect(task.completions == [true])
+    }
+
+    @Test func aRunWhileSignedInAsksForTomorrow() async {
+        let h = harness(api())
+        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        let task = FakeTask()
+        h.refresh.handle(task, now: Self.date(2026, 11, 2))
+        await task.waitForCompletion()
+        #expect(h.scheduler.submitted.count == 1)
+        #expect(task.completions == [true])
+    }
+
+    /// A locked phone (token unreadable) is still signed in: keep the daily run.
+    @Test func aLockedPhoneStillAsksForTomorrow() async {
+        let h = harness(api(), signedIn: false, storedSession: true)
+        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        let task = FakeTask()
+        h.refresh.handle(task, now: Self.date(2026, 11, 2))
+        await task.waitForCompletion()
+        #expect(h.scheduler.submitted.count == 1)
+    }
+
+    /// 11.57: the expiration handler completes the task itself (as failed), once, without waiting on the work.
+    @Test func expiryCompletesTheTaskAsFailedOnce() async {
+        let stub = api()
+        let gate = ReportGate()
+        stub.reportHook = { _ in await gate.pass() }
+        let h = harness(stub)
+        defer { UserDefaults().removePersistentDomain(forName: h.suite) }
+        let task = FakeTask()
+        h.refresh.handle(task, now: Self.date(2026, 11, 2))
+        while !gate.arrived { await Task.yield() }
+
+        task.expirationHandler?()
+        #expect(task.completions == [false])
+
+        gate.open()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(task.completions == [false])
     }
 
     @Test func registerRegistersTheCheckupIdentifier() {

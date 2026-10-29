@@ -38,14 +38,6 @@ struct WidgetSyncTests {
     private let sep = StubAPI.sep, oct = StubAPI.oct, nov = StubAPI.nov
     private let snapshot = WidgetSnapshot(score: 64, band: .fair, previousScore: 73, month: StubAPI.oct)
 
-    private struct Parts {
-        let sync: WidgetSync
-        let widgets = CountingWidgets()
-        let snapshots: SnapshotStore
-        let defaults: UserDefaults
-        let suite: String
-    }
-
     private func parts() -> (WidgetSync, CountingWidgets, SnapshotStore, UserDefaults, String) {
         let suite = "test.spendoza.sync.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -104,7 +96,8 @@ struct WidgetSyncTests {
         let notifier = QuietNotifier()
         let refresh = CheckupRefresh(
             scope: scope, snapshots: snapshots, defaults: defaults, calendar: Self.utc,
-            hasSession: { true }, makeAPI: { stub }, notifier: notifier, scheduler: NoScheduler(), widgets: widgets)
+            hasSession: { true }, hasStoredSession: { true }, makeAPI: { stub }, notifier: notifier,
+            scheduler: NoScheduler(), widgets: widgets)
         #expect(await refresh.run(api: stub, now: Self.date(2026, 11, 3)) == nil)
         #expect(notifier.posted.isEmpty)
 

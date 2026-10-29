@@ -14,6 +14,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     var failingMonths: [Month: Error] = [:]
     /// Months that answer slowly (a cancellable sleep).
     var reportDelay: @Sendable (Month) -> Duration? = { _ in nil }
+    /// Runs at the start of every `personalReport` (tests hold requests open with it).
+    var reportHook: @Sendable (Month) async -> Void = { _ in }
     var categoryList: [BudgetCategory] = StubAPI.defaultCategories
     var categoriesError: APIError?
     /// `categories()` waits (up to a second) for `transactions(from:to:)` to start, and records whether it did.
@@ -68,6 +70,7 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     func personalReport(_ month: Month) async throws -> Report? {
         lock.withLock { _requestedMonths.append(month) }
+        await reportHook(month)
         if let delay = reportDelay(month) { try await Task.sleep(for: delay) }
         if let failure = failingMonths[month] { throw failure }
         if let reportError { throw reportError }
