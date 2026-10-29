@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, mock } from "bun:test";
 import type { Server } from "http";
 import type { Router } from "express";
+import { createFakeSupabase, type FakeSupabase } from "../../__tests__/helpers/fake-supabase";
 
 // ---------------------------------------------------------------------------
 // Test data
@@ -112,15 +113,17 @@ const mockStorageUpload = mock(() =>
   })
 );
 
-const mockStorageFrom = mock(() => ({
+const defaultStorageFrom = (_bucket?: string): any => ({
   upload: mockStorageUpload,
-}));
+});
+const mockStorageFrom = mock(defaultStorageFrom);
 
-const mockFrom = mock((_table: string) => ({
+const defaultFrom = (_table: string): any => ({
   select: mockSelect,
   insert: mockInsert,
   update: mockUpdate,
-}));
+});
+const mockFrom = mock(defaultFrom);
 
 // ---------------------------------------------------------------------------
 // Mock for supabaseAdmin (auth middleware uses getUser, upload uses storage)
@@ -267,6 +270,9 @@ beforeEach(() => {
   mockStorageFrom.mockClear();
 
   // Reset to successful defaults
+  mockFrom.mockImplementation(defaultFrom);
+  mockStorageFrom.mockImplementation(defaultStorageFrom);
+
   mockGetUser.mockImplementation(() =>
     Promise.resolve({
       data: {
@@ -627,5 +633,231 @@ describe("POST /api/bank-statements/upload (CSV)", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("Only PDF and CSV files are supported");
+  });
+});
+
+// ===========================================================================
+// Statement file cleanup (in-memory Supabase fake for tables + storage)
+// ===========================================================================
+const PDF_PATH = `${TEST_USER_ID}/statements/test-statement.pdf`;
+const CSV_PATH = `${TEST_USER_ID}/statements/history.csv`;
+
+let fake: FakeSupabase;
+
+function useFake(rows: Record<string, any>[], files: string[]) {
+  fake = createFakeSupabase({ bank_statements: rows }, files);
+  mockFrom.mockImplementation((table: string) => fake.from(table));
+  mockStorageFrom.mockImplementation((bucket?: string) => fake.storage.from(bucket ?? ""));
+}
+
+const failedSingle = {
+  ...statementRecord,
+  id: "stmt-failed",
+  status: "failed",
+  parsed_data: { error: "boom" },
+};
+
+// A multi-month CSV: the parent is split into children that share its file.
+const splitParent = {
+  ...statementRecord,
+  id: "stmt-parent",
+  file_path: CSV_PATH,
+  file_hash: "csvhash",
+  status: "parsed",
+  parsed_data: { is_parent_split: true },
+};
+const splitChild = (id: string, month: string, status: string) => ({
+  ...statementRecord,
+  id,
+  file_path: CSV_PATH,
+  file_hash: `csvhash:${month}`,
+  status,
+  parsed_data: { source_statement_id: "stmt-parent" },
+});
+
+const ids = () => fake.tables.bank_statements.map((r) => r.id).sort();
+
+describe("DELETE /api/bank-statements/:id (file cleanup)", () => {
+  const del = (id: string) =>
+    fetch(`${baseUrl}/api/bank-statements/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+  it("deletes the failed statement's file from storage", async () => {
+    useFake([failedSingle], [PDF_PATH]);
+
+    const res = await del("stmt-failed");
+
+    expect(res.status).toBe(204);
+    expect(ids()).toEqual([]);
+    expect(fake.removedFiles).toEqual([PDF_PATH]);
+    expect(fake.files.has(PDF_PATH)).toBe(false);
+  });
+
+  it("deletes a failed parent's file along with its split children", async () => {
+    useFake(
+      [
+        { ...splitParent, status: "failed" },
+        splitChild("stmt-jan", "2026-01", "processing"),
+      ],
+      [CSV_PATH]
+    );
+
+    const res = await del("stmt-parent");
+
+    expect(res.status).toBe(204);
+    expect(ids()).toEqual([]);
+    expect(fake.files.has(CSV_PATH)).toBe(false);
+  });
+
+  it("deletes the shared file when removing the only failed child of a split", async () => {
+    useFake(
+      [
+        splitParent,
+        splitChild("stmt-jan", "2026-01", "parsed"),
+        splitChild("stmt-feb", "2026-02", "failed"),
+      ],
+      [CSV_PATH]
+    );
+
+    const res = await del("stmt-feb");
+
+    expect(res.status).toBe(204);
+    expect(ids()).toEqual(["stmt-jan", "stmt-parent"]);
+    expect(fake.removedFiles).toEqual([CSV_PATH]);
+    expect(fake.files.has(CSV_PATH)).toBe(false);
+  });
+
+  it("keeps the shared file while another child of the split has failed", async () => {
+    useFake(
+      [
+        splitParent,
+        splitChild("stmt-jan", "2026-01", "failed"),
+        splitChild("stmt-feb", "2026-02", "failed"),
+      ],
+      [CSV_PATH]
+    );
+
+    const res = await del("stmt-feb");
+
+    expect(res.status).toBe(204);
+    expect(ids()).toEqual(["stmt-jan", "stmt-parent"]);
+    expect(fake.removedFiles).toEqual([]);
+    expect(fake.files.has(CSV_PATH)).toBe(true);
+
+    // Removing the last failed child then deletes the file
+    const res2 = await del("stmt-jan");
+    expect(res2.status).toBe(204);
+    expect(fake.files.has(CSV_PATH)).toBe(false);
+  });
+
+  it("deletes the shared file if the last processing sibling finishes during removal", async () => {
+    useFake(
+      [
+        splitParent,
+        splitChild("stmt-jan", "2026-01", "processing"),
+        splitChild("stmt-feb", "2026-02", "failed"),
+      ],
+      [CSV_PATH]
+    );
+    // The sibling finishes (and sees stmt-feb still present) right as rows are deleted
+    mockFrom.mockImplementation((table: string) => {
+      const query = fake.from(table);
+      const realDelete = query.delete.bind(query);
+      query.delete = () => {
+        fake.tables.bank_statements.find((r) => r.id === "stmt-jan")!.status = "parsed";
+        return realDelete();
+      };
+      return query;
+    });
+
+    const res = await del("stmt-feb");
+
+    expect(res.status).toBe(204);
+    expect(ids()).toEqual(["stmt-jan", "stmt-parent"]);
+    expect(fake.files.has(CSV_PATH)).toBe(false);
+  });
+
+  it("returns 500 and keeps the statement if the file cannot be deleted", async () => {
+    useFake([failedSingle], [PDF_PATH]);
+    fake.setRemoveError("storage unavailable");
+
+    const res = await del("stmt-failed");
+
+    expect(res.status).toBe(500);
+    expect(ids()).toEqual(["stmt-failed"]);
+  });
+
+  it("does not touch storage for a statement that is not failed", async () => {
+    useFake([{ ...failedSingle, status: "parsed" }], [PDF_PATH]);
+
+    const res = await del("stmt-failed");
+
+    expect(res.status).toBe(400);
+    expect(fake.storageLog).toEqual([]);
+    expect(ids()).toEqual(["stmt-failed"]);
+  });
+});
+
+describe("POST /api/bank-statements/upload (file cleanup)", () => {
+  const upload = () =>
+    fetch(`${baseUrl}/api/bank-statements/upload`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ bank_name: "Chase" }),
+    });
+
+  it("removes the uploaded file if the statement row cannot be inserted", async () => {
+    useFake([], []);
+    fake.failNextInsert("bank_statements", "insert failed");
+
+    const res = await upload();
+
+    expect(res.status).toBe(400);
+    expect(fake.storageLog).toEqual([`upload:${PDF_PATH}`, `remove:${PDF_PATH}`]);
+    expect(fake.files.has(PDF_PATH)).toBe(false);
+  });
+
+  it("does not remove an existing file when the storage upload itself fails", async () => {
+    // Another statement's file already occupies the path, so upload fails
+    useFake([], [PDF_PATH]);
+
+    const res = await upload();
+
+    expect(res.status).toBe(500);
+    expect(fake.removedFiles).toEqual([]);
+    expect(fake.files.has(PDF_PATH)).toBe(true);
+  });
+
+  it("re-uploading over a failed statement replaces its file and row", async () => {
+    const { computeFileHash } = await import("../../services/bank-statement.service");
+    useFake([{ ...failedSingle, file_hash: computeFileHash(fakePdfBuffer) }], [PDF_PATH]);
+
+    const res = await upload();
+
+    expect(res.status).toBe(201);
+    // Old file removed before the new one is uploaded to the same path
+    expect(fake.storageLog).toEqual([`remove:${PDF_PATH}`, `upload:${PDF_PATH}`]);
+    expect(fake.files.has(PDF_PATH)).toBe(true);
+    const rows = fake.tables.bank_statements;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).not.toBe("stmt-failed");
+    expect(rows[0].status).toBe("processing");
+  });
+
+  it("re-uploading over a failed statement under a new filename removes the old file", async () => {
+    const { computeFileHash } = await import("../../services/bank-statement.service");
+    const oldPath = `${TEST_USER_ID}/statements/old-name.pdf`;
+    useFake([{ ...failedSingle, file_path: oldPath, file_hash: computeFileHash(fakePdfBuffer) }], [oldPath]);
+
+    const res = await upload();
+
+    expect(res.status).toBe(201);
+    expect(fake.files.has(oldPath)).toBe(false);
+    expect(fake.files.has(PDF_PATH)).toBe(true);
   });
 });

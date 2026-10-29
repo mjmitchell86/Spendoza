@@ -10,20 +10,39 @@ import { detectRecurringIncome } from "./income-detection.service";
 import { linkPaymentsToDebts } from "./debt-payment-linker.service";
 import { generateUserReport, generateHouseholdReport } from "./report.service";
 import { splitCsvByMonth } from "./csv-splitter";
+import { isStatementFileNeeded, removeStatementFile } from "./statement-file.service";
 
 /** Normalize a transaction description for dedup comparison. */
 function normalizeDescription(desc: string): string {
   return desc.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-/** Delete the raw PDF from Supabase Storage after processing completes. */
-async function deleteRawFile(statementId: string, filePath: string): Promise<void> {
-  const { error } = await supabaseAdmin.storage
-    .from("bank-statements")
-    .remove([filePath]);
+/**
+ * Delete the raw statement file from Supabase Storage once processing is done
+ * with it. Child statements from a multi-month CSV split share the parent's
+ * file, so it's kept while any statement using it is still processing or has
+ * failed (failed statements keep it for Retry). Call after updating the
+ * statement's own status, so the last statement to finish sees all siblings done.
+ */
+async function deleteRawFile(
+  statement: { id: string; user_id: string; file_path: string }
+): Promise<void> {
+  const { id: statementId, file_path: filePath } = statement;
+
+  try {
+    if (await isStatementFileNeeded(statement.user_id, filePath, [statementId])) {
+      console.log(`[ai-pipeline] [${statementId}] raw file still needed by another statement, keeping: ${filePath}`);
+      return;
+    }
+  } catch (err) {
+    console.error(`[ai-pipeline] [${statementId}] keeping raw file, reference check failed:`, err);
+    return;
+  }
+
+  const { error } = await removeStatementFile(filePath);
 
   if (error) {
-    console.error(`[ai-pipeline] [${statementId}] failed to delete raw file: ${error.message}`);
+    console.error(`[ai-pipeline] [${statementId}] failed to delete raw file: ${error}`);
   } else {
     console.log(`[ai-pipeline] [${statementId}] deleted raw file: ${filePath}`);
   }
@@ -244,6 +263,10 @@ async function stepExtractText(statementId: string): Promise<void> {
         })
         .eq("id", statementId);
 
+      // Children normally delete the shared file when the last one finishes;
+      // this covers them all finishing before the parent was marked parsed.
+      await deleteRawFile(statement);
+
       return; // Children auto-trigger via DB trigger
     }
   }
@@ -331,8 +354,8 @@ async function stepExtractTransactions(statementId: string): Promise<void> {
       })
       .eq("id", statementId);
 
-    // Clean up raw PDF from storage
-    await deleteRawFile(statementId, statement.file_path);
+    // Clean up raw file from storage (kept if split siblings still need it)
+    await deleteRawFile(statement);
     return;
   }
 
@@ -675,12 +698,9 @@ async function stepMatchAndInsert(statementId: string): Promise<void> {
     );
   }
 
-  // Clean up raw file from storage — but not for child statements (they share
-  // the parent's file, which may still be needed by sibling children).
-  const isChildStatement = statement.file_hash?.includes(":");
-  if (!isChildStatement) {
-    await deleteRawFile(statementId, statement.file_path);
-  }
+  // Clean up raw file from storage — for child statements of a split, only once
+  // no sibling still needs the shared file.
+  await deleteRawFile(statement);
 
   // Detect recurring bills from transaction patterns (non-fatal)
   try {

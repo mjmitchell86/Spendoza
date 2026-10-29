@@ -5,9 +5,76 @@ import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { computeFileHash, listBankStatements, getBankStatement } from "../services/bank-statement.service";
 import { toServiceContext } from "../services/context";
+import { isStatementFileNeeded, removeStatementFile } from "../services/statement-file.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+/**
+ * Remove a failed statement: its uploaded file, its multi-month split children,
+ * and its row. The file is deleted first (unless another statement still needs
+ * the shared file), so if storage fails nothing is removed and the user can retry.
+ */
+async function removeFailedStatement(
+  db: AuthenticatedRequest["supabase"],
+  userId: string,
+  statement: { id: string; file_hash: string; file_path: string }
+): Promise<{ error: string | null }> {
+  const { data: children, error: childrenError } = await db
+    .from("bank_statements")
+    .select("id")
+    .eq("user_id", userId)
+    .like("file_hash", `${statement.file_hash}:%`);
+
+  if (childrenError) {
+    return { error: childrenError.message };
+  }
+
+  const removedIds = [statement.id, ...(children ?? []).map((c: { id: string }) => c.id)];
+
+  let fileKept = false;
+  try {
+    if (await isStatementFileNeeded(userId, statement.file_path, removedIds)) {
+      fileKept = true;
+    } else {
+      const { error: storageError } = await removeStatementFile(statement.file_path);
+      if (storageError) {
+        return { error: storageError };
+      }
+    }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+
+  // Delete child records from multi-month splits (CASCADE removes their transactions)
+  await db
+    .from("bank_statements")
+    .delete()
+    .eq("user_id", userId)
+    .like("file_hash", `${statement.file_hash}:%`);
+
+  await db
+    .from("bank_statements")
+    .delete()
+    .eq("id", statement.id);
+
+  // A sibling that needed the shared file may have finished while we were
+  // removing rows (it saw this statement still present), so re-check.
+  if (fileKept) {
+    try {
+      if (!(await isStatementFileNeeded(userId, statement.file_path, []))) {
+        const { error: storageError } = await removeStatementFile(statement.file_path);
+        if (storageError) {
+          console.error(`[bank-statements] failed to delete file ${statement.file_path}: ${storageError}`);
+        }
+      }
+    } catch (err) {
+      console.error(`[bank-statements] file reference re-check failed for ${statement.file_path}:`, err);
+    }
+  }
+
+  return { error: null };
+}
 
 // ---------------------------------------------------------------------------
 // POST /upload — upload a bank statement PDF
@@ -49,18 +116,19 @@ router.post(
     // Check for duplicates
     const { data: existing } = await db
       .from("bank_statements")
-      .select("id, status")
+      .select("id, status, file_hash, file_path")
       .eq("user_id", user.id)
       .eq("file_hash", fileHash)
       .maybeSingle();
 
     if (existing) {
       if (existing.status === "failed") {
-        // Allow re-upload by deleting the failed record first
-        await db
-          .from("bank_statements")
-          .delete()
-          .eq("id", existing.id);
+        // Allow re-upload by removing the failed record and its file first
+        const { error: removeError } = await removeFailedStatement(db, user.id, existing);
+        if (removeError) {
+          console.error(`[upload] failed to remove failed statement ${existing.id}: ${removeError}`);
+          return res.status(500).json({ error: "Failed to upload file" });
+        }
       } else {
         return res.status(409).json({ error: "Duplicate statement" });
       }
@@ -99,6 +167,11 @@ router.post(
       .single();
 
     if (error) {
+      // Don't leave the uploaded file in storage without a statement record
+      const { error: cleanupError } = await removeStatementFile(storagePath);
+      if (cleanupError) {
+        console.error(`[upload] failed to remove orphaned file ${storagePath}: ${cleanupError}`);
+      }
       return res.status(400).json({ error: error.message });
     }
 
@@ -189,7 +262,7 @@ router.delete("/:id", async (req, res: Response) => {
 
   const { data: statement } = await db
     .from("bank_statements")
-    .select("id, status, file_hash")
+    .select("id, status, file_hash, file_path")
     .eq("id", req.params.id)
     .eq("user_id", user.id)
     .single();
@@ -202,17 +275,11 @@ router.delete("/:id", async (req, res: Response) => {
     return res.status(400).json({ error: "Only failed statements can be deleted" });
   }
 
-  // Delete child records from multi-month splits (CASCADE removes their transactions)
-  await db
-    .from("bank_statements")
-    .delete()
-    .eq("user_id", user.id)
-    .like("file_hash", `${statement.file_hash}:%`);
-
-  await db
-    .from("bank_statements")
-    .delete()
-    .eq("id", statement.id);
+  const { error: removeError } = await removeFailedStatement(db, user.id, statement);
+  if (removeError) {
+    console.error(`[delete] failed to remove statement ${statement.id}: ${removeError}`);
+    return res.status(500).json({ error: "Failed to remove statement" });
+  }
 
   return res.status(204).send();
 });
