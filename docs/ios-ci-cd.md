@@ -17,6 +17,13 @@
 
 The marketing version comes from `MARKETING_VERSION` in `apps/ios/project.yml`.
 
+## App icon
+
+App Store Connect rejects an upload without an app icon. The app ships a placeholder: a single 1024 x 1024 universal PNG at `apps/ios/Spendoza/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png`, set as the app icon by `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon` in `project.yml`. It is drawn from the app's theme (the note-green field with the engraved dial in paper tones, no text), opaque with no alpha channel, by `AppIconArtwork` in `apps/ios/SpendozaTests/AppIconTests.swift`.
+
+- To replace it, drop in your own opaque 1024 x 1024 PNG under the same name. `AppIconTests` checks it is 1024 x 1024 with no alpha and that the built app has a primary icon.
+- To regenerate the placeholder after changing the artwork, run the test with `TEST_RUNNER_WRITE_APP_ICON=1` set (for example `TEST_RUNNER_WRITE_APP_ICON=1 xcodebuild test ... -only-testing:'SpendozaTests/AppIconTests/theArtworkRendersOpaqueAt1024()'`).
+
 ## Owner checklist
 
 These need your Apple Developer account (Gravitaz LLC; Apple may ask for the DUNS number 11-904-2051) and the GitHub repo settings. None of it can be done from code.
