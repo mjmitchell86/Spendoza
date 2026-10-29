@@ -302,6 +302,48 @@ struct APIClientTests {
         #expect(log.count == 0)
     }
 
+    @Test func aTokenProviderThatCantReachTheNetworkIsOfflineWithoutARequest() async {
+        let log = stub()
+        let offline = APIClient(baseURL: base, session: StubURLProtocol.session(),
+                                accessToken: { throw URLError(.notConnectedToInternet) })
+        await expectError(.offline) { try await offline.profile() }
+        #expect(log.count == 0)
+    }
+
+    @Test func aTokenProviderErrorThatIsAlreadyAnAPIErrorPassesThrough() async {
+        let log = stub()
+        let failing = APIClient(baseURL: base, session: StubURLProtocol.session(),
+                                accessToken: { throw APIError.message("Auth is down") })
+        await expectError(.message("Auth is down")) { try await failing.profile() }
+        #expect(log.count == 0)
+    }
+
+    @Test func a404OutsideReportsIsAnError() async {
+        stub(status: 404, body: #"{"error":"Profile not found"}"#)
+        await expectError(.message("Profile not found")) { try await client().profile() }
+    }
+
+    @Test func aURLSessionCancellationIsRethrownAsIs() async {
+        StubURLProtocol.setHandler { _ in throw URLError(.cancelled) }
+        do {
+            _ = try await client().categories()
+            Issue.record("Expected URLError.cancelled")
+        } catch let error as URLError {
+            #expect(error.code == .cancelled)
+        } catch {
+            Issue.record("Expected URLError.cancelled, got \(error)")
+        }
+    }
+
+    @Test func uploadFilenameDropsLineBreaksSoItCantAddHeaders() async throws {
+        let log = stub(status: 201, body: #"{"id":"s9","file_type":"pdf","status":"uploaded","created_at":"2026-10-29T12:00:00Z"}"#)
+        let url = try tempFile(bytes: 8, name: "a\r\nX-Injected: 1\n\"b.pdf")
+        _ = try await client().uploadStatement(fileURL: url, mimeType: "application/pdf", bankName: nil)
+        let text = String(decoding: try #require(log.all.first).body, as: UTF8.self)
+        #expect(text.contains(#"filename="aX-Injected: 1'b.pdf""#))
+        #expect(!text.contains("\r\nX-Injected"))
+    }
+
     @Test func fileTooLargeNeverOverstatesTheLimit() {
         #expect(APIClient.maxStatementMB * 1_048_576 <= APIClient.maxStatementBytes)
         #expect(APIError.fileTooLarge(maxMB: 4).userMessage == "This file is too large (max 4 MB)")

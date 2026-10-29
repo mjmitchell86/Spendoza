@@ -16,6 +16,32 @@ public func signInError(_ error: Error) -> APIError {
     return .message("Couldn't sign in. Try again.")
 }
 
+/// What a failure to get an access token from supabase-swift means for an API call.
+///
+/// `nil`: there is no usable session (none is stored, or the auth server rejected it), so the call is unauthorized.
+/// Anything else is returned as the error to throw instead, and none of it may sign the person out: a network
+/// failure while refreshing the token is `.offline` (the cached account stays usable), auth-server trouble is a
+/// retryable message, and cancellation stays cancellation.
+public func tokenFailure(for error: Error) -> Error? {
+    let retry = APIError.message("Couldn't reach Spendoza. Try again.")
+    if error is CancellationError { return error }
+    if let urlError = error as? URLError {
+        return urlError.code == .cancelled ? urlError : APIError.offline
+    }
+    if let apiError = error as? APIError { return apiError }
+    guard let authError = error as? AuthError else { return retry }
+    switch authError {
+    case .sessionMissing:
+        return nil
+    case .api(_, _, _, let response):
+        // 4xx is the server rejecting this session (408 timeout and 429 rate limit are transient).
+        let status = response.statusCode
+        return (400..<500).contains(status) && status != 408 && status != 429 ? nil : retry
+    default:
+        return retry
+    }
+}
+
 /// The account was created but signing in afterwards failed; send the person to Sign in.
 public struct AccountReadyError: Error, Equatable, Sendable {
     public let email: String
@@ -47,6 +73,9 @@ public final class SessionStore {
     @ObservationIgnored public var onInteractiveSignIn: (@MainActor () -> Void)?
     /// Runs whenever the store drops to signed out (sign-out, an ended session): clear per-account caches here.
     @ObservationIgnored public var onSignOut: (@MainActor () -> Void)?
+    /// Also runs whenever the store drops to signed out, even when the phase was already `.signedOut` (signing out
+    /// from a load failure): the app lock listens here.
+    @ObservationIgnored public var onSessionEnded: (@MainActor () -> Void)?
     /// Set when sign-up created an account but the follow-up sign-in failed; Sign in prefills this email and says the account is ready.
     public private(set) var accountReadyEmail: String?
     /// The Spendoza API, authorized with this store's session.
@@ -58,7 +87,8 @@ public final class SessionStore {
     /// The signed-in user's id, if a session is stored on this device (readable offline).
     @ObservationIgnored private let sessionUserID: @MainActor () -> String?
     @ObservationIgnored private let auth: AuthClient?
-    @ObservationIgnored private var listener: Task<Void, Never>?
+    /// Clears the store when supabase-swift signs the session out. One per store.
+    @ObservationIgnored private(set) var signOutListener: Task<Void, Never>?
 
     public static let notConfiguredMessage = "This build isn't configured to sign in."
 
@@ -79,7 +109,13 @@ public final class SessionStore {
         self.isConfigured = auth != nil
         self.api = APIClient(baseURL: apiBaseURL, session: urlSession) {
             guard let auth else { return nil }
-            return try? await auth.session.accessToken
+            do {
+                // Refreshes an expired token, which needs the network.
+                return try await auth.session.accessToken
+            } catch {
+                if let failure = tokenFailure(for: error) { throw failure }
+                return nil
+            }
         }
     }
 
@@ -114,11 +150,7 @@ public final class SessionStore {
     public func restore() async {
         defer { isRestoring = false }
         guard let auth else { return }
-        listener = Task { [weak self] in
-            for await (event, _) in auth.authStateChanges where event == .signedOut {
-                self?.clear()
-            }
-        }
+        listenForSignOuts(auth.authStateChanges)
         guard auth.currentSession != nil else {
             // No session: nothing on this device may belong to a previous account.
             clear()
@@ -126,6 +158,16 @@ public final class SessionStore {
         }
         await refresh()
         restoredSession = auth.currentSession != nil
+    }
+
+    /// Starts the sign-out listener once; later calls (a second restore) do nothing.
+    func listenForSignOuts(_ events: AsyncStream<(event: AuthChangeEvent, session: Session?)>) {
+        guard signOutListener == nil else { return }
+        signOutListener = Task { [weak self] in
+            for await (event, _) in events where event == .signedOut {
+                self?.clear()
+            }
+        }
     }
 
     public func signIn(email: String, password: String) async throws {
@@ -161,7 +203,8 @@ public final class SessionStore {
         clear()
     }
 
-    /// Reloads the profile and recomputes the phase.
+    /// Reloads the profile and recomputes the phase. Only an unauthorized answer signs out (the server's 401, or no
+    /// usable session at all); being offline falls back to the cached profile, anything else shows a retry.
     public func refresh() async {
         guard let userID = sessionUserID() else { clear(); return }
         accountScope.begin(userID: userID)
@@ -202,5 +245,6 @@ public final class SessionStore {
         phase = .signedOut
         accountScope.end()
         onSignOut?()
+        onSessionEnded?()
     }
 }

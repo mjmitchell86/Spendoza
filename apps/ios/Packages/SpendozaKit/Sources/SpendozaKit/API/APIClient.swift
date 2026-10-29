@@ -9,9 +9,12 @@ public final class APIClient: SpendozaAPI {
 
     private let baseURL: URL
     private let session: URLSession
-    private let accessToken: @Sendable () async -> String?
+    private let accessToken: @Sendable () async throws -> String?
 
-    public init(baseURL: URL, session: URLSession = .shared, accessToken: @escaping @Sendable () async -> String?) {
+    /// `accessToken` returns nil when there is no session (the call is then unauthorized, with no request). It
+    /// throws when it can't tell, for example offline while refreshing an expired token: that error is the call's.
+    public init(baseURL: URL, session: URLSession = .shared,
+                accessToken: @escaping @Sendable () async throws -> String?) {
         self.baseURL = baseURL
         self.session = session
         self.accessToken = accessToken
@@ -59,7 +62,10 @@ public final class APIClient: SpendozaAPI {
         let boundary = "spendoza-\(UUID().uuidString)"
         var body = Data()
         func add(_ text: String) { body.append(Data(text.utf8)) }
-        let filename = fileURL.lastPathComponent.replacingOccurrences(of: "\"", with: "'")
+        // A quote or a line break in the name would end the header early (or add one).
+        let filename = fileURL.lastPathComponent
+            .replacingOccurrences(of: "\"", with: "'")
+            .filter { $0 != "\r" && $0 != "\n" && $0 != "\r\n" }
         add("--\(boundary)\r\n")
         add("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
         add("Content-Type: \(mimeType)\r\n\r\n")
@@ -119,7 +125,11 @@ public final class APIClient: SpendozaAPI {
     private func perform(_ endpoint: Endpoint, contentType: String? = nil, notFoundIsNil: Bool) async throws -> Data? {
         var token: String?
         if endpoint.requiresAuth {
-            token = await accessToken()
+            do {
+                token = try await accessToken()
+            } catch let error as URLError where error.code != .cancelled {
+                throw APIError.offline
+            }
             guard token != nil else { throw APIError.unauthorized }
         }
 
