@@ -13,6 +13,16 @@ public struct Transaction: Decodable, Sendable, Equatable, Identifiable {
     public let type: TransactionType
     public let category: String?
 
+    public init(id: String, date: String, description: String, amount: Double,
+                type: TransactionType, category: String?) {
+        self.id = id
+        self.date = date
+        self.description = description
+        self.amount = amount
+        self.type = type
+        self.category = category
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, date, description, amount, type
         case category = "ai_category"
