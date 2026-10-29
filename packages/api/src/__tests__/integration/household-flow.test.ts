@@ -16,7 +16,6 @@ const householdData = {
   id: HOUSEHOLD_ID,
   name: "Smith Family",
   head_of_household_id: HEAD_USER_ID,
-  invite_code: INVITE_CODE,
   created_at: "2026-01-01T00:00:00Z",
 };
 
@@ -51,6 +50,8 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
 
     const makeEqChain = (): any => ({
       eq: () => makeEqChain(),
+      gt: () => makeEqChain(),
+      ilike: () => makeEqChain(),
       gte: () => makeEqChain(),
       lte: () => makeEqChain(),
       or: () => makeEqChain(),
@@ -104,6 +105,18 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
         });
         return { eq: () => makeUpdateEq() };
       },
+      upsert: (data: any) => {
+        calls.push({ table, op: "upsert", args: data });
+        return {
+          select: () =>
+            Promise.resolve(
+              cfg.upsertResult ?? {
+                data: [{ household_id: data.household_id, code: data.code }],
+                error: null,
+              }
+            ),
+        };
+      },
       delete: () => {
         calls.push({ table, op: "delete" });
         return {
@@ -150,8 +163,14 @@ const mockAdminFrom = mock((...args: any[]) =>
 // ---------------------------------------------------------------------------
 // Mock the household service for deterministic invite code
 // ---------------------------------------------------------------------------
+mock.module("../../services/email.service", () => ({
+  sendHouseholdInvitationEmail: () => Promise.resolve(),
+  sendReportEmail: () => Promise.resolve({ success: true }),
+}));
 mock.module("../../services/household.service", () => ({
   generateInviteCode: () => INVITE_CODE,
+  generateHouseholdCode: () => INVITE_CODE,
+  deleteHousehold: () => Promise.resolve(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -268,7 +287,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     currentUserEmail = HEAD_EMAIL;
     resetResults();
 
-    // POST /:id/invite uses req.supabase (RLS client) for all queries
+    // POST /:id/invite checks the head and counts members with the RLS client
     rlsResults = {
       households: {
         selectSingle: { data: householdData, error: null },
@@ -306,6 +325,12 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     adminResults = {
       households: {
         selectSingle: { data: householdData, error: null },
+      },
+      household_invite_codes: {
+        selectSingle: {
+          data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+          error: null,
+        },
       },
       profiles: {
         selectSingle: { data: { ...memberProfile, household_id: null }, error: null },
@@ -418,7 +443,14 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
       households: {
         selectSingle: { data: householdData, error: null },
       },
+      household_invite_codes: {
+        selectSingle: {
+          data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+          error: null,
+        },
+      },
       profiles: {
+        selectMaybeSingle: { data: { id: MEMBER_USER_ID }, error: null },
         updateResult: { data: null, error: null },
       },
     };
@@ -472,6 +504,12 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     adminResults = {
       households: {
         selectSingle: { data: householdData, error: null },
+      },
+      household_invite_codes: {
+        selectSingle: {
+          data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+          error: null,
+        },
       },
       profiles: {
         selectSingle: {

@@ -7,6 +7,7 @@ import {
   generateAllReports,
   getReport,
 } from "../services/report.service";
+import { requireHouseholdPlan } from "../middleware/require-household-plan";
 import { toServiceContext } from "../services/context";
 import {
   generatePersonalPdfForUser,
@@ -51,7 +52,7 @@ router.get("/personal", requireAuth, async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 // GET /household — get latest household report
 // ---------------------------------------------------------------------------
-router.get("/household", requireAuth, async (req: Request, res: Response) => {
+router.get("/household", requireAuth, requireHouseholdPlan("callerOrHead"), async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const month = parseMonth(req.query.month as string | undefined);
   const ctx = toServiceContext(authReq);
@@ -225,6 +226,7 @@ router.get(
 router.get(
   "/export/household",
   requireAuth,
+  requireHouseholdPlan("callerOrHead"),
   async (req: Request, res: Response) => {
     try {
       const { user, supabase: db } = req as AuthenticatedRequest;

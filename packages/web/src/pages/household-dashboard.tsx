@@ -44,10 +44,15 @@ import { SavingsRateCard } from "@/components/dashboard/savings-rate-card";
 import { TopExpensesList } from "@/components/dashboard/top-expenses-list";
 import { AiInsightsCard } from "@/components/dashboard/ai-insights-card";
 import { CreateHousehold } from "@/components/household/create-household";
+import { MyInvitations } from "@/components/household/my-invitations";
 import { JoinHousehold } from "@/components/household/join-household";
 import { MemberList } from "@/components/household/member-list";
 import { InviteForm } from "@/components/household/invite-form";
 import { SharingConfig } from "@/components/household/sharing-config";
+import { PendingInvitations } from "@/components/household/pending-invitations";
+import { HouseholdSettings } from "@/components/household/household-settings";
+import { PlanRequired } from "@/components/plan-error";
+import { isPlanError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import {
   TimePeriodFilter,
@@ -272,6 +277,8 @@ function HouseholdGoalsTab({ householdId }: { householdId: string }) {
         <div className="flex items-center justify-center py-12">
           <RefreshCw className="size-5 animate-spin text-muted-foreground" />
         </div>
+      ) : error && isPlanError(error) ? (
+        <PlanRequired />
       ) : error ? (
         <div className="flex flex-col items-center justify-center gap-2 py-12">
           <p className="text-sm text-destructive">
@@ -391,7 +398,28 @@ export function HouseholdPage() {
     );
   }
 
-  // Tier gate — Pro required (show benefits page for non-Pro users without a household)
+  // Error state (a 404 "no household" comes back as null, not an error)
+  if (householdError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-12">
+        {isPlanError(householdError) ? (
+          <PlanRequired />
+        ) : (
+          <p className="text-sm text-destructive">
+            {householdError instanceof Error
+              ? householdError.message
+              : "Failed to load household"}
+          </p>
+        )}
+        <Button variant="outline" size="sm" onClick={() => void refetchHousehold()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  // Creating a household needs Pro; joining with a code or an invitation
+  // works on any plan (the household's head must be on Pro).
   if (profile && profile.subscription_tier !== "pro" && !household) {
     const benefits = [
       { icon: Users, title: "Shared Dashboard", description: "View combined income, expenses, and savings across all household members in one place." },
@@ -410,6 +438,10 @@ export function HouseholdPage() {
           </p>
         </div>
 
+        <MyInvitations />
+
+        <JoinHousehold />
+
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
@@ -418,7 +450,7 @@ export function HouseholdPage() {
             <div>
               <h2 className="text-xl font-semibold">Unlock Household Features</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Upgrade to the Pro plan to create or join a household and manage finances as a team.
+                Upgrade to the Pro plan to create a household and manage finances as a team.
               </p>
             </div>
           </CardContent>
@@ -461,22 +493,6 @@ export function HouseholdPage() {
     );
   }
 
-  // Error state
-  if (householdError) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 py-12">
-        <p className="text-sm text-destructive">
-          {householdError instanceof Error
-            ? householdError.message
-            : "Failed to load household"}
-        </p>
-        <Button variant="outline" size="sm" onClick={() => void refetchHousehold()}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
   // No household — show create/join
   if (!household) {
     return (
@@ -487,6 +503,7 @@ export function HouseholdPage() {
             Create or join a household to share finances with your family
           </p>
         </div>
+        <MyInvitations />
         <div className="grid gap-6 sm:grid-cols-2">
           <CreateHousehold />
           <JoinHousehold />
@@ -518,6 +535,10 @@ export function HouseholdPage() {
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <RefreshCw className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : error && isPlanError(error) ? (
+            <div className="py-12">
+              <PlanRequired />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center gap-2 py-12">
@@ -691,6 +712,21 @@ export function HouseholdPage() {
                 </CardHeader>
                 <CardContent>
                   <InviteForm inviteCode={household.invite_code} />
+                  <div className="mt-4">
+                    <PendingInvitations />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Rename / delete (head only) */}
+            {isHead && (
+              <Card>
+                <CardHeader className="pb-0">
+                  <CardTitle>Household Settings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <HouseholdSettings key={household.name} name={household.name} />
                 </CardContent>
               </Card>
             )}

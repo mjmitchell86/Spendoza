@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { ApiError } from "./api-error";
 
 export const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
@@ -17,9 +18,18 @@ export async function apiClient(path: string, options?: RequestInit) {
     },
   });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "API request failed");
+    let body: unknown = null;
+    try {
+      body = await response.json();
+    } catch {
+      // Response may not be JSON
+    }
+    const message =
+      (body as { error?: string } | null)?.error || "API request failed";
+    throw new ApiError(message, response.status, body);
   }
+  // 204 No Content (deletes, revokes) has no body to parse.
+  if (response.status === 204) return undefined;
   return response.json();
 }
 
