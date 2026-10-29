@@ -1,0 +1,5 @@
+// Dev (Debug) configuration. Copy Secrets.example.xcconfig to Secrets.Dev.xcconfig
+// (gitignored) and fill in SUPABASE_URL and SUPABASE_ANON_KEY.
+// "//" starts a comment in xcconfig, so URLs are written as https:/$()/host.
+API_BASE_URL = https:/$()/test-api.spendoza.io
+#include? "Secrets.Dev.xcconfig"

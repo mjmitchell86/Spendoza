@@ -725,6 +725,18 @@ erDiagram
     }
 ```
 
+## iOS app
+
+The native SwiftUI iPhone app lives in `apps/ios/` (iOS 26+, Xcode 26+).
+
+```bash
+brew install xcodegen
+cd apps/ios && xcodegen && open Spendoza.xcodeproj
+scripts/test.sh   # SpendozaKit package tests + app tests on the newest iPhone simulator
+```
+
+Copy `Configurations/Secrets.example.xcconfig` to `Secrets.Dev.xcconfig` (and `Secrets.Prod.xcconfig`) and fill in the Supabase URL and anon key. These files are gitignored; tests do not need real values.
+
 ## CI/CD
 
 ```mermaid

@@ -1,0 +1,88 @@
+name: Spendoza
+options:
+  bundleIdPrefix: com.gravitaz
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Configurations/Dev.xcconfig
+  Release: Configurations/Prod.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    VERSIONING_SYSTEM: apple-generic
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  SpendozaKit:
+    path: Packages/SpendozaKit
+targets:
+  Spendoza:
+    type: application
+    platform: iOS
+    sources:
+      - path: Spendoza
+        excludes:
+          - Info.plist
+    dependencies:
+      - package: SpendozaKit
+    info:
+      path: Spendoza/Info.plist
+      properties:
+        CFBundleDisplayName: Spendoza
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        APIBaseURL: "$(API_BASE_URL)"
+        SupabaseURL: "$(SUPABASE_URL)"
+        SupabaseAnonKey: "$(SUPABASE_ANON_KEY)"
+    entitlements:
+      path: Spendoza/Spendoza.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.gravitaz.spendoza]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gravitaz.spendoza
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          CODE_SIGNING_ALLOWED: NO
+  SpendozaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: SpendozaTests
+    dependencies:
+      - target: Spendoza
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gravitaz.spendoza.tests
+        GENERATE_INFOPLIST_FILE: YES
+  SpendozaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: SpendozaUITests
+    dependencies:
+      - target: Spendoza
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gravitaz.spendoza.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Spendoza:
+    build:
+      targets:
+        Spendoza: all
+        SpendozaTests: [test]
+        SpendozaUITests: [test]
+    test:
+      targets:
+        - SpendozaTests

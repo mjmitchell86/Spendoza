@@ -1,0 +1,4 @@
+// Prod (Release) configuration. CI writes Secrets.Prod.xcconfig (gitignored) from GitHub secrets.
+// "//" starts a comment in xcconfig, so URLs are written as https:/$()/host.
+API_BASE_URL = https:/$()/api.spendoza.io
+#include? "Secrets.Prod.xcconfig"
