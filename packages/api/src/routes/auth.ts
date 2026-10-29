@@ -6,6 +6,7 @@ import {
   normalizeInviteCode,
 } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
+import { householdHeadOnPro } from "../middleware/require-household-plan";
 import { supabaseAdmin } from "../lib/supabase";
 import {
   addToHousehold,
@@ -76,8 +77,16 @@ router.post("/signup", validate(signupSchema), async (req: Request, res: Respons
     return res.status(201).json({ user: data.user, joined_household: false });
   }
 
-  // Household invitation: join unless the household is full (the account is
-  // still created; the invitation stays pending)
+  // Household invitation: join unless the household's head is off Pro or the
+  // household is full (the account is still created; the invitation stays pending)
+  if (!(await householdHeadOnPro(invitation!.household_id))) {
+    return res.status(201).json({
+      user: data.user,
+      joined_household: false,
+      household_not_on_plan: true,
+    });
+  }
+
   const failure = await addToHousehold(
     { id: data.user.id, email: data.user.email ?? email },
     invitation!.household_id

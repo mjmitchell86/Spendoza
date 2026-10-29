@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, mock } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, mock } from "bun:test";
 import type { Server } from "http";
 import type { Router } from "express";
 
@@ -29,6 +29,7 @@ interface Invitation {
 let invitations: Invitation[] = [];
 let memberCount = 0;
 let genericCodeValid = false;
+let headTier = "pro";
 let calls: Call[] = [];
 
 const mockCreateUser = mock((_args: Record<string, unknown>) =>
@@ -60,13 +61,19 @@ function resolve(c: Call): { data: unknown; error: unknown } {
     return inv ? { data: inv, error: null } : NOT_FOUND;
   }
   if (c.table === "profiles" && c.op === "select") {
-    if (c.filters.some((f) => f[1] === "id")) {
-      return { data: { household_id: null }, error: null };
+    const idFilter = c.filters.find((f) => f[1] === "id");
+    if (idFilter) {
+      return idFilter[2] === "head-1"
+        ? { data: { subscription_tier: headTier }, error: null }
+        : { data: { household_id: null }, error: null };
     }
     return {
       data: Array.from({ length: memberCount }, (_, i) => ({ id: `m${i}` })),
       error: null,
     };
+  }
+  if (c.table === "households" && c.op === "select") {
+    return { data: { head_of_household_id: "head-1" }, error: null };
   }
   if (c.table === "household_invitations" && c.op === "update") {
     for (const inv of invitations) {
@@ -140,6 +147,7 @@ beforeEach(() => {
   calls = [];
   memberCount = 1;
   genericCodeValid = false;
+  headTier = "pro";
   invitations = [invitation()];
   mockCreateUser.mockClear();
 });
@@ -239,5 +247,42 @@ describe("POST /api/auth/signup with a household invitation code", () => {
     expect(body.joined_household).toBe(false);
     expect(calls.some((c) => c.table === "household_invitations")).toBe(false);
     expect(profileUpdates()).toHaveLength(0);
+  });
+
+  describe("with plan checks on", () => {
+    const original = process.env.STRIPE_SECRET_KEY;
+    beforeEach(() => {
+      process.env.STRIPE_SECRET_KEY = "sk_test_123";
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.STRIPE_SECRET_KEY;
+      else process.env.STRIPE_SECRET_KEY = original;
+    });
+
+    it("joins a free new user to a Pro head's household", async () => {
+      const res = await signup();
+      expect(res.status).toBe(201);
+      expect((await res.json()).joined_household).toBe(true);
+      expect(invitations[0].status).toBe("accepted");
+    });
+
+    it("creates the account but does not join when the head is not on Pro", async () => {
+      headTier = "free";
+      const res = await signup();
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.joined_household).toBe(false);
+      expect(body.household_not_on_plan).toBe(true);
+      expect(body.household_full).toBeUndefined();
+      expect(mockCreateUser).toHaveBeenCalledTimes(1);
+      expect(profileUpdates()).toHaveLength(0);
+      expect(invitations[0].status).toBe("pending");
+    });
+  });
+
+  it("joins regardless of the head's plan when plan checks are off", async () => {
+    headTier = "free";
+    const res = await signup();
+    expect((await res.json()).joined_household).toBe(true);
   });
 });

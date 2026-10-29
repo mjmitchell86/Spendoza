@@ -17,6 +17,7 @@ import {
   invitationCodeSchema,
 } from "@spendoza/shared";
 import { validate } from "../middleware/validate";
+import { requireHouseholdPlan } from "../middleware/require-household-plan";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import {
@@ -781,13 +782,19 @@ const inviteLimiter = rateLimit({
   message: { error: "Too many invitations. Try again later." },
 });
 
+// Plan rule: head-only management and creating a household need the caller
+// on Pro; member actions pass when the caller or the household's head is.
+const caller = requireHouseholdPlan("caller");
+const callerOrHead = requireHouseholdPlan("callerOrHead");
+
 // ---------------------------------------------------------------------------
 // Routes without household ID (resolve from user's profile)
 // These MUST be registered before /:id routes to avoid path conflicts.
 // ---------------------------------------------------------------------------
-router.get("/", resolveHousehold, getHouseholdHandler);
+router.get("/", resolveHousehold, callerOrHead, getHouseholdHandler);
 router.post(
   "/",
+  caller,
   validate(createHouseholdSchema),
   async (req, res: Response) => {
     const { user, supabase: db } = req as AuthenticatedRequest;
@@ -842,30 +849,39 @@ router.post(
 router.put(
   "/sharing",
   resolveHousehold,
+  callerOrHead,
   validate(updateSharingSchema),
   updateSharingHandler
 );
 router.post(
   "/invite",
+  caller,
   inviteLimiter,
   resolveHousehold,
   validate(inviteToHouseholdSchema),
   inviteHandler
 );
-router.post("/invite-code", resolveHousehold, rotateInviteCodeHandler);
+router.post(
+  "/invite-code",
+  caller,
+  resolveHousehold,
+  rotateInviteCodeHandler
+);
 router.patch(
   "/",
+  caller,
   resolveHousehold,
   validate(renameHouseholdSchema),
   renameHandler
 );
 router.delete(
   "/",
+  caller,
   resolveHousehold,
   validate(deleteHouseholdSchema),
   deleteHouseholdHandler
 );
-router.post("/leave", resolveHousehold, leaveHandler);
+router.post("/leave", resolveHousehold, callerOrHead, leaveHandler);
 // Invitation codes are guessable credentials, so cap failed attempts per user
 // (accept and decline share the budget).
 const invitationAttemptLimiter = rateLimit({
@@ -875,12 +891,19 @@ const invitationAttemptLimiter = rateLimit({
   keyGenerator: (req) => (req as AuthenticatedRequest).user.id,
   message: { error: "Too many attempts. Try again in 15 minutes." },
 });
-router.get("/invitations", resolveHousehold, listInvitationsHandler);
-// The invitee routes act on the caller's own email, not a household
+router.get(
+  "/invitations",
+  caller,
+  resolveHousehold,
+  listInvitationsHandler
+);
+// The invitee routes act on the caller's own email, not a household. Listing
+// and declining open no household, so they are allowed on any plan.
 router.get("/invitations/mine", myInvitationsHandler);
 router.post(
   "/invitations/:invitationId/accept",
   invitationAttemptLimiter,
+  callerOrHead,
   acceptInvitationHandler
 );
 router.post(
@@ -890,6 +913,7 @@ router.post(
 );
 router.delete(
   "/invitations/:invitationId",
+  caller,
   resolveHousehold,
   revokeInvitationHandler
 );
@@ -905,36 +929,60 @@ router.post(
   "/join",
   joinByCodeLimiter,
   validate(joinHouseholdSchema),
+  callerOrHead,
   joinByCodeHandler
 );
 router.post(
   "/transfer",
+  caller,
   resolveHousehold,
   validate(transferOwnershipSchema),
   transferOwnershipHandler
 );
-router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
+router.delete(
+  "/members/:userId",
+  caller,
+  resolveHousehold,
+  removeMemberHandler
+);
 
 // ---------------------------------------------------------------------------
 // Routes with explicit household ID
 // ---------------------------------------------------------------------------
-router.get("/:id", getHouseholdHandler);
-router.patch("/:id", validate(renameHouseholdSchema), renameHandler);
-router.delete("/:id", validate(deleteHouseholdSchema), deleteHouseholdHandler);
+router.get("/:id", callerOrHead, getHouseholdHandler);
+router.patch("/:id", caller, validate(renameHouseholdSchema), renameHandler);
+router.delete(
+  "/:id",
+  caller,
+  validate(deleteHouseholdSchema),
+  deleteHouseholdHandler
+);
 router.post(
   "/:id/invite",
+  caller,
   inviteLimiter,
   validate(inviteToHouseholdSchema),
   inviteHandler
 );
-router.post("/:id/invite-code", rotateInviteCodeHandler);
-router.post("/:id/join", validate(joinHouseholdSchema), joinHandler);
+router.post("/:id/invite-code", caller, rotateInviteCodeHandler);
+router.post(
+  "/:id/join",
+  validate(joinHouseholdSchema),
+  callerOrHead,
+  joinHandler
+);
 router.post(
   "/:id/transfer",
+  caller,
   validate(transferOwnershipSchema),
   transferOwnershipHandler
 );
-router.delete("/:id/members/:userId", removeMemberHandler);
-router.put("/:id/sharing", validate(updateSharingSchema), updateSharingHandler);
+router.delete("/:id/members/:userId", caller, removeMemberHandler);
+router.put(
+  "/:id/sharing",
+  callerOrHead,
+  validate(updateSharingSchema),
+  updateSharingHandler
+);
 
 export default router;
