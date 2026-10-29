@@ -8,6 +8,7 @@ import {
   Mail,
   Monitor,
   Moon,
+  ShieldAlert,
   Sun,
   Trash2,
 } from "lucide-react";
@@ -485,6 +486,33 @@ export function ProfilePage() {
           </dl>
         </CardContent>
       </Card>
+
+      {/* Admin — the sidebar link isn't in the mobile nav, so admins get a path here too */}
+      {profile?.is_admin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert className="size-4" />
+              Admin
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Usage, users and reports across Spendoza.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/admin">Admin dashboard</Link>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/admin/users">Users</Link>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Danger Zone */}
       <Card className="border-destructive/50">
