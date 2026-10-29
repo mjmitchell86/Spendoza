@@ -60,7 +60,8 @@ const sections: { heading: string; body: ReactNode }[] = [
         <p>
           The file itself is deleted once processing finishes. If processing fails, the file is kept
           so you can retry, until you retry successfully or remove the statement. Removing it
-          deletes the file. Spendoza doesn't store your account balances or your full account
+          deletes the file. If a statement ever gets stuck processing, email <Email /> and we'll
+          remove it and its file. Spendoza doesn't store your account balances or your full account
           number.
         </p>
       </>
