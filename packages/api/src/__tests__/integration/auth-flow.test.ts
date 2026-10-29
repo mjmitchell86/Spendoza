@@ -199,7 +199,7 @@ describe("Auth Flow: Signup -> Login -> Profile -> Onboarding", () => {
         email: TEST_EMAIL,
         password: "securepass123",
         display_name: "Integration User",
-        invite_code: "Chloe14",
+        invite_code: "WELCOME1",
       }),
     });
 
