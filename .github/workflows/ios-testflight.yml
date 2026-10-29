@@ -1,7 +1,7 @@
 name: iOS TestFlight
 
 # Manual only: Actions > iOS TestFlight > Run workflow. Needs the owner's Apple setup and secrets;
-# see docs/ios-ci-cd.md.
+# see docs/ios-ci-cd.md. Secrets are scoped to the steps that need them.
 on:
   workflow_dispatch:
 
@@ -15,27 +15,30 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 45
     defaults:
       run:
         working-directory: apps/ios
-    env:
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
-      IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
-      IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
-      IOS_PROVISIONING_PROFILE_APP: ${{ secrets.IOS_PROVISIONING_PROFILE_APP }}
-      IOS_PROVISIONING_PROFILE_WIDGETS: ${{ secrets.IOS_PROVISIONING_PROFILE_WIDGETS }}
-      PROD_SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
-      PROD_SUPABASE_ANON_KEY: ${{ secrets.PROD_SUPABASE_ANON_KEY }}
-      BUILD_NUMBER: ${{ github.run_number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        with:
+          xcode-version: '26.3'
 
       - name: Check required secrets
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_APP: ${{ secrets.IOS_PROVISIONING_PROFILE_APP }}
+          IOS_PROVISIONING_PROFILE_WIDGETS: ${{ secrets.IOS_PROVISIONING_PROFILE_WIDGETS }}
+          PROD_SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
+          PROD_SUPABASE_ANON_KEY: ${{ secrets.PROD_SUPABASE_ANON_KEY }}
         run: |
           missing=""
           for name in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_CONTENT \
@@ -48,7 +51,7 @@ jobs:
             exit 1
           fi
 
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1.335.0
         with:
           ruby-version: '3.4'
           bundler-cache: true
@@ -58,6 +61,9 @@ jobs:
         run: brew install xcodegen && xcodegen generate
 
       - name: Write production Supabase config
+        env:
+          PROD_SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
+          PROD_SUPABASE_ANON_KEY: ${{ secrets.PROD_SUPABASE_ANON_KEY }}
         run: |
           # "//" starts an xcconfig comment, so https://host is written as https:/$()/host.
           # shellcheck disable=SC2016  # the literal $() is intended
@@ -66,4 +72,14 @@ jobs:
             > Configurations/Secrets.Prod.xcconfig
 
       - name: Build and upload to TestFlight
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_APP: ${{ secrets.IOS_PROVISIONING_PROFILE_APP }}
+          IOS_PROVISIONING_PROFILE_WIDGETS: ${{ secrets.IOS_PROVISIONING_PROFILE_WIDGETS }}
+          BUILD_NUMBER: ${{ github.run_number }}
         run: bundle exec fastlane beta
