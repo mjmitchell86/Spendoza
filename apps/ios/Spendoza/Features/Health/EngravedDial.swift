@@ -44,14 +44,14 @@ struct EngravedDial: View {
     let score: Int
     let previousScore: Int?
     let size: DialSize
-    /// The check-up month; only used for the spoken label ("... since September"). Defaults to the current month.
+    /// The check-up month; only used for the spoken label ("... since September"). Required: it is the month the score is for, not the current one.
     let month: Month
 
-    init(score: Int, previousScore: Int?, size: DialSize, month: Month? = nil) {
+    init(score: Int, previousScore: Int?, size: DialSize, month: Month) {
         self.score = score
         self.previousScore = previousScore
         self.size = size
-        self.month = month ?? Month(date: .now, calendar: .current)
+        self.month = month
     }
 
     var body: some View {
@@ -132,13 +132,14 @@ struct EngravedDial: View {
         var layer = ctx
         layer.clip(to: Path(CGRect(x: 0, y: 0, width: m.canvas.width, height: m.hub.y)))
         layer.opacity = 0.5
+        // One combined path stroked once, so crossings stay as light as single strokes (the mockup's group opacity).
         let ellipse = Path(ellipseIn: CGRect(x: -86, y: -38, width: 172, height: 76))
+        var engraving = Path()
         for step in 0..<12 {
-            var rotated = layer
-            rotated.translateBy(x: m.hub.x, y: m.hub.y)
-            rotated.rotate(by: .degrees(Double(step) * 15))
-            rotated.stroke(ellipse, with: .color(Theme.note), lineWidth: 0.45)
+            let transform = CGAffineTransform(translationX: m.hub.x, y: m.hub.y).rotated(by: Double(step) * 15 * .pi / 180)
+            engraving.addPath(ellipse, transform: transform)
         }
+        layer.stroke(engraving, with: .color(Theme.note), lineWidth: 0.45)
     }
 }
 
