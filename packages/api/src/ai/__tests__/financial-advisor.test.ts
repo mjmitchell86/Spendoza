@@ -140,6 +140,17 @@ describe("generateFinancialAdvice", () => {
     expect(prompt).toContain("Should I pay off debt first?");
   });
 
+  it("prints the stored savings_rate as a percentage without re-scaling it", async () => {
+    // report_data.savings_rate is stored as a percentage (0-100), e.g. 30 = 30%
+    mockInvoke.mockResolvedValueOnce({ content: "ok", usage_metadata: null });
+
+    await generateFinancialAdvice("How am I doing?", sampleContext, "user-123");
+
+    const prompt = mockInvoke.mock.calls[0][0][1].content as string;
+    expect(prompt).toContain("Savings Rate 30.0%");
+    expect(prompt).not.toContain("3000.0%");
+  });
+
   it("throws error when LLM call fails", async () => {
     mockInvoke.mockRejectedValueOnce(new Error("API timeout"));
 

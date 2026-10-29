@@ -12,7 +12,7 @@ export function registerReportTools(
   if (allowed.has("get_report")) {
     server.tool(
       "get_report",
-      "Get the personal financial report for a given month, including detailed breakdowns, AI insights, health score, and allocation analysis. Defaults to the current month.",
+      "Get the personal financial report for a given month, including detailed breakdowns, AI insights, health score, and allocation analysis. Defaults to the current month. report_data.savings_rate is a percentage (e.g. 21.1 means 21.1%).",
       {
         month: z
           .string()

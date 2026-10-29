@@ -5,6 +5,7 @@ import { apiClient } from "@/lib/api";
 export interface DashboardSummary {
   total_income: number;
   total_expenses: number;
+  /** Percentage (0-100), e.g. 21.06 = 21.06%. Not a 0-1 fraction. */
   savings_rate: number;
   net: number;
 }

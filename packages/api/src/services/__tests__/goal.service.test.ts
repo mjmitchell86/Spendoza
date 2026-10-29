@@ -589,6 +589,22 @@ describe("getGoalSuggestions", () => {
     expect(data!.suggestions).toHaveLength(0);
     expect(data!.report_month).toBeNull();
   });
+
+  it("degrades to empty suggestions with a message when the AI call fails", async () => {
+    mockGenerateGoalSuggestions.mockImplementationOnce(() =>
+      Promise.reject(new Error("Request timed out."))
+    );
+
+    const { data, error } = await getGoalSuggestions(ctx);
+
+    expect(error).toBeNull();
+    expect(data!.suggestions).toEqual([]);
+    expect(data!.report_month).toBe("2026-03-01");
+    expect(data!.message).toBe(
+      "Goal suggestions are temporarily unavailable. Please try again later."
+    );
+    expect(mockAdminUpdate).not.toHaveBeenCalled();
+  });
 });
 
 // ===========================================================================
