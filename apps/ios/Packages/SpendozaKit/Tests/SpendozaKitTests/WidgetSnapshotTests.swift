@@ -18,6 +18,12 @@ struct WidgetSnapshotTests {
         #expect(Set(object.keys).isSubset(of: ["score", "band", "previousScore", "month"]))
     }
 
+    @Test func bandIsStoredAsPlainString() throws {
+        let data = try JSONEncoder().encode(snapshot)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["band"] as? String == "good")
+    }
+
     @Test func roundTrips() throws {
         let data = try JSONEncoder().encode(snapshot)
         #expect(try JSONDecoder().decode(WidgetSnapshot.self, from: data) == snapshot)

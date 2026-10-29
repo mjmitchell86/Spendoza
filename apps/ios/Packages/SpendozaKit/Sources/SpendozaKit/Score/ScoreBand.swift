@@ -1,7 +1,7 @@
 import Foundation
 
 /// Low 0-39, Fair 40-69, Good 70-100.
-public enum ScoreBand: Sendable, Equatable, Codable {
+public enum ScoreBand: String, Codable, Sendable, Equatable {
     case low, fair, good
 
     public init(score: Int) {
