@@ -16,6 +16,24 @@ export const createHouseholdSchema = z.object({
 export type CreateHouseholdInput = z.infer<typeof createHouseholdSchema>;
 
 // ---------------------------------------------------------------------------
+// Rename household
+// ---------------------------------------------------------------------------
+export const renameHouseholdSchema = z.object({
+  name: z.string().min(1).max(100),
+});
+
+export type RenameHouseholdInput = z.infer<typeof renameHouseholdSchema>;
+
+// ---------------------------------------------------------------------------
+// Delete household (the head types the household name to confirm)
+// ---------------------------------------------------------------------------
+export const deleteHouseholdSchema = z.object({
+  confirm_name: z.string(),
+});
+
+export type DeleteHouseholdInput = z.infer<typeof deleteHouseholdSchema>;
+
+// ---------------------------------------------------------------------------
 // Invite member
 // ---------------------------------------------------------------------------
 export const inviteToHouseholdSchema = z.object({

@@ -59,6 +59,61 @@ export async function resolveEntity(
   };
 }
 
+const HOUSEHOLD_OWNED_TABLES = [
+  "reports",
+  "goals",
+  "debts",
+  "email_jobs",
+  "email_report_log",
+] as const;
+
+/**
+ * Delete a household and everything it owns. Members stay (their
+ * household_id is cleared) along with all of their personal data; only rows
+ * with entity_type = 'household' for this household are removed. The invite
+ * code row goes with the household via its FK cascade.
+ */
+export async function deleteHousehold(householdId: string): Promise<void> {
+  // Loaded lazily: this module is imported by services that otherwise never
+  // touch the admin client (and by their tests, which have no Supabase env).
+  const { supabaseAdmin } = await import("../lib/supabase");
+  const check = (error: { message: string } | null) => {
+    if (error) throw new Error(error.message);
+  };
+
+  check(
+    (
+      await supabaseAdmin
+        .from("profiles")
+        .update({ household_id: null })
+        .eq("household_id", householdId)
+    ).error
+  );
+  check(
+    (
+      await supabaseAdmin
+        .from("household_invitations")
+        .delete()
+        .eq("household_id", householdId)
+    ).error
+  );
+  for (const table of HOUSEHOLD_OWNED_TABLES) {
+    check(
+      (
+        await supabaseAdmin
+          .from(table)
+          .delete()
+          .eq("entity_type", "household")
+          .eq("entity_id", householdId)
+      ).error
+    );
+  }
+  check(
+    (await supabaseAdmin.from("households").delete().eq("id", householdId))
+      .error
+  );
+}
+
 export async function validateHouseholdMembership(
   ctx: ServiceContext,
   targetUserId: string

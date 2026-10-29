@@ -201,9 +201,11 @@ const mockGetUser = mock(() =>
 // ---------------------------------------------------------------------------
 // Mock the household service to return a deterministic invite code
 // ---------------------------------------------------------------------------
+const mockDeleteHousehold = mock((_householdId: string) => Promise.resolve());
 mock.module("../../services/household.service", () => ({
   generateInviteCode: () => INVITE_CODE,
   generateHouseholdCode: () => NEW_HOUSEHOLD_CODE,
+  deleteHousehold: mockDeleteHousehold,
 }));
 
 // ---------------------------------------------------------------------------
@@ -266,6 +268,7 @@ beforeEach(() => {
   mockRlsFrom.mockClear();
   mockAdminFrom.mockClear();
   mockGetUser.mockClear();
+  mockDeleteHousehold.mockClear();
 
   // Reset to successful defaults
   mockGetUser.mockImplementation(() =>
@@ -1104,5 +1107,141 @@ describe("POST /api/households/:id/transfer", () => {
     const body = await res.json();
     expect(body.head_of_household_id).toBe("user-456");
     expect("invite_code" in body).toBe(false);
+  });
+});
+
+// ===========================================================================
+// PATCH /api/household - rename (head only)
+// ===========================================================================
+describe("PATCH /api/households/:id", () => {
+  const patch = (body: unknown) =>
+    fetch(`${baseUrl}/api/households/${HOUSEHOLD_ID}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+  it("lets the head rename the household", async () => {
+    adminResults.households.updateSingle = {
+      data: { ...householdData, name: "New Name" },
+      error: null,
+    };
+
+    const res = await patch({ name: "New Name" });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.name).toBe("New Name");
+    expect(body.invite_code).toBe(INVITE_CODE);
+    expect(adminCalls).toContainEqual({
+      table: "households",
+      op: "update",
+      args: { name: "New Name" },
+    });
+  });
+
+  it("returns 403 for a member who is not the head", async () => {
+    rlsResults.households.selectSingle = {
+      data: { ...householdData, head_of_household_id: "user-456" },
+      error: null,
+    };
+
+    const res = await patch({ name: "New Name" });
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(
+      "Only the head of household can rename the household"
+    );
+    expect(adminCalls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("returns 400 for an empty name", async () => {
+    const res = await patch({ name: "" });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ===========================================================================
+// DELETE /api/household - delete (head only, confirm by name)
+// ===========================================================================
+describe("DELETE /api/households/:id", () => {
+  const del = (body: unknown) =>
+    fetch(`${baseUrl}/api/households/${HOUSEHOLD_ID}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+  it("deletes the household when the head types the exact name", async () => {
+    const res = await del({ confirm_name: "Test Household" });
+
+    expect(res.status).toBe(204);
+    expect(mockDeleteHousehold).toHaveBeenCalledTimes(1);
+    expect(mockDeleteHousehold).toHaveBeenCalledWith(HOUSEHOLD_ID);
+  });
+
+  it.each(["test household", "Test Household ", ""])(
+    "returns 400 and deletes nothing when the name is %p",
+    async (confirm_name) => {
+      const res = await del({ confirm_name });
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe(
+        "Type the household name to confirm"
+      );
+      expect(mockDeleteHousehold).not.toHaveBeenCalled();
+    }
+  );
+
+  it("returns 403 for a member who is not the head", async () => {
+    rlsResults.households.selectSingle = {
+      data: { ...householdData, head_of_household_id: "user-456" },
+      error: null,
+    };
+
+    const res = await del({ confirm_name: "Test Household" });
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(
+      "Only the head of household can delete the household"
+    );
+    expect(mockDeleteHousehold).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when the deletion fails", async () => {
+    mockDeleteHousehold.mockImplementationOnce(() =>
+      Promise.reject(new Error("boom"))
+    );
+
+    const res = await del({ confirm_name: "Test Household" });
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("Failed to delete household");
+  });
+});
+
+// ===========================================================================
+// POST /api/household/leave - the last member leaving deletes the household
+// ===========================================================================
+describe("POST /api/households/leave (sole member)", () => {
+  it("uses the shared deleteHousehold helper", async () => {
+    adminResults.profiles.selectList = {
+      data: [{ id: TEST_USER_ID }],
+      error: null,
+    };
+
+    const res = await fetch(`${baseUrl}/api/households/leave`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockDeleteHousehold).toHaveBeenCalledWith(HOUSEHOLD_ID);
   });
 });

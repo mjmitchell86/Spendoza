@@ -7,6 +7,8 @@ import {
 import rateLimit from "express-rate-limit";
 import {
   createHouseholdSchema,
+  renameHouseholdSchema,
+  deleteHouseholdSchema,
   inviteToHouseholdSchema,
   joinHouseholdSchema,
   updateSharingSchema,
@@ -16,7 +18,10 @@ import {
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
-import { generateHouseholdCode } from "../services/household.service";
+import {
+  generateHouseholdCode,
+  deleteHousehold,
+} from "../services/household.service";
 
 const router = Router();
 
@@ -398,10 +403,13 @@ async function leaveHandler(req: Request, res: Response) {
       });
     }
 
-    // Sole member — remove from household then delete it
-    await db.from("profiles").update({ household_id: null }).eq("id", user.id);
-
-    await supabaseAdmin.from("households").delete().eq("id", householdId);
+    // Sole member — deleting the household also clears their household_id
+    try {
+      await deleteHousehold(householdId);
+    } catch (err) {
+      console.error("[households] delete on leave failed:", err);
+      return res.status(500).json({ error: "Failed to leave household" });
+    }
 
     return res
       .status(200)
@@ -411,6 +419,71 @@ async function leaveHandler(req: Request, res: Response) {
   await db.from("profiles").update({ household_id: null }).eq("id", user.id);
 
   return res.status(200).json({ message: "Left household successfully" });
+}
+
+async function renameHandler(req: Request, res: Response) {
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const householdId = req.params.id;
+
+  const { data: household } = await db
+    .from("households")
+    .select("*")
+    .eq("id", householdId)
+    .single();
+
+  if (!household || household.head_of_household_id !== user.id) {
+    return res.status(403).json({
+      error: "Only the head of household can rename the household",
+    });
+  }
+
+  // Admin client after the head check above (see transferOwnershipHandler)
+  const { data: updated, error } = await supabaseAdmin
+    .from("households")
+    .update({ name: req.body.name })
+    .eq("id", householdId)
+    .select()
+    .single();
+
+  if (error || !updated) {
+    return res
+      .status(400)
+      .json({ error: error?.message ?? "Failed to rename household" });
+  }
+
+  return res.status(200).json(await householdForCaller(db, updated, user.id));
+}
+
+async function deleteHouseholdHandler(req: Request, res: Response) {
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const householdId = req.params.id;
+
+  const { data: household } = await db
+    .from("households")
+    .select("*")
+    .eq("id", householdId)
+    .single();
+
+  if (!household || household.head_of_household_id !== user.id) {
+    return res.status(403).json({
+      error: "Only the head of household can delete the household",
+    });
+  }
+
+  if (req.body.confirm_name !== household.name) {
+    return res
+      .status(400)
+      .json({ error: "Type the household name to confirm" });
+  }
+
+  try {
+    await deleteHousehold(householdId);
+  } catch (err) {
+    console.error("[households] delete failed:", err);
+    return res.status(500).json({ error: "Failed to delete household" });
+  }
+
+  return res.status(204).send();
 }
 
 async function transferOwnershipHandler(req: Request, res: Response) {
@@ -540,6 +613,18 @@ router.post(
   inviteHandler
 );
 router.post("/invite-code", resolveHousehold, rotateInviteCodeHandler);
+router.patch(
+  "/",
+  resolveHousehold,
+  validate(renameHouseholdSchema),
+  renameHandler
+);
+router.delete(
+  "/",
+  resolveHousehold,
+  validate(deleteHouseholdSchema),
+  deleteHouseholdHandler
+);
 router.post("/leave", resolveHousehold, leaveHandler);
 // The code alone is the credential here, so cap failed guesses per user.
 const joinByCodeLimiter = rateLimit({
@@ -567,6 +652,8 @@ router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 // Routes with explicit household ID
 // ---------------------------------------------------------------------------
 router.get("/:id", getHouseholdHandler);
+router.patch("/:id", validate(renameHouseholdSchema), renameHandler);
+router.delete("/:id", validate(deleteHouseholdSchema), deleteHouseholdHandler);
 router.post("/:id/invite", validate(inviteToHouseholdSchema), inviteHandler);
 router.post("/:id/invite-code", rotateInviteCodeHandler);
 router.post("/:id/join", validate(joinHouseholdSchema), joinHandler);
