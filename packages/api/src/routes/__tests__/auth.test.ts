@@ -168,7 +168,7 @@ describe("POST /api/auth/signup", () => {
         email: "test@example.com",
         password: "securepass1",
         display_name: "Test User",
-        invite_code: "Chloe14",
+        invite_code: "WELCOME1",
       }),
     });
 
@@ -210,7 +210,7 @@ describe("POST /api/auth/signup", () => {
       body: JSON.stringify({
         email: "test@example.com",
         password: "securepass1",
-        invite_code: "Chloe14",
+        invite_code: "WELCOME1",
       }),
     });
 
@@ -228,7 +228,7 @@ describe("POST /api/auth/signup", () => {
         email: "test@example.com",
         password: "short",
         display_name: "Test User",
-        invite_code: "Chloe14",
+        invite_code: "WELCOME1",
       }),
     });
 
@@ -246,7 +246,7 @@ describe("POST /api/auth/signup", () => {
         email: "not-an-email",
         password: "securepass1",
         display_name: "Test User",
-        invite_code: "Chloe14",
+        invite_code: "WELCOME1",
       }),
     });
 
@@ -279,6 +279,44 @@ describe("POST /api/auth/signup", () => {
     expect(mockCreateUser).not.toHaveBeenCalled();
   });
 
+  it("treats the old hard-coded admin code like any other invite code", async () => {
+    mockSelectResult = {
+      data: null,
+      error: { message: "No rows found", code: "PGRST116" },
+    };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "test@example.com",
+        password: "securepass1",
+        display_name: "Test User",
+        invite_code: "Chloe14",
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockCreateUser).not.toHaveBeenCalled();
+  });
+
+  it("never grants admin or a plan at signup", async () => {
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "test@example.com",
+        password: "securepass1",
+        display_name: "Test User",
+        invite_code: "WELCOME1",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const tables = mockFrom.mock.calls.map((call) => call[0]);
+    expect(tables).not.toContain("profiles");
+  });
+
   it("returns 400 when supabase returns an error", async () => {
     mockCreateUser.mockImplementation(() =>
       Promise.resolve({
@@ -294,7 +332,7 @@ describe("POST /api/auth/signup", () => {
         email: "test@example.com",
         password: "securepass1",
         display_name: "Test User",
-        invite_code: "Chloe14",
+        invite_code: "WELCOME1",
       }),
     });
 
