@@ -550,6 +550,31 @@ describe("POST /api/households/join", () => {
     });
   });
 
+  it("returns 429 after 5 failed attempts by the same user", async () => {
+    // A different caller, so earlier tests' failures don't count toward this one
+    mockGetUser.mockImplementation(() =>
+      Promise.resolve({
+        data: { user: { id: "guesser-1", email: "guesser@example.com" } },
+        error: null,
+      })
+    );
+    adminResults.households.selectMaybeSingle = { data: null, error: null };
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, id: "guesser-1", household_id: null },
+      error: null,
+    };
+
+    for (let i = 0; i < 5; i++) {
+      expect((await post({ invite_code: `guess${i}` })).status).toBe(400);
+    }
+    const res = await post({ invite_code: "guess5" });
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Too many attempts. Try again in 15 minutes.",
+    });
+  });
+
   it("validates the body", async () => {
     const res = await post({});
 

@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import {
   createHouseholdSchema,
   inviteToHouseholdSchema,
@@ -396,7 +397,15 @@ router.post("/", validate(createHouseholdSchema), async (req, res: Response) => 
 router.put("/sharing", resolveHousehold, validate(updateSharingSchema), updateSharingHandler);
 router.post("/invite", resolveHousehold, validate(inviteToHouseholdSchema), inviteHandler);
 router.post("/leave", resolveHousehold, leaveHandler);
-router.post("/join", validate(joinHouseholdSchema), joinByCodeHandler);
+// The code alone is the credential here, so cap failed guesses per user.
+const joinByCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => (req as AuthenticatedRequest).user.id,
+  message: { error: "Too many attempts. Try again in 15 minutes." },
+});
+router.post("/join", joinByCodeLimiter, validate(joinHouseholdSchema), joinByCodeHandler);
 router.post("/transfer", resolveHousehold, validate(transferOwnershipSchema), transferOwnershipHandler);
 router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 
