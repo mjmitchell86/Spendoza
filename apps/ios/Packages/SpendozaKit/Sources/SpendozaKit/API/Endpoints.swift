@@ -58,7 +58,9 @@ struct Endpoint {
 
     static func signUp(email: String, password: String, displayName: String, inviteCode: String) -> Endpoint {
         .json(.post, "/api/auth/signup",
-              ["email": email, "password": password, "display_name": displayName, "invite_code": inviteCode],
+              ["email": email, "password": password, "display_name": displayName,
+               // Codes are matched exactly by the server: trim whitespace, never change case.
+               "invite_code": inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)],
               requiresAuth: false)
     }
 

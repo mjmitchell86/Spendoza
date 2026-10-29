@@ -16,6 +16,9 @@ struct SignInView: View {
                 if !store.isConfigured {
                     OutlinedPanel { Text(SessionStore.notConfiguredMessage) }
                 }
+                if store.accountReadyEmail != nil {
+                    OutlinedPanel { Text("Your account is ready. Sign in to continue.") }
+                }
                 AuthField(label: "Email", text: $email, contentType: .username, keyboard: .emailAddress)
                 AuthField(label: "Password", text: $password, secure: true, contentType: .password)
                 if let error { InlineError(message: error) }
@@ -32,6 +35,9 @@ struct SignInView: View {
                 }
                 .padding(.top, 8)
             }
+        }
+        .onChange(of: store.accountReadyEmail) { _, newValue in
+            if let newValue { email = newValue }
         }
     }
 

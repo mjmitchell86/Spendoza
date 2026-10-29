@@ -2,6 +2,34 @@ import Auth
 import Foundation
 import Observation
 
+/// Maps a sign-in failure to copy: only an invalid-credentials answer says the details don't match.
+public func signInError(_ error: Error) -> APIError {
+    if let urlError = error as? URLError {
+        switch urlError.code {
+        case .notConnectedToInternet, .networkConnectionLost, .timedOut: return .offline
+        default: return .message("Couldn't sign in. Try again.")
+        }
+    }
+    if let authError = error as? AuthError, authError.errorCode == .invalidCredentials {
+        return .message("That email and password don't match. Check them and try again.")
+    }
+    return .message("Couldn't sign in. Try again.")
+}
+
+/// The account was created but signing in afterwards failed; send the person to Sign in.
+public struct AccountReadyError: Error, Equatable, Sendable {
+    public let email: String
+    public let message = "Your account is ready. Sign in to continue."
+}
+
+/// Creates the account, then signs in. A sign-in failure after a created account becomes `AccountReadyError`.
+public func completeSignUp(email: String, createAccount: () async throws -> Void,
+                           signIn: () async throws -> Void,
+                           isolation: isolated (any Actor)? = #isolation) async throws {
+    try await createAccount()
+    do { try await signIn() } catch { throw AccountReadyError(email: email) }
+}
+
 /// Holds the Supabase session and the profile, and says which phase of the app to show.
 /// Without Supabase settings (`config == nil`) the store stays signed out and `isConfigured` is false.
 @MainActor @Observable
@@ -13,6 +41,8 @@ public final class SessionStore {
     public private(set) var loadError: String?
     public private(set) var profile: Profile?
     public let isConfigured: Bool
+    /// Set when sign-up created an account but the follow-up sign-in failed; Sign in prefills this email and says the account is ready.
+    public private(set) var accountReadyEmail: String?
     /// The Spendoza API, authorized with this store's session.
     @ObservationIgnored public private(set) var api: any SpendozaAPI
 
@@ -69,11 +99,8 @@ public final class SessionStore {
         guard let auth else { throw APIError.message(Self.notConfiguredMessage) }
         do {
             _ = try await auth.signIn(email: email, password: password)
-        } catch let error as URLError {
-            throw error.code == .notConnectedToInternet || error.code == .networkConnectionLost
-                ? APIError.offline : APIError.message("Couldn't reach Spendoza. Try again.")
         } catch {
-            throw APIError.message("That email and password don't match. Check them and try again.")
+            throw signInError(error)
         }
         await refresh()
     }
@@ -81,8 +108,18 @@ public final class SessionStore {
     /// Creates the account with an invite code, then signs in.
     public func signUp(displayName: String, email: String, password: String, inviteCode: String) async throws {
         guard isConfigured else { throw APIError.message(Self.notConfiguredMessage) }
-        try await api.signUp(email: email, password: password, displayName: displayName, inviteCode: inviteCode)
-        try await signIn(email: email, password: password)
+        do {
+            try await completeSignUp(
+                email: email,
+                createAccount: { [api] in
+                    try await api.signUp(email: email, password: password, displayName: displayName, inviteCode: inviteCode)
+                },
+                signIn: { try await self.signIn(email: email, password: password) }
+            )
+        } catch let ready as AccountReadyError {
+            accountReadyEmail = ready.email
+            throw ready
+        }
     }
 
     public func signOut() async {
@@ -97,6 +134,7 @@ public final class SessionStore {
             let profile = try await api.profile()
             self.profile = profile
             loadError = nil
+            accountReadyEmail = nil
             phase = appPhase(session: true, profile: profile)
         } catch APIError.unauthorized {
             await signOut()
@@ -108,6 +146,7 @@ public final class SessionStore {
     }
 
     private func clear() {
+        accountReadyEmail = nil
         profile = nil
         loadError = nil
         phase = .signedOut

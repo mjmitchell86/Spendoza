@@ -175,6 +175,14 @@ struct APIClientTests {
         #expect(log.all[1].json as? [String: String] == ["name": "Ann", "email": "a@b.co"])
     }
 
+    @Test func inviteCodeIsTrimmedButKeepsItsCase() async throws {
+        let log = stub(status: 201)
+        try await client(token: nil).signUp(email: "a@b.co", password: "password1", displayName: "Ann", inviteCode: " ab12cd34 \n")
+        try await client(token: nil).signUp(email: "a@b.co", password: "password1", displayName: "Ann", inviteCode: "AbC")
+        #expect((log.all[0].json as? [String: String])?["invite_code"] == "ab12cd34")
+        #expect((log.all[1].json as? [String: String])?["invite_code"] == "AbC")
+    }
+
     // MARK: statements
 
     @Test func statementsDecodeWithBothDateShapes() async throws {

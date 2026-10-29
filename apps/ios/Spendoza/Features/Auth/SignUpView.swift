@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SignUpView: View {
     let store: SessionStore
+    @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
@@ -30,7 +31,8 @@ struct SignUpView: View {
                     .font(.sans(13, relativeTo: .footnote))
                     .foregroundStyle(Theme.soft)
             }
-            AuthField(label: "Invite code", text: $inviteCode, capitalization: .characters)
+            // Codes are matched exactly by the server, so never capitalize or autocorrect them.
+            AuthField(label: "Invite code", text: $inviteCode, capitalization: .never)
             if let error { InlineError(message: error) }
             BusyButton(title: "Create account", busy: busy, action: submit)
                 .disabled(!canSubmit || !store.isConfigured)
@@ -53,6 +55,8 @@ struct SignUpView: View {
                     password: password,
                     inviteCode: inviteCode.trimmingCharacters(in: .whitespaces)
                 )
+            } catch is AccountReadyError {
+                dismiss()  // back to Sign in, which prefills the email and says the account is ready
             } catch let apiError as APIError {
                 error = apiError.userMessage
             } catch {
