@@ -1,7 +1,18 @@
 import { Router, type Request, type Response } from "express";
-import { signupSchema, loginSchema, waitlistSchema } from "@spendoza/shared";
+import {
+  signupSchema,
+  loginSchema,
+  waitlistSchema,
+  normalizeInviteCode,
+} from "@spendoza/shared";
 import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
+import {
+  addToHousehold,
+  HOUSEHOLD_FULL_MESSAGE,
+} from "../services/household-membership.service";
+
+const INVALID_CODE_ERROR = "Invalid or already-used invite code";
 
 const router = Router();
 
@@ -11,17 +22,36 @@ const router = Router();
 router.post("/signup", validate(signupSchema), async (req: Request, res: Response) => {
   const { email, password, display_name, invite_code } = req.body;
 
-  // Validate invite code against the DB
-  const { data: codeRecord, error: codeError } = await supabaseAdmin
+  const invalidCode = () => {
+    console.error("Signup failed: invalid invite code");
+    return res.status(400).json({ error: INVALID_CODE_ERROR });
+  };
+
+  // A sign-up invite code (unchanged behaviour)...
+  const { data: codeRecord } = await supabaseAdmin
     .from("invite_codes")
     .select("id")
     .eq("code", invite_code)
     .is("used_by", null)
     .single();
 
-  if (codeError || !codeRecord) {
-    console.error(`Signup failed: invalid invite code "${invite_code}"`);
-    return res.status(400).json({ error: "Invalid or already-used invite code" });
+  // ...or the code from a household invitation email, which only works for
+  // the invited address. Any miss looks the same as a bad sign-up code.
+  let invitation: { id: string; household_id: string } | null = null;
+  if (!codeRecord) {
+    const { data } = await supabaseAdmin
+      .from("household_invitations")
+      .select("id, household_id")
+      .eq("code", normalizeInviteCode(invite_code))
+      .eq("status", "pending")
+      .gt("expires_at", new Date().toISOString())
+      .eq("email", String(email).toLowerCase())
+      .single();
+    invitation = data ?? null;
+  }
+
+  if (!codeRecord && !invitation) {
+    return invalidCode();
   }
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -36,13 +66,37 @@ router.post("/signup", validate(signupSchema), async (req: Request, res: Respons
     return res.status(400).json({ error: error.message });
   }
 
-  // Mark the invite code as used
-  await supabaseAdmin
-    .from("invite_codes")
-    .update({ used_by: data.user.id, used_at: new Date().toISOString() })
-    .eq("id", codeRecord.id);
+  if (codeRecord) {
+    // Mark the invite code as used
+    await supabaseAdmin
+      .from("invite_codes")
+      .update({ used_by: data.user.id, used_at: new Date().toISOString() })
+      .eq("id", codeRecord.id);
 
-  return res.status(201).json({ user: data.user });
+    return res.status(201).json({ user: data.user, joined_household: false });
+  }
+
+  // Household invitation: join unless the household is full (the account is
+  // still created; the invitation stays pending)
+  const failure = await addToHousehold(
+    { id: data.user.id, email: data.user.email ?? email },
+    invitation!.household_id
+  );
+  if (failure) {
+    return res.status(201).json({
+      user: data.user,
+      joined_household: false,
+      ...(failure === HOUSEHOLD_FULL_MESSAGE ? { household_full: true } : {}),
+    });
+  }
+
+  await supabaseAdmin
+    .from("household_invitations")
+    .update({ status: "accepted" })
+    .eq("id", invitation!.id)
+    .eq("status", "pending");
+
+  return res.status(201).json({ user: data.user, joined_household: true });
 });
 
 // ---------------------------------------------------------------------------

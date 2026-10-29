@@ -69,6 +69,36 @@ describe("sendHouseholdInvitationEmail", () => {
     }
   });
 
+  it("invites people without an account to sign up with the code, linking the url-encoded email", async () => {
+    await send();
+    const signupUrl =
+      "https://www.spendoza.io/signup?invitation=ABCDE-FGHJK&email=invitee%40example.com";
+    expect(sent[0].text).toContain(
+      "New to Spendoza? Create your account with invitation code ABCDE-FGHJK"
+    );
+    expect(sent[0].text).toContain(signupUrl);
+    expect(sent[0].html).toContain(
+      "New to Spendoza? Create your account with invitation code <strong>ABCDE-FGHJK</strong>"
+    );
+    // the ampersand in the href is HTML-escaped
+    expect(sent[0].html).toContain(signupUrl.replace("&", "&amp;"));
+    expect(sent[0].html).not.toContain("?invitation=ABCDE-FGHJK&email");
+    for (const body of [sent[0].html, sent[0].text]) {
+      expect(body).not.toContain(INVITE_CODE);
+    }
+  });
+
+  it("escapes a hostile recipient address in the signup link", async () => {
+    await sendHouseholdInvitationEmail(
+      'a"><script>@example.com',
+      "Matt",
+      "HH",
+      "abcdefghjk"
+    );
+    expect(sent[0].html).not.toContain("<script>");
+    expect(sent[0].html).not.toContain('a"><');
+  });
+
   it("escapes names in the HTML", async () => {
     await send('<script>alert("x")</script>', "Tom & <b>Jerry</b>");
     expect(sent[0].html).not.toContain("<script>");

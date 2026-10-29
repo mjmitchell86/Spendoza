@@ -8,6 +8,8 @@ export interface HouseholdInvitationEmailInput {
   householdName: string;
   /** The invitation's own code, as stored (lowercase). */
   invitationCode: string;
+  /** The address the invitation is sent to (prefills the sign-up form). */
+  recipientEmail: string;
 }
 
 function escapeHtml(value: string): string {
@@ -34,6 +36,10 @@ export function buildHouseholdInvitationEmail(
   const subject = "You've been invited to a household on Spendoza";
   const acceptUrl = `${APP_URL}/household?invitation=${encodeURIComponent(code)}`;
 
+  const signupUrl = `${APP_URL}/signup?invitation=${encodeURIComponent(code)}&email=${encodeURIComponent(input.recipientEmail)}`;
+  const newToSpendoza =
+    "New to Spendoza? Create your account with invitation code";
+
   const inviter = escapeHtml(`"${inviterName}"`);
   const household = escapeHtml(`"${householdName}"`);
 
@@ -45,6 +51,7 @@ export function buildHouseholdInvitationEmail(
       <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">${inviter} invited you to join the household ${household} on Spendoza. The invitation is valid for 7 days.</p>
       <p style="margin:0 0 24px;font-size:16px;line-height:1.5;">Your invitation code: <strong>${escapeHtml(code)}</strong></p>
       <p style="margin:0;"><a href="${escapeHtml(acceptUrl)}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-size:16px;">Accept invitation</a></p>
+      <p style="margin:24px 0 0;font-size:14px;line-height:1.5;color:#475569;">${newToSpendoza} <strong>${escapeHtml(code)}</strong>: <a href="${escapeHtml(signupUrl)}" style="color:#0f172a;">Create your account</a></p>
     </div>
   </body>
 </html>`;
@@ -55,6 +62,8 @@ export function buildHouseholdInvitationEmail(
     `Your invitation code: ${code}`,
     "",
     `Accept invitation: ${acceptUrl}`,
+    "",
+    `${newToSpendoza} ${code}: ${signupUrl}`,
   ].join("\n");
 
   return { subject, html, text };
