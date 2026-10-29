@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/server.ts",
-    "build": "bun build api/mcp.ts --outfile dist/api/mcp.mjs --target node",
+    "build": "bun build handlers/mcp.ts --outfile dist/api/mcp.mjs --target node",
     "build:vercel": "bun scripts/build-output.ts",
     "typecheck": "tsc --noEmit",
     "test": "bash run-tests.sh",
