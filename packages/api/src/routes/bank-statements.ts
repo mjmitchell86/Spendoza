@@ -231,29 +231,16 @@ router.get("/:id", async (req, res: Response) => {
 // POST /:id/reprocess — re-trigger AI parsing
 // ---------------------------------------------------------------------------
 router.post("/:id/reprocess", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { user } = req as AuthenticatedRequest;
 
-  // Look up the statement first to determine file type and split status
-  const { data: existing } = await db
-    .from("bank_statements")
-    .select("file_type, parsed_data")
-    .eq("id", req.params.id)
-    .eq("user_id", user.id)
-    .single();
-
-  // CSVs that were parent-split need to re-run from extract_text so splitting re-runs.
-  // Other CSVs already have text stored, so start at extract_transactions.
-  const isParentSplit = existing?.parsed_data?.is_parent_split === true;
-  const startStep =
-    existing?.file_type === "csv" && !isParentSplit
-      ? "extract_transactions"
-      : "extract_text";
-
+  // Always restart from extract_text: a failure discards intermediate text, but
+  // the uploaded file is kept until success or removal, so re-read it (for CSVs
+  // this re-runs splitting, or re-derives a split child's month).
   const { data, error } = await supabaseAdmin
     .from("bank_statements")
     .update({
       status: "processing",
-      parsed_data: { pipeline_step: startStep },
+      parsed_data: { pipeline_step: "extract_text" },
     })
     .eq("id", req.params.id)
     .eq("user_id", user.id)

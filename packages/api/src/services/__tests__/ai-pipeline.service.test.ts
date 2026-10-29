@@ -307,3 +307,100 @@ describe("statement file path confinement", () => {
     expect(fake.files.has(otherPath)).toBe(true);
   });
 });
+
+// ===========================================================================
+// Retries
+// ===========================================================================
+
+/** Run fn with setTimeout firing immediately (skips retry backoff delays). */
+async function withoutDelays(fn: () => Promise<void>) {
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((cb: () => void) => {
+    cb();
+    return 0;
+  }) as any;
+  try {
+    await fn();
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+}
+
+describe("retries", () => {
+  it("bumps retry_count on each failure (which dispatches the retry), then ends failed", async () => {
+    setup([
+      statement({
+        id: "single",
+        file_hash: "singlehash",
+        status: "processing",
+        parsed_data: { pipeline_step: "match_and_insert" }, // no classified_transactions -> throws
+      }),
+    ]);
+    const row = () => fake.tables.bank_statements.find((r) => r.id === "single")!;
+
+    // Each run stands in for one trigger dispatch of the same step
+    await withoutDelays(() => executeStep("single", "match_and_insert"));
+    expect(row().status).toBe("processing");
+    expect(row().parsed_data).toMatchObject({ pipeline_step: "match_and_insert", retry_count: 1 });
+
+    await withoutDelays(() => executeStep("single", "match_and_insert"));
+    expect(row().status).toBe("processing");
+    expect(row().parsed_data).toMatchObject({ pipeline_step: "match_and_insert", retry_count: 2 });
+
+    await withoutDelays(() => executeStep("single", "match_and_insert"));
+    expect(row().status).toBe("failed");
+    expect(row().parsed_data.pipeline_step).toBeUndefined(); // no further dispatch
+    expect(fake.files.has(FILE_PATH)).toBe(true); // kept for Retry
+  });
+});
+
+// ===========================================================================
+// Retry (reprocess) of CSV statements restarts from the kept file
+// ===========================================================================
+describe("CSV retry from extract_text", () => {
+  const twoMonthCsv =
+    "Date,Description,Amount\n2026-01-05,Coffee,4.50\n2026-01-20,Lunch,12.00\n2026-02-03,Gas,40.00\n2026-02-14,Dinner,55.00";
+
+  it("a single-month CSV re-reads the kept file and continues", async () => {
+    setup([
+      statement({
+        id: "single",
+        file_hash: "singlehash",
+        status: "processing",
+        parsed_data: { pipeline_step: "extract_text" }, // as set by Retry; old text was discarded on failure
+      }),
+    ]);
+    fake.fileContents[FILE_PATH] = "Date,Description,Amount\n2026-01-05,Coffee,4.50";
+
+    await executeStep("single", "extract_text");
+
+    const row = fake.tables.bank_statements.find((r) => r.id === "single")!;
+    expect(row.parsed_data.pipeline_step).toBe("extract_transactions");
+    expect(row.parsed_data.pdf_text).toContain("Coffee");
+  });
+
+  it("a failed split child re-derives its own month from the shared file without re-splitting", async () => {
+    setup([
+      parentSplit,
+      child("jan", "2026-01", "parsed"),
+      child("feb", "2026-02", "processing", { pipeline_step: "extract_text" }),
+    ]);
+    fake.fileContents[FILE_PATH] = twoMonthCsv;
+
+    await executeStep("feb", "extract_text");
+
+    const rows = fake.tables.bank_statements;
+    expect(rows.map((r) => r.id).sort()).toEqual(["feb", "jan", "parent"]); // no new children
+    const feb = rows.find((r) => r.id === "feb")!;
+    expect(feb.status).toBe("processing");
+    expect(feb.parsed_data.pipeline_step).toBe("extract_transactions");
+    expect(feb.parsed_data.pdf_text).toContain("2026-02-03,Gas,40.00");
+    expect(feb.parsed_data.pdf_text).not.toContain("2026-01-05");
+    expect(rows.find((r) => r.id === "parent")!.status).toBe("parsed");
+
+    // Finishing the retried child (last one) deletes the shared file
+    await executeStep("feb", "extract_transactions");
+    expect(statusOf("feb")).toBe("parsed");
+    expect(fake.files.has(FILE_PATH)).toBe(false);
+  });
+});

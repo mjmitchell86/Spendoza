@@ -898,3 +898,34 @@ describe("POST /api/bank-statements/upload (file cleanup)", () => {
     expect(fake.files.has(PDF_PATH)).toBe(true);
   });
 });
+
+describe("POST /api/bank-statements/:id/reprocess (restart step)", () => {
+  const reprocess = (id: string) =>
+    fetch(`${baseUrl}/api/bank-statements/${id}/reprocess`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+  // Failure discards intermediate text, so every Retry restarts from the kept file.
+  for (const fileType of ["pdf", "csv"]) {
+    it(`restarts a failed ${fileType.toUpperCase()} statement from extract_text`, async () => {
+      useFake([{ ...failedSingle, file_type: fileType }], [PDF_PATH]);
+
+      const res = await reprocess("stmt-failed");
+
+      expect(res.status).toBe(200);
+      const row = fake.tables.bank_statements[0];
+      expect(row.status).toBe("processing");
+      expect(row.parsed_data).toEqual({ pipeline_step: "extract_text" });
+    });
+  }
+
+  it("returns 404 for another user's statement", async () => {
+    useFake([{ ...failedSingle, user_id: "other-user" }], []);
+
+    const res = await reprocess("stmt-failed");
+
+    expect(res.status).toBe(404);
+    expect(fake.tables.bank_statements[0].status).toBe("failed");
+  });
+});
