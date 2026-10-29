@@ -303,11 +303,40 @@ async function removeMemberHandler(req: Request, res: Response) {
       .json({ error: "Cannot remove yourself as head of household" });
   }
 
+  // The target must actually belong to this household
+  const { data: target } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("id", targetUserId)
+    .eq("household_id", householdId)
+    .maybeSingle();
+
+  if (!target) {
+    return res
+      .status(404)
+      .json({ error: "Member not found in this household" });
+  }
+
   // Set the removed member's household_id to null
-  await supabaseAdmin
+  const { error: removeError } = await supabaseAdmin
     .from("profiles")
     .update({ household_id: null })
-    .eq("id", targetUserId);
+    .eq("id", targetUserId)
+    .eq("household_id", householdId);
+
+  if (removeError) {
+    return res.status(500).json({ error: "Failed to remove member" });
+  }
+
+  // The removed member knew the code: rotate it
+  try {
+    await rotateInviteCode(householdId);
+  } catch (err) {
+    console.error("[households] rotate after removal failed:", err);
+    return res.status(500).json({
+      error: "Member removed, but the invite code could not be changed",
+    });
+  }
 
   return res.status(204).send();
 }
@@ -451,6 +480,18 @@ router.post(
   validate(createHouseholdSchema),
   async (req, res: Response) => {
     const { user, supabase: db } = req as AuthenticatedRequest;
+
+    const { data: existing } = await db
+      .from("profiles")
+      .select("household_id")
+      .eq("id", user.id)
+      .single();
+
+    if (existing?.household_id) {
+      return res
+        .status(400)
+        .json({ error: "Leave your household before creating a new one" });
+    }
 
     const invite_code = generateHouseholdCode();
 

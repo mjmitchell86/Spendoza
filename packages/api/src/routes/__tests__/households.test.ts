@@ -86,12 +86,21 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
                     ? cfg.selectMaybeSingle
                     : (cfg.selectSingle ?? { data: null, error: null })
                 ),
-              eq: () => ({
-                single: () =>
-                  Promise.resolve(
-                    cfg.selectSingle ?? { data: null, error: null }
-                  ),
-              }),
+              eq: (...eq2Args: any[]) => {
+                calls.push({ table, op: "select.eq.eq", args: eq2Args });
+                return {
+                  single: () =>
+                    Promise.resolve(
+                      cfg.selectSingle ?? { data: null, error: null }
+                    ),
+                  maybeSingle: () =>
+                    Promise.resolve(
+                      "selectMaybeSingle" in cfg
+                        ? cfg.selectMaybeSingle
+                        : (cfg.selectSingle ?? { data: null, error: null })
+                    ),
+                };
+              },
               // For member list: .select("...").eq("household_id", id)
               ...(cfg.selectList
                 ? Promise.resolve(cfg.selectList)
@@ -330,6 +339,38 @@ beforeEach(() => {
 // ===========================================================================
 describe("POST /api/households", () => {
   const url = () => `${baseUrl}/api/households`;
+
+  beforeEach(() => {
+    rlsResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+  });
+
+  it("returns 400 when the caller already belongs to a household", async () => {
+    rlsResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: "other-household" },
+      error: null,
+    };
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "Second Household" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe(
+      "Leave your household before creating a new one"
+    );
+    expect(
+      [...rlsCalls, ...adminCalls].some(
+        (c) => c.table === "households" && c.op === "insert"
+      )
+    ).toBe(false);
+  });
 
   it("returns 201 with household data", async () => {
     const res = await fetch(url(), {
@@ -827,13 +868,88 @@ describe("DELETE /api/households/:id/members/:userId", () => {
   const url = (hhId: string, userId: string) =>
     `${baseUrl}/api/households/${hhId}/members/${userId}`;
 
-  it("returns 204 when head removes a member", async () => {
-    const res = await fetch(url(HOUSEHOLD_ID, "user-456"), {
+  const del = (userId = "user-456") =>
+    fetch(url(HOUSEHOLD_ID, userId), {
       method: "DELETE",
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
     });
 
+  it("returns 204, clears the member and rotates the invite code", async () => {
+    adminResults.profiles.selectMaybeSingle = {
+      data: { id: "user-456" },
+      error: null,
+    };
+    const res = await del();
+
     expect(res.status).toBe(204);
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "select.eq",
+      args: ["id", "user-456"],
+    });
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "select.eq.eq",
+      args: ["household_id", HOUSEHOLD_ID],
+    });
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "update",
+      args: { household_id: null },
+    });
+    const upserts = adminCalls.filter(
+      (c) => c.table === "household_invite_codes" && c.op === "upsert"
+    );
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].args).toMatchObject({
+      household_id: HOUSEHOLD_ID,
+      code: NEW_HOUSEHOLD_CODE,
+    });
+  });
+
+  it("returns 404 for a user who is not in this household", async () => {
+    adminResults.profiles.selectMaybeSingle = { data: null, error: null };
+    const res = await del("user-in-another-household");
+
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe("Member not found in this household");
+    expect(
+      adminCalls.some((c) => c.table === "profiles" && c.op === "update")
+    ).toBe(false);
+    expect(adminCalls.some((c) => c.op === "upsert")).toBe(false);
+  });
+
+  it("makes the old code invalid for joining afterwards", async () => {
+    adminResults.profiles.selectMaybeSingle = {
+      data: { id: "user-456" },
+      error: null,
+    };
+    expect((await del()).status).toBe(204);
+
+    // The old code no longer exists in household_invite_codes
+    adminResults.household_invite_codes.selectMaybeSingle = {
+      data: null,
+      error: null,
+    };
+    adminResults.profiles.selectMaybeSingle = {
+      data: null,
+      error: null,
+    };
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+    const res = await fetch(`${baseUrl}/api/households/join`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ invite_code: INVITE_CODE }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid invite code" });
   });
 
   it("returns 403 for non-head member", async () => {

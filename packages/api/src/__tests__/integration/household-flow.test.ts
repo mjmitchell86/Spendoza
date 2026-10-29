@@ -103,6 +103,18 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
         });
         return { eq: () => makeUpdateEq() };
       },
+      upsert: (data: any) => {
+        calls.push({ table, op: "upsert", args: data });
+        return {
+          select: () =>
+            Promise.resolve(
+              cfg.upsertResult ?? {
+                data: [{ household_id: data.household_id, code: data.code }],
+                error: null,
+              }
+            ),
+        };
+      },
       delete: () => {
         calls.push({ table, op: "delete" });
         return {
@@ -429,6 +441,7 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
         },
       },
       profiles: {
+        selectMaybeSingle: { data: { id: MEMBER_USER_ID }, error: null },
         updateResult: { data: null, error: null },
       },
     };
