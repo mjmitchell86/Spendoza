@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 @testable import SpendozaKit
-import struct SpendozaKit.Category
 
 enum Fixture {
     static func data(_ name: String) throws -> Data {
@@ -16,7 +15,7 @@ enum Fixture {
     static var october: Report { get throws { try report("report-2026-10") } }
     static var september: Report { get throws { try report("report-2026-09") } }
 
-    static let categories: [Category] = [
+    static let categories: [BudgetCategory] = [
         .init(id: "c1", name: "Housing", budgetClass: .need),
         .init(id: "c2", name: "Groceries", budgetClass: .need),
         .init(id: "c3", name: "Dining out", budgetClass: .want),

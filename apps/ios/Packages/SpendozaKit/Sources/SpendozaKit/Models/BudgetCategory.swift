@@ -5,7 +5,7 @@ public enum BudgetClass: String, Decodable, Sendable {
 }
 
 /// A row of `GET /api/categories`.
-public struct Category: Decodable, Sendable, Equatable {
+public struct BudgetCategory: Decodable, Sendable, Equatable {
     public let id: String
     public let name: String
     public let budgetClass: BudgetClass

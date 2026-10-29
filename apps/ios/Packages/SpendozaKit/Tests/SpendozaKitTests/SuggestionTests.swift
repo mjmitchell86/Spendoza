@@ -62,6 +62,30 @@ import Testing
         #expect(result.contains { $0.action == .openEmergencyFund })
     }
 
+    @Test func actionableSuggestionsComeFirstWithoutHistory() throws {
+        // Gaps from full points: debt 15, emergency fund 10, wants 6, savings 5. Actionable first by gap
+        // (emergency fund, wants budget), then action-less by gap (debt); savings is cut by the limit of 3.
+        let result = suggestions(current: try Fixture.october, history: [], categories: Fixture.categories)
+        #expect(result.map(\.action) == [
+            .openEmergencyFund,
+            .setBudget(categoryID: "c3", categoryName: "Dining out", amount: 450),
+            .none,
+        ])
+        #expect(result.first?.action != SuggestionAction.none)
+        #expect(result.last?.title == "Bring debt payments down")
+    }
+
+    @Test func actionableSuggestionsComeFirstWithHistory() throws {
+        // Wants lost 6 points, savings lost 3; emergency fund and debt lost none.
+        let result = suggestions(current: try Fixture.october, history: try history(), categories: Fixture.categories)
+        #expect(result.map(\.action) == [
+            .setBudget(categoryID: "c3", categoryName: "Dining out", amount: 250),
+            .openEmergencyFund,
+            .none,
+        ])
+        #expect(result.last?.title == "Raise your savings rate")
+    }
+
     @Test func atMostThree() throws {
         let result = suggestions(current: try Fixture.october, history: try history(), categories: Fixture.categories)
         #expect(result.count <= 3)

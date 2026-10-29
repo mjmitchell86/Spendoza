@@ -20,7 +20,7 @@ public enum SuggestionAction: Sendable, Equatable {
 /// Budget amount rule: the average of the category's amount across the `history` months (a month with a
 /// report but no row for the category counts as 0), rounded UP to the nearest 50. With no history, the
 /// current month's amount is rounded up to the nearest 50.
-public func suggestions(current: Report, history: [Report], categories: [Category]) -> [Suggestion] {
+public func suggestions(current: Report, history: [Report], categories: [BudgetCategory]) -> [Suggestion] {
     guard let health = current.data.health else { return [] }
     let previousReport = history.first
     let changes = partChanges(current: health, previous: previousReport?.data.health)
@@ -39,10 +39,6 @@ public func suggestions(current: Report, history: [Report], categories: [Categor
         }
         .map(\.element)
 
-    var result: [Suggestion] = []
-    func add(_ suggestion: Suggestion?) {
-        if let suggestion, result.count < 3 { result.append(suggestion) }
-    }
     func suggestion(for change: PartChange) -> Suggestion? {
         let value = health.parts[change.part]?.value ?? 0
         switch change.part {
@@ -63,18 +59,16 @@ public func suggestions(current: Report, history: [Report], categories: [Categor
         }
     }
 
-    if let worst = ranked.first { add(suggestion(for: worst)) }
-    // Emergency fund under 3 months always gets a prompt.
-    let emergencyValue = health.parts[.emergencyFund]?.value
-    if let emergencyValue, emergencyValue < 3, !result.contains(where: { $0.action == .openEmergencyFund }) {
-        add(emergencySuggestion(value: emergencyValue))
+    // Every candidate in `ranked` order, plus the emergency prompt when under 3 months and not already there.
+    var candidates = ranked.compactMap(suggestion(for:))
+    if let months = health.parts[.emergencyFund]?.value, months < 3,
+       !candidates.contains(where: { $0.action == .openEmergencyFund }) {
+        candidates.append(emergencySuggestion(value: months))
     }
-    for change in ranked.dropFirst() where result.count < 3 {
-        guard let next = suggestion(for: change), !result.contains(next) else { continue }
-        if next.action == .openEmergencyFund { continue }
-        add(next)
-    }
-    return result
+    // Stable partition: actionable suggestions first, action-less ones after; each keeps its ranked order.
+    let actionable = candidates.filter { $0.action != .none }
+    let passive = candidates.filter { $0.action == .none }
+    return Array((actionable + passive).prefix(3))
 }
 
 private func emergencySuggestion(value: Double) -> Suggestion {
@@ -85,7 +79,7 @@ private func emergencySuggestion(value: Double) -> Suggestion {
 }
 
 private func budgetSuggestion(
-    _ change: PartChange, current: Report, history: [Report], categories: [Category]
+    _ change: PartChange, current: Report, history: [Report], categories: [BudgetCategory]
 ) -> Suggestion? {
     guard let budgetClass = change.part.budgetClass else { return nil }
     let previousReport = history.first

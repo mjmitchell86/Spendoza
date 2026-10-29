@@ -10,7 +10,7 @@ public struct CategoryChange: Sendable, Equatable {
 /// This month's categories of one budget class, biggest increase first, nil deltas last.
 /// Ties keep larger amounts first.
 public func categoryChanges(
-    current: ReportData, previous: ReportData?, budgetClass: BudgetClass, categories: [Category]
+    current: ReportData, previous: ReportData?, budgetClass: BudgetClass, categories: [BudgetCategory]
 ) -> [CategoryChange] {
     let names = Set(categories.filter { $0.budgetClass == budgetClass }.map(\.name))
     let before = previous.map { Dictionary($0.byCategory.map { ($0.category, $0.amount) }, uniquingKeysWith: +) }
