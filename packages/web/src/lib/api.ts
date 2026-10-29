@@ -20,6 +20,8 @@ export async function apiClient(path: string, options?: RequestInit) {
     const error = await response.json();
     throw new Error(error.error || "API request failed");
   }
+  // 204 No Content (deletes, revokes) has no body to parse.
+  if (response.status === 204) return undefined;
   return response.json();
 }
 

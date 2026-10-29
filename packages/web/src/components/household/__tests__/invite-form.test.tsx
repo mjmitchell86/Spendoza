@@ -102,3 +102,34 @@ describe("InviteForm invite code card", () => {
     );
   });
 });
+
+describe("InviteForm invite by email", () => {
+  beforeEach(() => apiClient.mockReset());
+  afterEach(cleanup);
+
+  async function send() {
+    await userEvent.type(screen.getByLabelText("Invite by email"), "pat@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Send invitation" }));
+  }
+
+  it("shows Invitation sent on success", async () => {
+    apiClient.mockResolvedValue({ message: "Invitation sent" });
+    setup();
+    await send();
+    await waitFor(() => expect(screen.getByText("Invitation sent")).toBeTruthy());
+    expect(apiClient).toHaveBeenCalledWith("/household/invite", {
+      method: "POST",
+      body: JSON.stringify({ email: "pat@example.com" }),
+    });
+  });
+
+  it("shows the API message verbatim when sending fails", async () => {
+    apiClient.mockRejectedValue(new Error("Couldn't send the invitation email. Try again."));
+    setup();
+    await send();
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't send the invitation email. Try again.")).toBeTruthy(),
+    );
+    expect(screen.queryByText("Invitation sent")).toBeNull();
+  });
+});

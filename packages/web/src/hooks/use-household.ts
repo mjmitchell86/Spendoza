@@ -62,6 +62,7 @@ export function useInviteToHousehold() {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["household"] });
+      void queryClient.invalidateQueries({ queryKey: ["household", "invitations"] });
     },
   });
 }
@@ -123,6 +124,59 @@ export function useLeaveHousehold() {
     mutationFn: () =>
       apiClient("/household/leave", { method: "POST" }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["household"] });
+    },
+  });
+}
+
+export interface HouseholdInvitation {
+  id: string;
+  email: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export function useHouseholdInvitations() {
+  return useQuery<HouseholdInvitation[]>({
+    queryKey: ["household", "invitations"],
+    queryFn: () => apiClient("/household/invitations"),
+  });
+}
+
+export function useRevokeInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (invitationId: string) =>
+      apiClient(`/household/invitations/${invitationId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["household", "invitations"] });
+    },
+  });
+}
+
+export function useRenameHousehold() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string }) =>
+      apiClient("/household", { method: "PATCH", body: JSON.stringify(data) }) as Promise<Household>,
+    onSuccess: (household) => {
+      queryClient.setQueryData<HouseholdData | null>(["household"], (old) =>
+        old ? { ...old, household: { ...old.household, ...household } } : old,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["household"] });
+    },
+  });
+}
+
+export function useDeleteHousehold() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { confirm_name: string }) =>
+      apiClient("/household", { method: "DELETE", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      // Show the no-household view immediately; the refetch confirms it.
+      queryClient.setQueryData<HouseholdData | null>(["household"], null);
+      queryClient.removeQueries({ queryKey: ["household", "invitations"] });
       void queryClient.invalidateQueries({ queryKey: ["household"] });
     },
   });

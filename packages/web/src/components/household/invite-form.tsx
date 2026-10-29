@@ -42,7 +42,9 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
       setEmail("");
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send invite");
+      setError(
+        err instanceof Error ? err.message : "Couldn't send the invitation email. Try again.",
+      );
     }
   }
 
@@ -134,7 +136,7 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
 
       {/* Email invite */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <Label htmlFor="invite_email">Or Invite by Email</Label>
+        <Label htmlFor="invite_email">Invite by email</Label>
         {error && (
           <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
@@ -142,7 +144,7 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
         )}
         {success && (
           <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
-            Invite sent successfully!
+            Invitation sent
           </div>
         )}
         <div className="flex gap-2">
@@ -150,12 +152,15 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
             id="invite_email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setSuccess(false);
+            }}
             placeholder="email@example.com"
             required
           />
           <Button type="submit" disabled={invite.isPending}>
-            {invite.isPending ? "Sending..." : "Invite"}
+            {invite.isPending ? "Sending..." : "Send invitation"}
           </Button>
         </div>
       </form>

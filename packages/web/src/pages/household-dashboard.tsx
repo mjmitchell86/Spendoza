@@ -48,6 +48,8 @@ import { JoinHousehold } from "@/components/household/join-household";
 import { MemberList } from "@/components/household/member-list";
 import { InviteForm } from "@/components/household/invite-form";
 import { SharingConfig } from "@/components/household/sharing-config";
+import { PendingInvitations } from "@/components/household/pending-invitations";
+import { HouseholdSettings } from "@/components/household/household-settings";
 import { cn } from "@/lib/utils";
 import {
   TimePeriodFilter,
@@ -691,6 +693,21 @@ export function HouseholdPage() {
                 </CardHeader>
                 <CardContent>
                   <InviteForm inviteCode={household.invite_code} />
+                  <div className="mt-4">
+                    <PendingInvitations />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Rename / delete (head only) */}
+            {isHead && (
+              <Card>
+                <CardHeader className="pb-0">
+                  <CardTitle>Household Settings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <HouseholdSettings key={household.name} name={household.name} />
                 </CardContent>
               </Card>
             )}
