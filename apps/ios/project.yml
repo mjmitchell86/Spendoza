@@ -38,6 +38,7 @@ targets:
         UILaunchScreen: {}
         UIAppFonts: [Newsreader-Variable.ttf, PublicSans-Variable.ttf]
         ITSAppUsesNonExemptEncryption: false
+        NSFaceIDUsageDescription: Unlock Spendoza with Face ID.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         APIBaseURL: "$(API_BASE_URL)"
         SupabaseURL: "$(SUPABASE_URL)"

@@ -4,6 +4,8 @@ import SwiftUI
 /// Switches between the signed-out screens, onboarding and the app.
 struct RootView: View {
     let store: SessionStore
+    let lock: AppLock
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -20,16 +22,31 @@ struct RootView: View {
                 case .onboarding:
                     PlaceholderView(title: "Onboarding", store: store)
                 case .ready:
-                    PlaceholderView(title: "Spendoza \(SpendozaKit.version)", store: store)
+                    MainTabs(store: store, lock: lock)
+                        .overlay {
+                            if lock.isLocked {
+                                LockView(lock: lock)
+                            } else if scenePhase != .active {
+                                LockView(lock: lock, offersUnlock: false)
+                            }
+                        }
+                        .task { await lock.appDidBecomeActive() }
                 }
             }
         }
         .background(Theme.paper.ignoresSafeArea())
         .task { await store.restore() }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background: lock.appDidEnterBackground()
+            case .active: Task { await lock.appDidBecomeActive() }
+            default: break
+            }
+        }
     }
 }
 
-/// Stands in until onboarding (Task 7) and Health (Task 9) exist.
+/// Stands in until onboarding exists.
 private struct PlaceholderView: View {
     let title: String
     let store: SessionStore
