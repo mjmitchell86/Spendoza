@@ -1,0 +1,69 @@
+name: iOS TestFlight
+
+# Manual only: Actions > iOS TestFlight > Run workflow. Needs the owner's Apple setup and secrets;
+# see docs/ios-ci-cd.md.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Queue, never cancel: a cancelled run can leave signing or an upload half-done.
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/ios
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+      IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+      IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+      IOS_PROVISIONING_PROFILE_APP: ${{ secrets.IOS_PROVISIONING_PROFILE_APP }}
+      IOS_PROVISIONING_PROFILE_WIDGETS: ${{ secrets.IOS_PROVISIONING_PROFILE_WIDGETS }}
+      PROD_SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
+      PROD_SUPABASE_ANON_KEY: ${{ secrets.PROD_SUPABASE_ANON_KEY }}
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        run: |
+          missing=""
+          for name in APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_CONTENT \
+            IOS_DIST_CERT_P12 IOS_DIST_CERT_PASSWORD IOS_PROVISIONING_PROFILE_APP \
+            IOS_PROVISIONING_PROFILE_WIDGETS PROD_SUPABASE_URL PROD_SUPABASE_ANON_KEY; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing GitHub secrets:$missing. Add them under Settings > Secrets and variables > Actions (see docs/ios-ci-cd.md)."
+            exit 1
+          fi
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: apps/ios
+
+      - name: Generate Xcode project
+        run: brew install xcodegen && xcodegen generate
+
+      - name: Write production Supabase config
+        run: |
+          # "//" starts an xcconfig comment, so https://host is written as https:/$()/host.
+          # shellcheck disable=SC2016  # the literal $() is intended
+          url=$(printf '%s' "$PROD_SUPABASE_URL" | sed 's|://|:/$()/|')
+          printf 'SUPABASE_URL = %s\nSUPABASE_ANON_KEY = %s\n' "$url" "$PROD_SUPABASE_ANON_KEY" \
+            > Configurations/Secrets.Prod.xcconfig
+
+      - name: Build and upload to TestFlight
+        run: bundle exec fastlane beta
