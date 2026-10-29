@@ -203,8 +203,13 @@ const sections: { heading: string; body: ReactNode }[] = [
         </p>
         <p>
           You can also delete individual income and expense entries, categories, goals, debts and
-          failed statements. Transactions can be edited but not deleted one at a time. If you're the
-          head of a household with other members, transfer ownership before deleting your account.
+          failed statements. Transactions can be edited but not deleted one at a time.
+        </p>
+        <p>
+          If you're the head of a household with other members, transfer ownership before deleting
+          your account. Household goals and debts you created stay with the household. Stripe keeps
+          its own records of past payments, and copies in our providers' logs and backups expire on
+          their own schedules.
         </p>
       </>
     ),
