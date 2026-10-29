@@ -33,10 +33,13 @@ public func tokenFailure(for error: Error) -> Error? {
     switch authError {
     case .sessionMissing:
         return nil
-    case .api(_, _, _, let response):
-        // 4xx is the server rejecting this session (408 timeout and 429 rate limit are transient).
+    case .api(_, let code, _, let response):
+        // 4xx is the auth server rejecting this session (408 timeout and 429 rate limit are transient). A 4xx whose
+        // body supabase-swift couldn't read (.unexpectedFailure) came from something in between, such as a CDN's
+        // 403 page or a proxy's 407: not a rejection.
         let status = response.statusCode
-        return (400..<500).contains(status) && status != 408 && status != 429 ? nil : retry
+        let rejected = (400..<500).contains(status) && status != 408 && status != 429 && code != .unexpectedFailure
+        return rejected ? nil : retry
     default:
         return retry
     }

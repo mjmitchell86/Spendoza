@@ -21,6 +21,14 @@ struct AccessTokenFailureTests {
         #expect(tokenFailure(for: apiError(status: 403, code: .userBanned)) == nil)
     }
 
+    /// A 4xx without a JSON body (a CDN's 403 page, a proxy's 407) isn't the auth server rejecting the session.
+    @Test func aFourHundredThatIsntFromAuthIsRetryable() throws {
+        for status in [403, 407] {
+            let error = try #require(tokenFailure(for: apiError(status: status, code: .unexpectedFailure)) as? APIError)
+            #expect(error != .unauthorized)
+        }
+    }
+
     @Test(arguments: [URLError.Code.notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost,
                       .cannotConnectToHost, .dataNotAllowed])
     func aNetworkFailureIsOffline(code: URLError.Code) {
