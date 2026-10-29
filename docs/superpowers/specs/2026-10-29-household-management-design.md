@@ -18,8 +18,6 @@ The owner's rule from 2026-10-29 applies: **every interface ships the same featu
 ## Non-goals
 
 - Household dashboard numbers (dial, drill-down, shared goals and debts) — that's the iPhone Home tab's second plan; the web already has it.
-- Letting someone **without a Spendoza account** join from an invitation — sign-up is invite-only and stays that way. The email tells them to ask the sender for a Spendoza invite code. *(Open for the owner — see below.)*
-- Changing who can use households (the Pro plan check stays as it is).
 - MCP tools for managing a household. Assistants keep the existing read-only `get_household_dashboard`; changing membership or codes is something a person does in the app. *(My call.)*
 
 ## Decisions
@@ -32,7 +30,7 @@ The owner's rule from 2026-10-29 applies: **every interface ships the same featu
 - The existing per-user limit of 5 failed joins per 15 minutes stays.
 
 ### Invitations
-- **Invite by email** sends an email (Resend, the provider already used for report emails): "<Inviter> invited you to join <Household> on Spendoza. Sign in to accept." with a link to `https://www.spendoza.io/household`. The email does **not** contain the code, so rotating the code never breaks an invitation. *(My call.)*
+- **Invite by email** sends an email (Resend, the provider already used for report emails) — wording in "A household invitation is also a way in" below. The email never contains the household's join code, so rotating that code never breaks an invitation. *(My call.)*
 - An invitation is valid for 7 days (the table already has `expires_at`). Inviting the same email again while one is pending resends it and resets the 7 days instead of creating a duplicate.
 - **The head sees pending invitations** (email, sent date, expires) and can **revoke** one.
 - **The invitee sees their pending invitations** where "Create or join a household" appears (web household page and onboarding; app Home tab) with **Accept** and **Decline**. Accepting checks: invitation is for their email, still pending, not expired, they aren't in a household, the household has room.
@@ -53,7 +51,15 @@ The owner's rule from 2026-10-29 applies: **every interface ships the same featu
 - App: the iPhone app's Home tab, built on the app foundation (`docs/superpowers/plans/2026-10-29-ios-foundation-health.md`): `SpendozaAPI`, `Theme`, `MainTabs`.
 - The app's Home tab only appears once it has real screens, so the API and web parts can ship first; the app's household management lands in the first build that has a Home tab. *(My reading of the parity rule while the app is TestFlight-only.)*
 
-## Open for the owner
+### A household invitation is also a way in (owner's decision, 2026-10-29)
+- Someone **without a Spendoza account** can create one from a household invitation, without a separate sign-up invite code.
+- Each invitation gets its own **invitation code**: 10 characters, same Crockford alphabet and `ABCDE-FGHJK` display as the household code, stored in a new unique column `household_invitations.code`, tied to the invited email, expiring with the invitation. It is not the household's join code, so rotating the household code never breaks an invitation, and revoking an invitation kills its code.
+- The email reads: "<Inviter> invited you to join <Household> on Spendoza." with **Accept invitation** → `https://www.spendoza.io/household` for people who already have an account, and "New to Spendoza? Create your account with invitation code ABCDE-FGHJK" → `https://www.spendoza.io/signup?invitation=<code>&email=<email>`.
+- **Sign-up accepts either code** in the existing invite-code field, relabelled "Invite code or invitation code" on web and app. A sign-up invite code works as today. An invitation code works only when the sign-up email matches the invited email (case-insensitive) and the invitation is pending and unexpired; it creates the account, joins the household (if the household is full the account is still created and the person sees "That household is full now"), and marks the invitation accepted. A wrong code, a different email, a revoked or expired invitation all return the same "Invalid or already-used invite code", so codes can't be probed.
+- The invitation code is the proof the person controls that inbox; the invitation's database id is never accepted as a credential.
 
-1. **Invitees without an account.** Should a household invitation also let someone create a Spendoza account (skipping the sign-up invite code)? Today they'd need a separate sign-up invite code.
-2. **Free-plan invitees.** All household routes need Pro, so a free user who's invited can't accept. Keep, or let anyone join a Pro member's household?
+### Members on any plan (owner's decision, 2026-10-29)
+- **Creating a household still needs Pro.** Head-only management (invite, get a new code, rename, delete, remove, hand over) needs the head — the caller — to be Pro.
+- **Joining, accepting, declining, viewing the household, leaving and editing your own sharing work on any plan** as long as the household's head is on Pro. One check: allowed when the caller is Pro *or* the relevant household's head is Pro (for join and accept, the target household's head). The household dashboard and household report routes follow the same rule.
+- If the head drops below Pro, members get the usual "Not available on your plan yet" until the head is on Pro again or someone on Pro becomes head. Nobody's data is removed.
+- With plan checks switched off (no `STRIPE_SECRET_KEY`), everything stays open as today.

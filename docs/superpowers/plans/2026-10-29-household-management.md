@@ -17,7 +17,8 @@
 - Invite code: 10 chars, Crockford base-32 alphabet `0123456789abcdefghjkmnpqrstvwxyz`, stored lowercase, displayed uppercase as `ABCDE-FGHJK`. Old 8-hex codes stay valid until rotated. Join normalizes input: remove spaces and hyphens, lowercase.
 - Only the head receives `invite_code` from the API.
 - Invitations last 7 days (`household_invitations.expires_at`); the email never contains the code; link `https://www.spendoza.io/household`.
-- Households stay behind `requireTier("pro")`; member limit 10 (members + pending invitations for invites, members for joins — unchanged).
+- Plan rule (owner): creating a household and head-only management need the caller on Pro; joining, accepting, declining, viewing, leaving, own sharing, household dashboard and household reports are allowed when the caller is Pro OR the relevant household's head is Pro. With plan checks off (no STRIPE_SECRET_KEY) everything stays open. Member limit 10 (members + pending invitations for invites, members for joins — unchanged).
+- Invitation codes (owner): 10-char Crockford code per invitation in `household_invitations.code` (unique), tied to the invited email; sign-up accepts it in the invite-code field ("Invite code or invitation code") when the sign-up email matches; every failure returns "Invalid or already-used invite code".
 - Branch from `origin/test`, PR against `test`. API: `bash run-tests.sh` and `npx tsc --noEmit -p .` in `packages/api`. Web: `bun run lint`, `bun run typecheck`, `bun run test` in `packages/web`. App: `apps/ios/scripts/test.sh`.
 
 ## Review Focus
@@ -26,6 +27,8 @@
 - **A non-head member's GET of the household** has no `invite_code` key at all (not `null`, absent) — test in Task 2.
 - **Accepting an expired or revoked invitation, or one for a different email** → 400 "This invitation has expired" / 404 "Invitation not found" (revoked and other-email look the same, so invitations can't be probed) — tests in Task 5.
 - **Deleting a household** removes its household-owned reports, goals, debts, email jobs and email log rows, and never touches any member's personal (`entity_type = 'user'`) rows — test in Task 4.
+- **Signing up with an invitation code but a different email, or a revoked/expired invitation** → the same "Invalid or already-used invite code" as a bad sign-up code, no account created — test in Task 6.
+- **A free-plan member of a Pro head's household** can view it, leave and edit own sharing, but cannot invite, rotate, rename, delete or remove (head-only) — tests in Task 7.
 - **The invitation email fails to send** → the invitation is kept pending and the API answers 502 "Couldn't send the invitation email. Try again." so Resend-on-retry works — test in Task 5.
 
 ---
@@ -94,7 +97,7 @@
 
 **Interfaces:**
 - Produces:
-  - `sendHouseholdInvitationEmail(to: string, inviterName: string, householdName: string): Promise<void>` — subject `"<Inviter> invited you to <Household> on Spendoza"`; body says sign in to accept at `https://www.spendoza.io/household`, and if they don't have an account to ask `<Inviter>` for a Spendoza invite code; no household code anywhere in it.
+  - `sendHouseholdInvitationEmail(to: string, inviterName: string, householdName: string, invitationCode: string): Promise<void>` — subject `"<Inviter> invited you to <Household> on Spendoza"`; body: "Accept invitation" → `https://www.spendoza.io/household`; "New to Spendoza? Create your account with invitation code ABCDE-FGHJK" → `https://www.spendoza.io/signup?invitation=<code>&email=<url-encoded email>` (Task 6 adds the code; until then pass an empty string and omit that paragraph); never the household's join code.
   - `POST /api/household/invite` `{ email }`: an existing pending, unexpired invitation for that email → update `expires_at = now() + 7 days` and resend (200 `{ message: "Invitation sent" }`); otherwise insert and send (201). Email failure → 502 `{ error: "Couldn't send the invitation email. Try again." }` with the row kept.
   - `GET /api/household/invitations` (head) → `[{ id, email, created_at, expires_at }]` pending and unexpired.
   - `DELETE /api/household/invitations/:id` (head; must belong to this household) → 204; else 404 "Invitation not found".
@@ -107,7 +110,36 @@
 - [ ] **Step 2:** Run → fail. **Step 3:** Implement. Check `invitation_status` enum values in the initial migration; add a migration only if `declined`/`revoked` are missing (revoke deletes the row, so only `declined` may be needed). **Step 4:** Run → pass; suite + tsc.
 - [ ] **Step 5:** Commit `feat(households): invitation emails, pending list, revoke, accept and decline`.
 
-### Task 6: Web — invite code card
+### Task 6: Invitation codes and signing up from an invitation
+
+**Files:**
+- Create: `packages/api/supabase/migrations/<timestamp>_household_invitation_codes.sql` (add `code text unique`, backfill pending rows with fresh codes generated in SQL or leave null and treat null as "no code", index)
+- Modify: `packages/api/src/routes/households.ts` (`inviteHandler` generates/keeps the code; resend keeps the same code and refreshes `expires_at`), `packages/api/src/routes/auth.ts` (signup), `packages/api/src/services/email.service.ts` + `packages/api/src/emails/household-invitation.ts` (include the code + signup link), `packages/shared/src/schemas/auth.ts` (no shape change; doc comment)
+- Test: `packages/api/src/routes/__tests__/auth.test.ts` (or the existing signup test file), `households.test.ts`, email tests
+
+**Interfaces:**
+- Consumes: `generateHouseholdCode`, `normalizeInviteCode` (Task 1); invitations (Task 5).
+- Produces: `POST /api/auth/signup` `{ email, password, display_name, invite_code }` — `invite_code` normalized; tries `invite_codes` first (unchanged behaviour); otherwise looks for a `household_invitations` row with that `code`, `status = 'pending'`, `expires_at > now()`, `lower(email) = lower(signup email)`; on match creates the user (same admin.createUser path), sets `profiles.household_id` unless the household has 10 members (then the account is still created and the response includes `household_full: true`), marks the invitation `accepted`; every non-match → 400 "Invalid or already-used invite code" (identical to today's bad-code response). Response adds `joined_household: boolean`.
+
+- [ ] **Step 1: Failing tests:** invitation code + matching email (any case) → 201, user created, profile household set, invitation accepted, `joined_household: true`; formatted input "ABCDE-FGHJK" works; different email → 400 exact text, no user created; expired → same 400; revoked (row deleted) → same 400; household with 10 members → 201, `joined_household: false`, `household_full: true`, invitation stays pending; existing sign-up invite codes still work unchanged; the email body contains the invitation code and the signup URL with the url-encoded email, and still not the household join code; resending keeps the same invitation code.
+- [ ] **Step 2:** Run → fail. **Step 3:** Implement (the auth route stays under the 10-per-15-min auth limiter). **Step 4:** Run → pass; suite + tsc.
+- [ ] **Step 5:** Commit `feat(auth): sign up from a household invitation`.
+
+### Task 7: Members on any plan
+
+**Files:**
+- Create: `packages/api/src/middleware/require-household-plan.ts`
+- Modify: `packages/api/src/index.ts` (household mounts no longer use a blanket `requireTier("pro")`), `packages/api/src/routes/households.ts` (per-route checks), the household dashboard and household report routes (find them: `routes/dashboard.ts`, `routes/reports.ts` household endpoints)
+- Test: `packages/api/src/middleware/__tests__/require-household-plan.test.ts`, `households.test.ts`
+
+**Interfaces:**
+- Produces: `requireHouseholdPlan(mode: "caller" | "callerOrHead")` — `"caller"` = today's `requireTier("pro")` (create household, head-only management); `"callerOrHead"` = pass when the caller is Pro or the household's head is Pro (the caller's household; for `POST /join` and `POST /invitations/:id/accept`, the TARGET household found from the code/invitation). Same 403 body as `requireTier` (`{ error: "Upgrade required", required_tier: "pro", current_tier }`). No-op when plan checks are off, exactly like `requireTier`.
+
+- [ ] **Step 1: Failing tests:** free caller in a Pro head's household → GET household 200, leave 200, PUT sharing 200, household dashboard 200, household report 200; free caller → POST invite / invite-code / PATCH / DELETE / remove member / transfer → 403 required_tier pro (they're head-only anyway — assert the 403 is the plan message when the free caller is the head); free caller joining a Pro head's household by code → 200; joining a free head's household → 403; accepting an invitation to a Pro head's household → 200; head drops to free → members get 403 on GET; plan checks off → all 200.
+- [ ] **Step 2:** Run → fail. **Step 3:** Implement. **Step 4:** Run → pass; suite + tsc.
+- [ ] **Step 5:** Commit `feat(households): members on any plan when the head is on Pro`.
+
+### Task 8: Web — invite code card
 
 **Files:**
 - Modify: `packages/web/src/hooks/use-household.ts` (`useRotateInviteCode`), `packages/web/src/components/household/invite-form.tsx`
@@ -121,7 +153,7 @@
 - [ ] **Step 2:** Run → fail. **Step 3:** Implement. **Step 4:** Run → pass; lint + typecheck.
 - [ ] **Step 5:** Commit `feat(web): share and rotate the household invite code`.
 
-### Task 7: Web — members, invitations, rename, delete
+### Task 9: Web — members, invitations, rename, delete
 
 **Files:**
 - Modify: `use-household.ts` (`useHouseholdInvitations`, `useRevokeInvitation`, `useRenameHousehold`, `useDeleteHousehold`), `components/household/member-list.tsx`, `invite-form.tsx` (email part), `pages/household-dashboard.tsx` (settings tab)
@@ -132,35 +164,35 @@
 - [ ] **Step 2:** Run → fail. **Step 3:** Implement (head-only sections render only for the head). **Step 4:** Run → pass; lint + typecheck.
 - [ ] **Step 5:** Commit `feat(web): manage members, invitations, name and deletion`.
 
-### Task 8: Web — accept or decline an invitation
+### Task 10: Web — accept or decline an invitation
 
 **Files:**
-- Modify: `use-household.ts` (`useMyInvitations`, `useAcceptInvitation`, `useDeclineInvitation`), `pages/household-dashboard.tsx` (no-household view), `components/onboarding/household-step.tsx`
+- Modify: `use-household.ts` (`useMyInvitations`, `useAcceptInvitation`, `useDeclineInvitation`), `pages/household-dashboard.tsx` (no-household view), `components/onboarding/household-step.tsx`, the web sign-up page (find it under `pages/`; reads `?invitation=` and `&email=` to prefill the code and email; field label "Invite code or invitation code"; after sign-up with `joined_household: true` lands on the household page, with `household_full: true` shows "That household is full now")
 - Create: `components/household/my-invitations.tsx`
 - Test: `__tests__/my-invitations.test.tsx`
 
-- [ ] **Step 1: Failing tests:** with one invitation, shows "<Inviter> invited you to <Household>" with "Accept" and "Decline" above Create/Join; Accept → household view; expired → shows the API text; no invitations → component renders nothing.
+- [ ] **Step 1: Failing tests:** sign-up page prefills code and email from `?invitation=ABCDE-FGHJK&email=a%40b.com` and shows the new label; with one invitation, shows "<Inviter> invited you to <Household>" with "Accept" and "Decline" above Create/Join; Accept → household view; expired → shows the API text; no invitations → component renders nothing.
 - [ ] **Step 2:** Run → fail. **Step 3:** Implement. **Step 4:** Run → pass; lint + typecheck + `bun run build` in `packages/web`.
-- [ ] **Step 5:** Commit `feat(web): accept or decline household invitations`. Open the PR for Tasks 1–8 against `test` (API + web ship together).
+- [ ] **Step 5:** Commit `feat(web): accept or decline household invitations`. Open the PR for Tasks 1–10 against `test` (API + web ship together).
 
-### Task 9: App — household API and models (after the app foundation plan)
+### Task 11: App — household API and models (after the app foundation plan)
 
 **Files:**
 - Create: `apps/ios/Packages/SpendozaKit/Sources/SpendozaKit/Household/{Household,HouseholdAPI,InviteCode}.swift`, `Tests/SpendozaKitTests/{HouseholdAPITests,InviteCodeTests}.swift`
 - Modify: `Sources/SpendozaKit/API/SpendozaAPI.swift`, `APIClient.swift`, the test stub
 
 **Interfaces:**
-- Produces: `struct Household { id, name, headID, inviteCode: String?, members: [Member] }`, `struct Member { id, displayName, incomeSharing, expenseSharing }`, `struct PendingInvitation { id, email, createdAt, expiresAt }`, `struct MyInvitation { id, householdName, inviterName, expiresAt }`; `enum InviteCode { static func normalize(_:) -> String; static func format(_:) -> String }` (same rules as Task 1's shared functions); on `SpendozaAPI`: `household() async throws -> Household?` (404 → nil), `createHousehold(name:)`, `joinHousehold(code:)`, `rotateInviteCode() -> String`, `renameHousehold(_:)`, `deleteHousehold(confirmName:)`, `invite(email:)`, `pendingInvitations()`, `revokeInvitation(id:)`, `myInvitations()`, `acceptInvitation(id:)`, `declineInvitation(id:)`, `removeMember(id:)`, `makeHead(id:)`, `updateSharing(_:)`, `leaveHousehold()`.
+- Produces: `struct Household { id, name, headID, inviteCode: String?, members: [Member] }`, `struct Member { id, displayName, incomeSharing, expenseSharing }`, `struct PendingInvitation { id, email, createdAt, expiresAt }`, `struct MyInvitation { id, householdName, inviterName, expiresAt }`; `enum InviteCode { static func normalize(_:) -> String; static func format(_:) -> String }` (same rules as Task 1's shared functions); on `SpendozaAPI`: `household() async throws -> Household?` (404 → nil), `createHousehold(name:)`, `joinHousehold(code:)`, `rotateInviteCode() -> String`, `renameHousehold(_:)`, `deleteHousehold(confirmName:)`, `invite(email:)`, `pendingInvitations()`, `revokeInvitation(id:)`, `myInvitations()`, `acceptInvitation(id:)`, `declineInvitation(id:)`, `removeMember(id:)`, `makeHead(id:)`, `updateSharing(_:)`, `leaveHousehold()`. `signUp(...)` now returns `SignUpResult { joinedHousehold: Bool; householdFull: Bool }` (Task 6). A 403 `required_tier` on any household call maps to `.notOnPlan` (Task 7).
 
 - [ ] **Step 1: Failing tests:** `InviteCode` cases mirror Task 1's exactly; each call hits the path/method/body from Tasks 2–5; non-head decode → `inviteCode == nil`; 502 invite → `.message("Couldn't send the invitation email. Try again.")`.
 - [ ] **Step 2:** Run → fail. **Step 3:** Implement. **Step 4:** `scripts/test.sh` → pass.
 - [ ] **Step 5:** Commit `ios: household API and invite codes`.
 
-### Task 10: App — Home tab without a household
+### Task 12: App — Home tab without a household
 
 **Files:**
 - Create: `apps/ios/Spendoza/Features/Home/{HomeModel,HomeView,NoHouseholdView,MyInvitationsSection,CreateHouseholdSheet,JoinHouseholdSheet}.swift`, `SpendozaTests/HomeModelTests.swift`
-- Modify: `Spendoza/App/MainTabs.swift` (add Home between Plan's slot and Me per the spec's tab order, showing tabs that exist)
+- Modify: `Spendoza/App/MainTabs.swift` (add Home between Plan's slot and Me per the spec's tab order, showing tabs that exist), `Spendoza/Features/Auth/SignUpView.swift` (label "Invite code or invitation code"; after sign-up with `joined_household` the Home tab opens; `household_full` shows "That household is full now")
 
 **Interfaces:**
 - Produces: `@MainActor @Observable final class HomeModel { enum State { case loading, none(invitations: [MyInvitation]), member(Household, isHead: Bool), notOnPlan, failed(String) }; func load() async; func accept(_:) async; func decline(_:) async; func create(name:) async throws; func join(code:) async throws }`.
@@ -169,7 +201,7 @@
 - [ ] **Step 2:** Run → fail. **Step 3:** Implement views in the Banknote theme (ruled rows, one filled panel for invitations; "Not available on your plan yet" + Plans & billing for `.notOnPlan`). **Step 4:** Run → pass.
 - [ ] **Step 5:** Commit `ios: Home tab — create, join, and household invitations`.
 
-### Task 11: App — manage the household
+### Task 13: App — manage the household
 
 **Files:**
 - Create: `apps/ios/Spendoza/Features/Home/{HouseholdView,MembersSection,InviteCodeCard,InviteByEmailSheet,PendingInvitationsSection,SharingSettingsView,HouseholdSettingsView}.swift`, `SpendozaTests/HouseholdManagementTests.swift`, `SpendozaUITests/HouseholdUITests.swift`
