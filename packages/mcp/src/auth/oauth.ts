@@ -10,7 +10,23 @@ import type {
   OAuthTokenRevocationRequest,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import { ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { supabaseAdmin, createSupabaseClient } from "../lib/supabase";
+
+function looksLikeJwt(token: string): boolean {
+  return token.split(".").length === 3;
+}
+
+/**
+ * True when Supabase failed for reasons other than the token itself being
+ * invalid (network error, 5xx). 4xx means the token or its session is
+ * already unusable, which counts as revoked.
+ */
+function isServerSideFailure(error: { status?: number } | null | undefined): boolean {
+  if (!error) return false;
+  const status = error.status;
+  return status === undefined || status === 0 || status >= 500;
+}
 
 // ---------------------------------------------------------------------------
 // Clients Store — backed by the `mcp_clients` Supabase table
@@ -259,15 +275,42 @@ export class SpendozaOAuthProvider implements OAuthServerProvider {
   }
 
   /**
-   * Revokes a token. For Supabase JWTs there isn't a built-in revocation
-   * mechanism, but we can sign out the user server-side.
+   * Revokes a token by ending the Supabase session it belongs to.
+   *
+   * The tokens we hand out are the user's own Supabase session tokens, so
+   * revoking either one signs out that session only (scope "local"): its
+   * refresh tokens stop working at once. Supabase access tokens are
+   * stateless JWTs, so one that was already issued keeps working until it
+   * expires (`exp`, one hour by default).
+   *
+   * Per RFC 7009 an invalid, expired or already-revoked token is not an
+   * error. If Supabase can't be reached we fail so the client can retry.
    */
   async revokeToken(
     _client: OAuthClientInformationFull,
-    _request: OAuthTokenRevocationRequest
+    request: OAuthTokenRevocationRequest
   ): Promise<void> {
-    // Supabase JWTs are stateless — no revocation mechanism.
-    // Intentionally a no-op; the token will expire naturally.
+    let accessToken = request.token;
+
+    // Access tokens are JWTs; anything else is a refresh token. Refreshing
+    // it yields an access token for the same session, which we then end.
+    if (!looksLikeJwt(request.token)) {
+      const { data, error } = await createSupabaseClient("").auth.refreshSession({
+        refresh_token: request.token,
+      });
+      if (error || !data.session) {
+        if (isServerSideFailure(error)) {
+          throw new ServerError("Could not revoke token");
+        }
+        return;
+      }
+      accessToken = data.session.access_token;
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.signOut(accessToken, "local");
+    if (error && isServerSideFailure(error)) {
+      throw new ServerError("Could not revoke token");
+    }
   }
 }
 

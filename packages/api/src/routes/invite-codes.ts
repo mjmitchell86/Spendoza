@@ -1,5 +1,6 @@
 import { Router, type Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { supabaseAdmin } from "../lib/supabase";
 import { generateInviteCode } from "../services/household.service";
 
 const router = Router();
@@ -27,13 +28,17 @@ router.get("/", async (req, res: Response) => {
 
 // ---------------------------------------------------------------------------
 // POST / — generate a new invite code (max 3 per user)
+//
+// Clients can't write invite_codes directly (see
+// 20261029120000_invite_codes_owner_only.sql), so the limit check and insert
+// use the service role. The row's fields are set here, never from the body.
 // ---------------------------------------------------------------------------
 router.post("/", async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { user } = req as AuthenticatedRequest;
   const userId = user.id;
 
   // Check count
-  const { count, error: countError } = await db
+  const { count, error: countError } = await supabaseAdmin
     .from("invite_codes")
     .select("id", { count: "exact", head: true })
     .eq("created_by", userId);
@@ -48,7 +53,7 @@ router.post("/", async (req, res: Response) => {
 
   const code = generateInviteCode();
 
-  const { data, error } = await db
+  const { data, error } = await supabaseAdmin
     .from("invite_codes")
     .insert({ code, created_by: userId })
     .select()

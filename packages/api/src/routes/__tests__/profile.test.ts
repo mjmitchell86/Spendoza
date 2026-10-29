@@ -102,6 +102,10 @@ const mockGetUser = mock(() =>
   })
 );
 
+const mockAdminSignOut = mock((_jwt: string, _scope?: string) =>
+  Promise.resolve({ data: null, error: null as { message: string; status?: number } | null })
+);
+
 // ---------------------------------------------------------------------------
 // Mock heavy transitive deps so module loading doesn't time out in CI
 // profile.ts -> report.service -> report-insights -> @langchain/*
@@ -139,7 +143,7 @@ mock.module("@supabase/supabase-js", () => ({
     // Admin client — used by routes (supabaseAdmin) and auth middleware (getUser)
     return {
       auth: {
-        admin: { createUser: mock() },
+        admin: { createUser: mock(), signOut: mockAdminSignOut },
         signInWithPassword: mock(),
         getUser: mockGetUser,
       },
@@ -551,5 +555,54 @@ describe("DELETE /api/profile", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toBe("Account deletion failed. Please try again.");
+  });
+});
+
+// ===========================================================================
+// POST /api/profile/sign-out-others — "Disconnect AI assistants"
+// ===========================================================================
+describe("POST /api/profile/sign-out-others", () => {
+  const url = () => `${baseUrl}/api/profile/sign-out-others`;
+  const send = (auth = true) =>
+    fetch(url(), {
+      method: "POST",
+      headers: auth ? { Authorization: `Bearer ${TEST_TOKEN}` } : {},
+    });
+
+  beforeEach(() => {
+    mockAdminSignOut.mockClear();
+    mockAdminSignOut.mockImplementation(() => Promise.resolve({ data: null, error: null }));
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await send(false);
+    expect(res.status).toBe(401);
+    expect(mockAdminSignOut).not.toHaveBeenCalled();
+  });
+
+  it("signs out every other session of the caller, keeping the current one", async () => {
+    const res = await send();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ signed_out_others: true });
+    expect(mockAdminSignOut).toHaveBeenCalledTimes(1);
+    expect(mockAdminSignOut.mock.calls[0]).toEqual([TEST_TOKEN, "others"]);
+  });
+
+  it("returns 401 when Supabase rejects the caller's session", async () => {
+    mockAdminSignOut.mockImplementation(() =>
+      Promise.resolve({ data: null, error: { message: "session not found", status: 403 } })
+    );
+    const res = await send();
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 500 with a generic message when sign-out fails", async () => {
+    mockAdminSignOut.mockImplementation(() =>
+      Promise.resolve({ data: null, error: { message: "upstream exploded", status: 500 } })
+    );
+    const res = await send();
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Could not sign out other sessions. Please try again.");
   });
 });

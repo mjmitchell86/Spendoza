@@ -6,6 +6,7 @@
     { "source": "/authorize", "destination": "/api/authorize" },
     { "source": "/callback", "destination": "/api/callback" },
     { "source": "/token", "destination": "/api/token" },
-    { "source": "/register", "destination": "/api/register" }
+    { "source": "/register", "destination": "/api/register" },
+    { "source": "/revoke", "destination": "/api/revoke" }
   ]
 }

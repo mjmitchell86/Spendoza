@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { apiClient, API_BASE } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import type { DeleteAccountInput, Profile, UpdateProfileInput } from "@spendoza/shared";
@@ -39,6 +40,23 @@ export function useDeleteAccount() {
   }
 
   return { ...mutation, clearLocalSession };
+}
+
+/**
+ * Sign out every session except this one — including connected AI assistants
+ * (MCP clients), which hold ordinary sessions for this account.
+ */
+export function useSignOutOtherSessions() {
+  return useMutation({
+    mutationFn: () =>
+      apiClient("/profile/sign-out-others", { method: "POST", body: JSON.stringify({}) }),
+    onSuccess: () => {
+      toast.success("AI assistants and other sessions disconnected");
+    },
+    onError: () => {
+      toast.error("Failed to disconnect other sessions. Please try again.");
+    },
+  });
 }
 
 const MAX_AVATAR_DIMENSION = 512;
