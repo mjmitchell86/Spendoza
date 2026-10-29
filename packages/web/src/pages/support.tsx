@@ -83,7 +83,8 @@ const sections: { heading: string; body: ReactNode }[] = [
       <p>
         Spendoza works with AI assistants such as Claude and ChatGPT through its MCP server. In the
         app, MCP has setup steps and example questions. The assistant can read and change your
-        Spendoza data, so only connect one you trust.
+        Spendoza data, so only connect one you trust. To disconnect it, choose Disconnect AI
+        assistants on the MCP page; that also signs you out on your other devices.
       </p>
     ),
   },

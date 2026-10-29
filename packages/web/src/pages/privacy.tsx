@@ -139,7 +139,9 @@ const sections: { heading: string; body: ReactNode }[] = [
         MCP server), you sign in to Spendoza to allow it. The assistant can then read your Spendoza
         data and add, change or delete income, expenses, goals and debts, depending on your plan.
         Whatever it reads is sent to that assistant's provider and handled under their privacy
-        policy.
+        policy. To disconnect, choose Disconnect AI assistants on the MCP page. That signs out every
+        other session, including connected assistants: Spendoza stops accepting their sign-in right
+        away, and the sign-in itself expires shortly after.
       </p>
     ),
   },
