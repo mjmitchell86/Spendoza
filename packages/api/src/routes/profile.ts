@@ -119,8 +119,10 @@ router.put("/onboarding", async (req, res: Response) => {
 
   void (async () => {
     try {
-      await generateUserReport(user.id, thisMonth, true);
-      await generateUserReport(user.id, lastMonth, true);
+      // skipIfEmpty: a month with no transactions gets no report. A new account that skipped the upload would
+      // otherwise get an all-zero report, which every client reads as a real (and misleading) score.
+      await generateUserReport(user.id, thisMonth, true, undefined, { skipIfEmpty: true });
+      await generateUserReport(user.id, lastMonth, true, undefined, { skipIfEmpty: true });
 
       if (data.household_id) {
         // Find all months with user reports (from AI pipeline + above)

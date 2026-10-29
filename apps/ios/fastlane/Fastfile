@@ -1,0 +1,108 @@
+# Spendoza TestFlight lane, modeled on CharadeFam's. Run by .github/workflows/ios-testflight.yml;
+# see docs/ios-ci-cd.md for the secrets and the owner checklist.
+require "tmpdir"
+require "fileutils"
+
+default_platform(:ios)
+
+APP_ID = "com.gravitaz.spendoza"
+WIDGETS_ID = "com.gravitaz.spendoza.widgets"
+PROJECT = "Spendoza.xcodeproj"
+SCHEME = "Spendoza"
+APP_TARGET = "Spendoza"
+WIDGETS_TARGET = "SpendozaWidgets"
+REQUIRED_ENV = %w[
+  APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_CONTENT
+  IOS_DIST_CERT_P12 IOS_DIST_CERT_PASSWORD
+  IOS_PROVISIONING_PROFILE_APP IOS_PROVISIONING_PROFILE_WIDGETS
+].freeze
+
+platform :ios do
+  desc "Build, sign with the stored distribution certificate, and upload to TestFlight"
+  lane :beta do
+    # Fail before touching keychains if a secret is missing. Print names only, never values.
+    missing = REQUIRED_ENV.select { |name| ENV[name].to_s.strip.empty? }
+    UI.user_error!("Missing environment: #{missing.join(', ')}") unless missing.empty?
+
+    setup_ci
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_content: ENV["ASC_KEY_CONTENT"],
+      is_key_content_base64: true
+    )
+
+    # CI passes github.run_number; a local run falls back to a timestamp.
+    increment_build_number(
+      build_number: ENV["BUILD_NUMBER"] || Time.now.strftime("%Y%m%d%H%M"),
+      xcodeproj: PROJECT
+    )
+
+    # Sign with ONE stored distribution certificate and two App Store profiles (app, widgets).
+    # Automatic signing on an ephemeral runner mints a new certificate every run.
+    signing_dir = Dir.mktmpdir("spendoza-signing")
+    begin
+      cert_path = File.join(signing_dir, "distribution.p12")
+      app_profile_path = File.join(signing_dir, "app.mobileprovision")
+      widgets_profile_path = File.join(signing_dir, "widgets.mobileprovision")
+      File.binwrite(cert_path, ENV["IOS_DIST_CERT_P12"].unpack1("m"))
+      File.binwrite(app_profile_path, ENV["IOS_PROVISIONING_PROFILE_APP"].unpack1("m"))
+      File.binwrite(widgets_profile_path, ENV["IOS_PROVISIONING_PROFILE_WIDGETS"].unpack1("m"))
+
+      import_certificate(
+        certificate_path: cert_path,
+        certificate_password: ENV["IOS_DIST_CERT_PASSWORD"],
+        keychain_name: ENV.fetch("MATCH_KEYCHAIN_NAME", "fastlane_tmp_keychain"),
+        keychain_password: ENV.fetch("MATCH_KEYCHAIN_PASSWORD", "")
+      )
+      install_provisioning_profile(path: app_profile_path)
+      install_provisioning_profile(path: widgets_profile_path)
+      app_profile_name = FastlaneCore::ProvisioningProfile.parse(app_profile_path)["Name"]
+      widgets_profile_name = FastlaneCore::ProvisioningProfile.parse(widgets_profile_path)["Name"]
+
+      # One call per target: each gets its own bundle id and profile, plus the team (the project
+      # sets no DEVELOPMENT_TEAM; Release takes it from APPLE_TEAM_ID).
+      [
+        [APP_TARGET, APP_ID, app_profile_name],
+        [WIDGETS_TARGET, WIDGETS_ID, widgets_profile_name]
+      ].each do |target, bundle_id, profile_name|
+        update_code_signing_settings(
+          use_automatic_signing: false,
+          path: PROJECT,
+          team_id: ENV["APPLE_TEAM_ID"],
+          targets: [target],
+          build_configurations: ["Release"],
+          code_sign_identity: "Apple Distribution",
+          profile_name: profile_name,
+          bundle_identifier: bundle_id
+        )
+      end
+
+      build_app(
+        project: PROJECT,
+        scheme: SCHEME,
+        configuration: "Release",
+        destination: "generic/platform=iOS",
+        clean: true,
+        export_method: "app-store",
+        export_options: {
+          signingStyle: "manual",
+          teamID: ENV["APPLE_TEAM_ID"],
+          provisioningProfiles: {
+            APP_ID => app_profile_name,
+            WIDGETS_ID => widgets_profile_name
+          }
+        }
+      )
+
+      upload_to_testflight(
+        api_key: api_key,
+        skip_waiting_for_build_processing: true,
+        skip_submission: true
+      )
+    ensure
+      FileUtils.rm_rf(signing_dir)
+    end
+  end
+end
