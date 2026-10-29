@@ -782,8 +782,11 @@ const inviteLimiter = rateLimit({
   message: { error: "Too many invitations. Try again later." },
 });
 
-// Plan rule: head-only management and creating a household need the caller
-// on Pro; member actions pass when the caller or the household's head is.
+// Plan rule: creating a household and growing or editing it (invite, rotate
+// the code, rename, list invitations) need the caller on Pro; member actions
+// pass when the caller or the household's head is. Leaving, deleting,
+// transferring, removing members and revoking invitations only shrink or exit
+// a household, so they work on any plan and nobody is trapped by a downgrade.
 const caller = requireHouseholdPlan("caller");
 const callerOrHead = requireHouseholdPlan("callerOrHead");
 
@@ -876,12 +879,11 @@ router.patch(
 );
 router.delete(
   "/",
-  caller,
   resolveHousehold,
   validate(deleteHouseholdSchema),
   deleteHouseholdHandler
 );
-router.post("/leave", resolveHousehold, callerOrHead, leaveHandler);
+router.post("/leave", resolveHousehold, leaveHandler);
 // Invitation codes are guessable credentials, so cap failed attempts per user
 // (accept and decline share the budget).
 const invitationAttemptLimiter = rateLimit({
@@ -913,7 +915,6 @@ router.post(
 );
 router.delete(
   "/invitations/:invitationId",
-  caller,
   resolveHousehold,
   revokeInvitationHandler
 );
@@ -934,17 +935,11 @@ router.post(
 );
 router.post(
   "/transfer",
-  caller,
   resolveHousehold,
   validate(transferOwnershipSchema),
   transferOwnershipHandler
 );
-router.delete(
-  "/members/:userId",
-  caller,
-  resolveHousehold,
-  removeMemberHandler
-);
+router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 
 // ---------------------------------------------------------------------------
 // Routes with explicit household ID
@@ -953,7 +948,6 @@ router.get("/:id", callerOrHead, getHouseholdHandler);
 router.patch("/:id", caller, validate(renameHouseholdSchema), renameHandler);
 router.delete(
   "/:id",
-  caller,
   validate(deleteHouseholdSchema),
   deleteHouseholdHandler
 );
@@ -973,11 +967,10 @@ router.post(
 );
 router.post(
   "/:id/transfer",
-  caller,
   validate(transferOwnershipSchema),
   transferOwnershipHandler
 );
-router.delete("/:id/members/:userId", caller, removeMemberHandler);
+router.delete("/:id/members/:userId", removeMemberHandler);
 router.put(
   "/:id/sharing",
   callerOrHead,

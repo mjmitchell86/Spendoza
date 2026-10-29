@@ -68,7 +68,7 @@ function resolve(table: string, op: string, filters: Filter[]) {
       };
     }
   }
-  if (table === "households" && op === "select") {
+  if (table === "households" && op !== "delete") {
     const h = households[f("id") as string];
     return h ? { data: h, error: null } : none;
   }
@@ -95,7 +95,11 @@ function chain(table: string, op: string) {
   c.maybeSingle = () => Promise.resolve(resolve(table, op, filters));
   c.then = (res: (v: unknown) => void, rej?: (e: unknown) => void) =>
     Promise.resolve(
-      op === "select" ? resolve(table, op, filters) : { data: null, error: null }
+      op === "select"
+        ? resolve(table, op, filters)
+        : op === "delete" || op === "upsert"
+          ? { data: [{ household_id: HH, code: CODE }], error: null }
+          : { data: null, error: null }
     ).then(res, rej);
   return c;
 }
@@ -206,6 +210,11 @@ describe("free member of a Pro head's household", () => {
     expect((await call("POST", "/leave")).status).toBe(200);
   });
 
+  it("can leave a free head's household", async () => {
+    users[HEAD].subscription_tier = "free";
+    expect((await call("POST", "/leave")).status).toBe(200);
+  });
+
   it("can edit their own sharing", async () => {
     const res = await call("PUT", "/sharing", {
       income_sharing_mode: "none",
@@ -215,19 +224,28 @@ describe("free member of a Pro head's household", () => {
     expect(res.status).toBe(200);
   });
 
-  it("cannot invite, rotate, rename, delete, transfer or remove", async () => {
+  it("cannot invite, rotate or rename (head-only and plan-gated)", async () => {
     await expectUpgrade(await call("POST", "/invite", { email: "a@b.co" }));
     await expectUpgrade(await call("POST", "/invite-code"));
     await expectUpgrade(await call("PATCH", "", { name: "New" }));
-    await expectUpgrade(await call("DELETE", "", { confirm_name: "Home" }));
-    await expectUpgrade(await call("POST", "/transfer", { new_head_id: HEAD }));
-    await expectUpgrade(await call("DELETE", "/members/other"));
     await expectUpgrade(await call("GET", "/invitations"));
-    await expectUpgrade(await call("DELETE", "/invitations/inv-1"));
     await expectUpgrade(await call("POST", `/${HH}/invite`, { email: "a@b.co" }));
     await expectUpgrade(await call("PATCH", `/${HH}`, { name: "New" }));
   });
 
+  it("is refused by the handler, not the plan, on shrinking routes", async () => {
+    for (const res of [
+      await call("DELETE", "", { confirm_name: "Home" }),
+      await call("POST", "/transfer", {
+        new_head_id: "11111111-1111-4111-8111-111111111111",
+      }),
+      await call("DELETE", "/members/other"),
+      await call("DELETE", "/invitations/inv-1"),
+    ]) {
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).not.toBe("Upgrade required");
+    }
+  });
   it("cannot create a household", async () => {
     currentUserId = "outsider";
     await expectUpgrade(await call("POST", "", { name: "Mine" }));
@@ -235,11 +253,28 @@ describe("free member of a Pro head's household", () => {
 });
 
 describe("a free head", () => {
-  it("gets the plan message on head-only routes", async () => {
+  beforeEach(() => {
     currentUserId = HEAD;
     users[HEAD].subscription_tier = "free";
-    await expectUpgrade(await call("POST", "/invite", { email: "a@b.co" }));
-    await expectUpgrade(await call("PATCH", "", { name: "New" }));
+  });
+
+  it("gets the plan message on invite, rotate and rename", async () => {
+    await expectUpgrade(await call("POST", "/invite", { email: "a@b.co" }), "free");
+    await expectUpgrade(await call("POST", "/invite-code"), "free");
+    await expectUpgrade(await call("PATCH", "", { name: "New" }), "free");
+  });
+
+  it("can transfer, remove a member, revoke and delete", async () => {
+    const other = "11111111-1111-4111-8111-111111111111";
+    users[other] = { id: other, household_id: HH, subscription_tier: "free" };
+    expect(
+      (await call("POST", "/transfer", { new_head_id: other })).status
+    ).toBe(200);
+    expect((await call("DELETE", `/members/${other}`)).status).toBe(204);
+    expect((await call("DELETE", "/invitations/inv-1")).status).toBe(204);
+    expect(
+      (await call("DELETE", "", { confirm_name: "Home" })).status
+    ).toBe(204);
   });
 });
 
