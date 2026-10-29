@@ -46,6 +46,20 @@ async function resolveHousehold(
 // Handlers (shared between /path and /:id/path routes)
 // ---------------------------------------------------------------------------
 
+// The invite code lives in its own head-only table. Add it to the household
+// only when the caller is the head; for everyone else the key is absent.
+async function householdForCaller<
+  T extends { id: string; head_of_household_id: string },
+>(db: AuthenticatedRequest["supabase"], household: T, userId: string) {
+  if (household.head_of_household_id !== userId) return household;
+  const { data } = await db
+    .from("household_invite_codes")
+    .select("code")
+    .eq("household_id", household.id)
+    .single();
+  return data?.code ? { ...household, invite_code: data.code } : household;
+}
+
 async function getHouseholdHandler(req: Request, res: Response) {
   const { user, supabase: db } = req as AuthenticatedRequest;
   const householdId = req.params.id;
@@ -82,15 +96,10 @@ async function getHouseholdHandler(req: Request, res: Response) {
     return res.status(400).json({ error: membersError.message });
   }
 
-  // Only the head receives the invite code
-  if (household.head_of_household_id !== user.id) {
-    const { invite_code: _omitted, ...withoutCode } = household;
-    return res
-      .status(200)
-      .json({ household: withoutCode, members: members ?? [] });
-  }
-
-  return res.status(200).json({ household, members: members ?? [] });
+  return res.status(200).json({
+    household: await householdForCaller(db, household, user.id),
+    members: members ?? [],
+  });
 }
 
 const UNIQUE_VIOLATION = "23505";
@@ -100,9 +109,9 @@ async function rotateInviteCode(householdId: string): Promise<string> {
   for (let attempt = 0; attempt < ROTATE_ATTEMPTS; attempt++) {
     const code = generateHouseholdCode();
     const { error } = await supabaseAdmin
-      .from("households")
-      .update({ invite_code: code })
-      .eq("id", householdId);
+      .from("household_invite_codes")
+      .update({ code, updated_at: new Date().toISOString() })
+      .eq("household_id", householdId);
 
     if (!error) return code;
     if (error.code !== UNIQUE_VIOLATION) throw new Error(error.message);
@@ -187,40 +196,37 @@ async function inviteHandler(req: Request, res: Response) {
 }
 
 async function joinHandler(req: Request, res: Response) {
-  const { data: household } = await supabaseAdmin
-    .from("households")
-    .select("*")
-    .eq("id", req.params.id)
-    .single();
+  const { data: row } = await supabaseAdmin
+    .from("household_invite_codes")
+    .select("household_id, code")
+    .eq("household_id", req.params.id)
+    .maybeSingle();
 
-  return joinHousehold(req, res, household);
+  return joinHousehold(req, res, row);
 }
 
 async function joinByCodeHandler(req: Request, res: Response) {
-  const { data: household } = await supabaseAdmin
-    .from("households")
-    .select("*")
-    .eq("invite_code", normalizeInviteCode(req.body.invite_code))
+  const { data: row } = await supabaseAdmin
+    .from("household_invite_codes")
+    .select("household_id, code")
+    .eq("code", normalizeInviteCode(req.body.invite_code))
     .maybeSingle();
 
-  return joinHousehold(req, res, household);
+  return joinHousehold(req, res, row);
 }
 
 async function joinHousehold(
   req: Request,
   res: Response,
-  household: { id: string; invite_code: string } | null
+  row: { household_id: string; code: string } | null
 ) {
   const { user } = req as AuthenticatedRequest;
 
   // Validate invite code matches household
-  if (
-    !household ||
-    household.invite_code !== normalizeInviteCode(req.body.invite_code)
-  ) {
+  if (!row || row.code !== normalizeInviteCode(req.body.invite_code)) {
     return res.status(400).json({ error: "Invalid invite code" });
   }
-  const householdId = household.id;
+  const householdId = row.household_id;
 
   // Check user is not already in a household
   const { data: profile } = await supabaseAdmin
@@ -420,7 +426,7 @@ async function transferOwnershipHandler(req: Request, res: Response) {
     return res.status(400).json({ error: error.message });
   }
 
-  return res.status(200).json(updated);
+  return res.status(200).json(await householdForCaller(db, updated, user.id));
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +447,6 @@ router.post(
       .insert({
         name: req.body.name,
         head_of_household_id: user.id,
-        invite_code,
       })
       .select()
       .single();
@@ -452,13 +457,22 @@ router.post(
         .json({ error: error?.message ?? "Failed to create household" });
     }
 
+    const { error: codeError } = await supabaseAdmin
+      .from("household_invite_codes")
+      .insert({ household_id: household.id, code: invite_code });
+
+    if (codeError) {
+      await supabaseAdmin.from("households").delete().eq("id", household.id);
+      return res.status(400).json({ error: codeError.message });
+    }
+
     // Update the user's profile to set household_id
     await db
       .from("profiles")
       .update({ household_id: household.id })
       .eq("id", user.id);
 
-    return res.status(201).json(household);
+    return res.status(201).json({ ...household, invite_code });
   }
 );
 router.put(

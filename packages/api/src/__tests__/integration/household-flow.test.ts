@@ -16,7 +16,6 @@ const householdData = {
   id: HOUSEHOLD_ID,
   name: "Smith Family",
   head_of_household_id: HEAD_USER_ID,
-  invite_code: INVITE_CODE,
   created_at: "2026-01-01T00:00:00Z",
 };
 
@@ -306,6 +305,12 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
       households: {
         selectSingle: { data: householdData, error: null },
       },
+      household_invite_codes: {
+        selectSingle: {
+          data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+          error: null,
+        },
+      },
       profiles: {
         selectSingle: { data: { ...memberProfile, household_id: null }, error: null },
         selectList: { data: [headProfile], error: null }, // current members
@@ -417,6 +422,12 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
       households: {
         selectSingle: { data: householdData, error: null },
       },
+      household_invite_codes: {
+        selectSingle: {
+          data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+          error: null,
+        },
+      },
       profiles: {
         updateResult: { data: null, error: null },
       },
@@ -471,6 +482,12 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     adminResults = {
       households: {
         selectSingle: { data: householdData, error: null },
+      },
+      household_invite_codes: {
+        selectSingle: {
+          data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+          error: null,
+        },
       },
       profiles: {
         selectSingle: {

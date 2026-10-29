@@ -24,7 +24,6 @@ const householdData = {
   id: HOUSEHOLD_ID,
   name: "Test Household",
   head_of_household_id: TEST_USER_ID,
-  invite_code: INVITE_CODE,
   created_at: "2026-01-01T00:00:00Z",
 };
 
@@ -275,6 +274,14 @@ beforeEach(() => {
       insertResult: { data: null, error: null },
       selectList: { data: [], error: null },
     },
+    household_invite_codes: {
+      selectSingle: {
+        data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+        error: null,
+      },
+      insertResult: { data: null, error: null },
+      updateResult: { data: null, error: null },
+    },
   };
 
   // Default admin results
@@ -293,6 +300,14 @@ beforeEach(() => {
       insertResult: { data: null, error: null },
       selectList: { data: [], error: null },
       selectSingle: { data: null, error: null },
+    },
+    household_invite_codes: {
+      selectSingle: {
+        data: { household_id: HOUSEHOLD_ID, code: INVITE_CODE },
+        error: null,
+      },
+      insertResult: { data: null, error: null },
+      updateResult: { data: null, error: null },
     },
   };
 });
@@ -317,7 +332,7 @@ describe("POST /api/households", () => {
     const body = await res.json();
     expect(body.id).toBe(HOUSEHOLD_ID);
     expect(body.name).toBe("Test Household");
-    expect(body.invite_code).toBe(INVITE_CODE);
+    expect(body.invite_code).toBe(NEW_HOUSEHOLD_CODE);
     expect(body.head_of_household_id).toBe(TEST_USER_ID);
   });
 
@@ -331,10 +346,14 @@ describe("POST /api/households", () => {
       body: JSON.stringify({ name: "Test Household" }),
     });
 
-    const insert = rlsCalls.find(
-      (c) => c.table === "households" && c.op === "insert"
+    const insert = adminCalls.find(
+      (c) => c.table === "household_invite_codes" && c.op === "insert"
     );
-    expect(insert?.args.invite_code).toHaveLength(10);
+    expect(insert?.args).toEqual({
+      household_id: HOUSEHOLD_ID,
+      code: NEW_HOUSEHOLD_CODE,
+    });
+    expect(NEW_HOUSEHOLD_CODE).toHaveLength(10);
   });
 
   it("returns 400 with invalid data", async () => {
@@ -402,6 +421,11 @@ describe("invite code visibility", () => {
     });
     const body = await res.json();
     expect(body.household.invite_code).toBe(INVITE_CODE);
+    expect(rlsCalls).toContainEqual({
+      table: "household_invite_codes",
+      op: "select.eq",
+      args: ["household_id", HOUSEHOLD_ID],
+    });
   });
 
   it("omits the invite_code key entirely for non-heads", async () => {
@@ -415,6 +439,9 @@ describe("invite code visibility", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect("invite_code" in body.household).toBe(false);
+    expect(rlsCalls.some((c) => c.table === "household_invite_codes")).toBe(
+      false
+    );
     expect(body.household.name).toBe("Test Household");
   });
 });
@@ -427,7 +454,7 @@ describe("POST /api/households/:id/invite-code", () => {
     });
   const householdUpdates = () =>
     [...rlsCalls, ...adminCalls].filter(
-      (c) => c.table === "households" && c.op === "update"
+      (c) => c.table === "household_invite_codes" && c.op === "update"
     );
 
   it("rotates the code for the head", async () => {
@@ -438,7 +465,15 @@ describe("POST /api/households/:id/invite-code", () => {
     expect(body.invite_code).toHaveLength(10);
     const updates = householdUpdates();
     expect(updates).toHaveLength(1);
-    expect(updates[0].args).toEqual({ invite_code: NEW_HOUSEHOLD_CODE });
+    expect(updates[0].args).toMatchObject({ code: NEW_HOUSEHOLD_CODE });
+    expect(adminCalls).toContainEqual(
+      expect.objectContaining({ table: "household_invite_codes", op: "update" })
+    );
+    expect(
+      [...rlsCalls, ...adminCalls].some(
+        (c) => c.table === "households" && c.op === "update"
+      )
+    ).toBe(false);
   });
 
   it("works on the resolved-household route too", async () => {
@@ -470,13 +505,12 @@ describe("POST /api/households/:id/invite-code", () => {
       { data: null, error: null },
     ];
     const cfg = {
-      ...adminResults.households,
+      ...adminResults.household_invite_codes,
       get updateResult() {
         return results.shift() ?? { data: null, error: null };
       },
     };
-    adminResults.households = cfg;
-    rlsResults.households = cfg;
+    adminResults.household_invite_codes = cfg;
     const res = await post(`${HOUSEHOLD_ID}/invite-code`);
     expect(res.status).toBe(200);
     expect(householdUpdates()).toHaveLength(2);
@@ -484,11 +518,10 @@ describe("POST /api/households/:id/invite-code", () => {
 
   it("gives up after 3 unique violations with a 500", async () => {
     const cfg = {
-      ...adminResults.households,
+      ...adminResults.household_invite_codes,
       updateResult: { data: null, error: { code: "23505", message: "dup" } },
     };
-    adminResults.households = cfg;
-    rlsResults.households = cfg;
+    adminResults.household_invite_codes = cfg;
     const res = await post(`${HOUSEHOLD_ID}/invite-code`);
     expect(res.status).toBe(500);
     expect(householdUpdates()).toHaveLength(3);
@@ -496,11 +529,10 @@ describe("POST /api/households/:id/invite-code", () => {
 
   it("does not retry other errors", async () => {
     const cfg = {
-      ...adminResults.households,
+      ...adminResults.household_invite_codes,
       updateResult: { data: null, error: { code: "XX000", message: "boom" } },
     };
-    adminResults.households = cfg;
-    rlsResults.households = cfg;
+    adminResults.household_invite_codes = cfg;
     const res = await post(`${HOUSEHOLD_ID}/invite-code`);
     expect(res.status).toBe(500);
     expect(householdUpdates()).toHaveLength(1);
@@ -626,9 +658,9 @@ describe("POST /api/households/join", () => {
     const body = await res.json();
     expect(body.message).toBe("Joined household successfully");
     expect(adminCalls).toContainEqual({
-      table: "households",
+      table: "household_invite_codes",
       op: "select.eq",
-      args: ["invite_code", INVITE_CODE],
+      args: ["code", INVITE_CODE],
     });
     expect(adminCalls).toContainEqual({
       table: "profiles",
@@ -638,8 +670,8 @@ describe("POST /api/households/join", () => {
   });
 
   it("normalizes a formatted code before looking it up", async () => {
-    adminResults.households.selectMaybeSingle = {
-      data: { ...householdData, invite_code: "abc12345xy" },
+    adminResults.household_invite_codes.selectMaybeSingle = {
+      data: { household_id: HOUSEHOLD_ID, code: "abc12345xy" },
       error: null,
     };
     adminResults.profiles.selectSingle = {
@@ -651,14 +683,17 @@ describe("POST /api/households/join", () => {
 
     expect(res.status).toBe(200);
     expect(adminCalls).toContainEqual({
-      table: "households",
+      table: "household_invite_codes",
       op: "select.eq",
-      args: ["invite_code", "abc12345xy"],
+      args: ["code", "abc12345xy"],
     });
   });
 
   it("returns 400 Invalid invite code when no household has that code", async () => {
-    adminResults.households.selectMaybeSingle = { data: null, error: null };
+    adminResults.household_invite_codes.selectMaybeSingle = {
+      data: null,
+      error: null,
+    };
     adminResults.profiles.selectSingle = {
       data: { ...memberProfile, household_id: null },
       error: null,
@@ -808,5 +843,36 @@ describe("PUT /api/households/:id/sharing", () => {
     expect(body.income_sharing_mode).toBe("partial");
     expect(body.shared_income_amount).toBe(2000);
     expect(body.expense_sharing_mode).toBe("category");
+  });
+});
+
+// ===========================================================================
+// POST /api/households/:id/transfer - the old head must not keep the code
+// ===========================================================================
+describe("POST /api/households/:id/transfer", () => {
+  it("returns the household without invite_code", async () => {
+    rlsResults.households.updateSingle = {
+      data: { ...householdData, head_of_household_id: "user-456" },
+      error: null,
+    };
+
+    const res = await fetch(
+      `${baseUrl}/api/households/${HOUSEHOLD_ID}/transfer`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TEST_TOKEN}`,
+        },
+        body: JSON.stringify({
+          new_head_id: "00000000-0000-4000-8000-000000000456",
+        }),
+      }
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.head_of_household_id).toBe("user-456");
+    expect("invite_code" in body).toBe(false);
   });
 });
