@@ -270,7 +270,7 @@ async function updateSharingHandler(req: Request, res: Response) {
 }
 
 async function leaveHandler(req: Request, res: Response) {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { user } = req as AuthenticatedRequest;
   const householdId = req.params.id;
 
   // Check if user is head of household
@@ -293,8 +293,9 @@ async function leaveHandler(req: Request, res: Response) {
         .json({ error: "Head of household cannot leave. Transfer ownership first." });
     }
 
-    // Sole member — remove from household then delete it
-    await db
+    // Sole member — remove from household then delete it.
+    // profiles.household_id is not client-writable, hence the service role.
+    await supabaseAdmin
       .from("profiles")
       .update({ household_id: null })
       .eq("id", user.id);
@@ -304,7 +305,7 @@ async function leaveHandler(req: Request, res: Response) {
     return res.status(200).json({ message: "Left and deleted household successfully" });
   }
 
-  await db
+  await supabaseAdmin
     .from("profiles")
     .update({ household_id: null })
     .eq("id", user.id);
@@ -368,11 +369,25 @@ async function transferOwnershipHandler(req: Request, res: Response) {
 // ---------------------------------------------------------------------------
 router.get("/", resolveHousehold, getHouseholdHandler);
 router.post("/", validate(createHouseholdSchema), async (req, res: Response) => {
-  const { user, supabase: db } = req as AuthenticatedRequest;
+  const { user } = req as AuthenticatedRequest;
+
+  // One household per user
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("household_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.household_id) {
+    return res.status(400).json({ error: "Already a member of a household" });
+  }
 
   const invite_code = generateInviteCode();
 
-  const { data: household, error } = await db
+  // Clients cannot insert households or set profiles.household_id themselves
+  // (see migration *_lock_profiles_columns.sql), so both writes use the
+  // service role after the checks above (tier is enforced by requireTier).
+  const { data: household, error } = await supabaseAdmin
     .from("households")
     .insert({
       name: req.body.name,
@@ -387,7 +402,7 @@ router.post("/", validate(createHouseholdSchema), async (req, res: Response) => 
   }
 
   // Update the user's profile to set household_id
-  await db
+  await supabaseAdmin
     .from("profiles")
     .update({ household_id: household.id })
     .eq("id", user.id);

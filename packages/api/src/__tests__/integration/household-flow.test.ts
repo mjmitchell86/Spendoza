@@ -233,16 +233,18 @@ describe("Household Flow: Create -> Invite -> Join -> Share -> Verify -> Remove"
     currentUserEmail = HEAD_EMAIL;
     resetResults();
 
-    // POST / uses req.supabase (RLS client) for households.insert + profiles.update
-    rlsResults = {
+    // POST / uses the service role for the one-household check,
+    // households.insert and profiles.update (clients can't write those).
+    rlsResults = {};
+    adminResults = {
       households: {
         insertSingle: { data: householdData, error: null },
       },
       profiles: {
+        selectSingle: { data: { ...headProfile, household_id: null }, error: null },
         updateResult: { data: null, error: null },
       },
     };
-    adminResults = {};
 
     const res = await fetch(`${baseUrl}/api/households`, {
       method: "POST",
