@@ -779,6 +779,32 @@ describe("DELETE /api/bank-statements/:id (file cleanup)", () => {
     expect(fake.files.has(CSV_PATH)).toBe(false);
   });
 
+  it("never deletes a file outside the user's own statements folder", async () => {
+    const otherPath = "other-user/statements/test-statement.pdf";
+    useFake([{ ...failedSingle, file_path: otherPath }], [otherPath]);
+
+    const res = await del("stmt-failed");
+
+    expect(res.status).toBe(204);
+    expect(ids()).toEqual([]);
+    expect(fake.storageLog).toEqual([]);
+    expect(fake.files.has(otherPath)).toBe(true);
+  });
+
+  it("never deletes a file reached by path traversal", async () => {
+    const otherPath = "other-user/statements/test-statement.pdf";
+    useFake(
+      [{ ...failedSingle, file_path: `${TEST_USER_ID}/statements/../../${otherPath}` }],
+      [otherPath]
+    );
+
+    const res = await del("stmt-failed");
+
+    expect(res.status).toBe(204);
+    expect(fake.storageLog).toEqual([]);
+    expect(fake.files.has(otherPath)).toBe(true);
+  });
+
   it("returns 500 and keeps the statement if the file cannot be deleted", async () => {
     useFake([failedSingle], [PDF_PATH]);
     fake.setRemoveError("storage unavailable");
@@ -810,6 +836,17 @@ describe("POST /api/bank-statements/upload (file cleanup)", () => {
       },
       body: JSON.stringify({ bank_name: "Chase" }),
     });
+
+  it("rejects a file name that would escape the user's statements folder", async () => {
+    useFake([], []);
+    currentMockFile = { ...currentMockFile, originalname: "../../other-user/statements/x.pdf" };
+
+    const res = await upload();
+
+    expect(res.status).toBe(400);
+    expect(fake.storageLog).toEqual([]);
+    expect(fake.tables.bank_statements).toHaveLength(0);
+  });
 
   it("removes the uploaded file if the statement row cannot be inserted", async () => {
     useFake([], []);

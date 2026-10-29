@@ -5,22 +5,29 @@ import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { computeFileHash, listBankStatements, getBankStatement } from "../services/bank-statement.service";
 import { toServiceContext } from "../services/context";
-import { isStatementFileNeeded, removeStatementFile } from "../services/statement-file.service";
+import {
+  isOwnedStatementPath,
+  isStatementFileNeeded,
+  removeStatementFile,
+} from "../services/statement-file.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// bank_statements rows are server-owned: clients can read their own rows but
+// not write them, so writes go through supabaseAdmin scoped by user_id.
 
 /**
  * Remove a failed statement: its uploaded file, its multi-month split children,
  * and its row. The file is deleted first (unless another statement still needs
  * the shared file), so if storage fails nothing is removed and the user can retry.
+ * A file_path outside the user's statements folder is never touched.
  */
 async function removeFailedStatement(
-  db: AuthenticatedRequest["supabase"],
   userId: string,
   statement: { id: string; file_hash: string; file_path: string }
 ): Promise<{ error: string | null }> {
-  const { data: children, error: childrenError } = await db
+  const { data: children, error: childrenError } = await supabaseAdmin
     .from("bank_statements")
     .select("id")
     .eq("user_id", userId)
@@ -33,37 +40,42 @@ async function removeFailedStatement(
   const removedIds = [statement.id, ...(children ?? []).map((c: { id: string }) => c.id)];
 
   let fileKept = false;
-  try {
-    if (await isStatementFileNeeded(userId, statement.file_path, removedIds)) {
-      fileKept = true;
-    } else {
-      const { error: storageError } = await removeStatementFile(statement.file_path);
-      if (storageError) {
-        return { error: storageError };
+  if (!isOwnedStatementPath(userId, statement.file_path)) {
+    console.error(`[bank-statements] statement ${statement.id} has a file_path outside the user's folder; not deleting it`);
+  } else {
+    try {
+      if (await isStatementFileNeeded(userId, statement.file_path, removedIds)) {
+        fileKept = true;
+      } else {
+        const { error: storageError } = await removeStatementFile(userId, statement.file_path);
+        if (storageError) {
+          return { error: storageError };
+        }
       }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
     }
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
   }
 
   // Delete child records from multi-month splits (CASCADE removes their transactions)
-  await db
+  await supabaseAdmin
     .from("bank_statements")
     .delete()
     .eq("user_id", userId)
     .like("file_hash", `${statement.file_hash}:%`);
 
-  await db
+  await supabaseAdmin
     .from("bank_statements")
     .delete()
-    .eq("id", statement.id);
+    .eq("id", statement.id)
+    .eq("user_id", userId);
 
   // A sibling that needed the shared file may have finished while we were
   // removing rows (it saw this statement still present), so re-check.
   if (fileKept) {
     try {
       if (!(await isStatementFileNeeded(userId, statement.file_path, []))) {
-        const { error: storageError } = await removeStatementFile(statement.file_path);
+        const { error: storageError } = await removeStatementFile(userId, statement.file_path);
         if (storageError) {
           console.error(`[bank-statements] failed to delete file ${statement.file_path}: ${storageError}`);
         }
@@ -124,7 +136,7 @@ router.post(
     if (existing) {
       if (existing.status === "failed") {
         // Allow re-upload by removing the failed record and its file first
-        const { error: removeError } = await removeFailedStatement(db, user.id, existing);
+        const { error: removeError } = await removeFailedStatement(user.id, existing);
         if (removeError) {
           console.error(`[upload] failed to remove failed statement ${existing.id}: ${removeError}`);
           return res.status(500).json({ error: "Failed to upload file" });
@@ -136,6 +148,9 @@ router.post(
 
     // Upload to Supabase Storage
     const storagePath = `${user.id}/statements/${file.originalname}`;
+    if (!isOwnedStatementPath(user.id, storagePath)) {
+      return res.status(400).json({ error: "Invalid file name" });
+    }
     const { error: storageError } = await supabaseAdmin.storage
       .from("bank-statements")
       .upload(storagePath, file.buffer, {
@@ -149,7 +164,7 @@ router.post(
     }
 
     // Insert record into bank_statements table
-    const { data, error } = await db
+    const { data, error } = await supabaseAdmin
       .from("bank_statements")
       .insert({
         user_id: user.id,
@@ -168,7 +183,7 @@ router.post(
 
     if (error) {
       // Don't leave the uploaded file in storage without a statement record
-      const { error: cleanupError } = await removeStatementFile(storagePath);
+      const { error: cleanupError } = await removeStatementFile(user.id, storagePath);
       if (cleanupError) {
         console.error(`[upload] failed to remove orphaned file ${storagePath}: ${cleanupError}`);
       }
@@ -234,7 +249,7 @@ router.post("/:id/reprocess", async (req, res: Response) => {
       ? "extract_transactions"
       : "extract_text";
 
-  const { data, error } = await db
+  const { data, error } = await supabaseAdmin
     .from("bank_statements")
     .update({
       status: "processing",
@@ -275,7 +290,7 @@ router.delete("/:id", async (req, res: Response) => {
     return res.status(400).json({ error: "Only failed statements can be deleted" });
   }
 
-  const { error: removeError } = await removeFailedStatement(db, user.id, statement);
+  const { error: removeError } = await removeFailedStatement(user.id, statement);
   if (removeError) {
     console.error(`[delete] failed to remove statement ${statement.id}: ${removeError}`);
     return res.status(500).json({ error: "Failed to remove statement" });

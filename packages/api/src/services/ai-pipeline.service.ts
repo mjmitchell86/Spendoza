@@ -10,7 +10,11 @@ import { detectRecurringIncome } from "./income-detection.service";
 import { linkPaymentsToDebts } from "./debt-payment-linker.service";
 import { generateUserReport, generateHouseholdReport } from "./report.service";
 import { splitCsvByMonth } from "./csv-splitter";
-import { isStatementFileNeeded, removeStatementFile } from "./statement-file.service";
+import {
+  downloadStatementFile,
+  isStatementFileNeeded,
+  removeStatementFile,
+} from "./statement-file.service";
 
 /** Normalize a transaction description for dedup comparison. */
 function normalizeDescription(desc: string): string {
@@ -39,7 +43,7 @@ async function deleteRawFile(
     return;
   }
 
-  const { error } = await removeStatementFile(filePath);
+  const { error } = await removeStatementFile(statement.user_id, filePath);
 
   if (error) {
     console.error(`[ai-pipeline] [${statementId}] failed to delete raw file: ${error}`);
@@ -173,13 +177,14 @@ async function stepExtractText(statementId: string): Promise<void> {
   const statement = await getStatement(statementId);
   const { file_path } = statement;
 
-  // Download file from Supabase Storage
-  const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-    .from("bank-statements")
-    .download(file_path);
+  // Download file from Supabase Storage (only from the owner's statements folder)
+  const { data: fileData, error: downloadError } = await downloadStatementFile(
+    statement.user_id,
+    file_path
+  );
 
   if (downloadError || !fileData) {
-    throw new Error(`Failed to download file: ${downloadError?.message}`);
+    throw new Error(`Failed to download file: ${downloadError}`);
   }
 
   const arrayBuffer = await fileData.arrayBuffer();

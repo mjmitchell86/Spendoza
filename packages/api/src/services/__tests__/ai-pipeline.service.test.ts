@@ -262,3 +262,48 @@ describe("raw file cleanup: multi-month CSV split", () => {
     expect(fake.files.has(FILE_PATH)).toBe(true);
   });
 });
+
+// ===========================================================================
+// Statement file paths are confined to the owner's folder
+// ===========================================================================
+describe("statement file path confinement", () => {
+  it("refuses to download a file outside the owner's statements folder", async () => {
+    const otherPath = "other-user/statements/history.csv";
+    setup([
+      statement({
+        id: "single",
+        file_hash: "singlehash",
+        file_path: otherPath,
+        status: "processing",
+        parsed_data: { pipeline_step: "extract_text" },
+      }),
+    ]);
+    fake.files.add(otherPath);
+
+    await executeStep("single", "extract_text");
+
+    expect(fake.storageLog).toEqual([]);
+    const row = fake.tables.bank_statements.find((r) => r.id === "single")!;
+    expect(row.parsed_data.pdf_text).toBeUndefined();
+    expect(row.status).not.toBe("parsed");
+  });
+
+  it("refuses to delete a file outside the owner's statements folder", async () => {
+    const otherPath = "other-user/statements/history.csv";
+    setup([
+      statement({
+        id: "single",
+        file_hash: "singlehash",
+        file_path: otherPath,
+        status: "processing",
+        parsed_data: { pipeline_step: "match_and_insert", classified_transactions: classified },
+      }),
+    ]);
+    fake.files.add(otherPath);
+
+    await executeStep("single", "match_and_insert");
+
+    expect(fake.storageLog).toEqual([]);
+    expect(fake.files.has(otherPath)).toBe(true);
+  });
+});
