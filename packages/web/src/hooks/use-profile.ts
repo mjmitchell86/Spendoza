@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, API_BASE } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
-import type { Profile, UpdateProfileInput } from "@spendoza/shared";
+import type { DeleteAccountInput, Profile, UpdateProfileInput } from "@spendoza/shared";
 
 export function useProfile() {
   return useQuery<Profile>({
@@ -19,6 +19,26 @@ export function useUpdateProfile() {
       void queryClient.invalidateQueries({ queryKey: ["profile"] });
     },
   });
+}
+
+/**
+ * Permanently delete the signed-in user's account. The caller should navigate
+ * away and then call `clearLocalSession` — the server has already removed the
+ * auth user, so only the local session and query cache remain.
+ */
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (data: DeleteAccountInput) =>
+      apiClient("/profile", { method: "DELETE", body: JSON.stringify(data) }),
+  });
+
+  async function clearLocalSession() {
+    await supabase.auth.signOut({ scope: "local" });
+    queryClient.clear();
+  }
+
+  return { ...mutation, clearLocalSession };
 }
 
 const MAX_AVATAR_DIMENSION = 512;

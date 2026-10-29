@@ -150,6 +150,21 @@ mock.module("@supabase/supabase-js", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mock account service (deletion logic is unit-tested in account.service.test)
+// ---------------------------------------------------------------------------
+class MockAccountDeletionError extends Error {
+  constructor(public code: string, message: string) {
+    super(message);
+  }
+}
+const mockDeleteAccount = mock((_userId: string) => Promise.resolve());
+
+mock.module("../../services/account.service", () => ({
+  deleteAccount: mockDeleteAccount,
+  AccountDeletionError: MockAccountDeletionError,
+}));
+
+// ---------------------------------------------------------------------------
 // Mock multer for avatar upload testing
 // ---------------------------------------------------------------------------
 const fakeImageBuffer = Buffer.from("fake-image-data");
@@ -458,5 +473,83 @@ describe("POST /api/profile/avatar", () => {
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error).toBe("Missing authorization header");
+  });
+});
+
+// ===========================================================================
+// DELETE /api/profile — self-service account deletion
+// ===========================================================================
+describe("DELETE /api/profile", () => {
+  const url = () => `${baseUrl}/api/profile`;
+  const send = (body?: unknown, auth = true) =>
+    fetch(url(), {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...(auth ? { Authorization: `Bearer ${TEST_TOKEN}` } : {}),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  beforeEach(() => {
+    mockDeleteAccount.mockClear();
+    mockDeleteAccount.mockImplementation(() => Promise.resolve());
+  });
+
+  it("returns 401 without auth token", async () => {
+    const res = await send({ confirm: "DELETE" }, false);
+    expect(res.status).toBe(401);
+    expect(mockDeleteAccount).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the confirmation is missing", async () => {
+    const res = await send({});
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Validation failed");
+    expect(mockDeleteAccount).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the confirmation is wrong", async () => {
+    const res = await send({ confirm: "delete" });
+    expect(res.status).toBe(400);
+    expect(mockDeleteAccount).not.toHaveBeenCalled();
+  });
+
+  it("deletes the authenticated user's account and returns 200", async () => {
+    const res = await send({ confirm: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: true });
+    expect(mockDeleteAccount).toHaveBeenCalledTimes(1);
+    expect(mockDeleteAccount.mock.calls[0][0]).toBe(TEST_USER_ID);
+  });
+
+  it("returns 409 with the message when the user must transfer household ownership first", async () => {
+    mockDeleteAccount.mockImplementation(() =>
+      Promise.reject(
+        new MockAccountDeletionError(
+          "HOUSEHOLD_HEAD_HAS_MEMBERS",
+          "Transfer household ownership first."
+        )
+      )
+    );
+
+    const res = await send({ confirm: "DELETE" });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe("Transfer household ownership first.");
+  });
+
+  it("returns 500 with a generic message when deletion fails", async () => {
+    mockDeleteAccount.mockImplementation(() =>
+      Promise.reject(
+        new MockAccountDeletionError("FAILED", "Account deletion failed. Please try again.")
+      )
+    );
+
+    const res = await send({ confirm: "DELETE" });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("Account deletion failed. Please try again.");
   });
 });
