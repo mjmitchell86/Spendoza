@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import { renderWithQuery } from "@/test/render";
@@ -10,6 +10,11 @@ mock.module("@/lib/api", () => ({ apiClient }));
 const { InviteForm } = await import("../invite-form");
 
 const originalShare = (navigator as { share?: unknown }).share;
+
+// The trigger and the confirm button share a name, so scope to the dialog.
+function confirmButton() {
+  return within(screen.getByRole("dialog")).getByRole("button", { name: "Get a new code" });
+}
 
 function setup(code = "abcdefghjk") {
   const queryClient = new QueryClient({
@@ -76,7 +81,7 @@ describe("InviteForm invite code card", () => {
       ),
     ).toBeTruthy();
     expect(apiClient).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Replace code" }));
+    await userEvent.click(confirmButton());
     await waitFor(() => expect(screen.getByText("KMNPQ-RSTVW")).toBeTruthy());
     expect(apiClient).toHaveBeenCalledWith("/household/invite-code", { method: "POST" });
     expect(
@@ -89,7 +94,7 @@ describe("InviteForm invite code card", () => {
     apiClient.mockRejectedValue(new Error("Only the head of household can change the invite code"));
     setup();
     await userEvent.click(screen.getByRole("button", { name: "Get a new code" }));
-    await userEvent.click(screen.getByRole("button", { name: "Replace code" }));
+    await userEvent.click(confirmButton());
     await waitFor(() =>
       expect(
         screen.getByText("Only the head of household can change the invite code"),

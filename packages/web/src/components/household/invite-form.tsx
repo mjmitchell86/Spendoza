@@ -126,7 +126,7 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
               Cancel
             </Button>
             <Button onClick={() => void handleRotate()} disabled={rotate.isPending}>
-              {rotate.isPending ? "Working..." : "Replace code"}
+              {rotate.isPending ? "Working..." : "Get a new code"}
             </Button>
           </DialogFooter>
         </DialogContent>
