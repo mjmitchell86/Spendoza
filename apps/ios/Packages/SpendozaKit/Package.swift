@@ -6,7 +6,8 @@ let package = Package(
     platforms: [.iOS("26.0"), .macOS(.v15)],
     products: [.library(name: "SpendozaKit", targets: ["SpendozaKit"])],
     dependencies: [
-        .package(url: "https://github.com/supabase/supabase-swift", from: "2.0.0"),
+        // Pinned to the 2.55.x line: Package.resolved is not used by xcodebuild for this local package.
+        .package(url: "https://github.com/supabase/supabase-swift", .upToNextMinor(from: "2.55.5")),
     ],
     targets: [
         .target(
