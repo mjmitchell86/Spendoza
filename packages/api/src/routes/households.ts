@@ -239,23 +239,34 @@ async function inviteHandler(req: Request, res: Response) {
       .json({ error: "Household has reached the 10-member limit" });
   }
 
-  // last_sent_at is written only once the email has gone out, so a failed
-  // send doesn't start the resend cooldown.
+  // Sending claims the resend cooldown up front (last_sent_at), so two
+  // concurrent resends can't both send; a failed send hands it back below.
+  const sentAt = new Date(now).toISOString();
   const timing = {
     expires_at: new Date(now + INVITATION_TTL_MS).toISOString(),
+    last_sent_at: sentAt,
   };
 
   let code: string;
   let created = false;
   if (existing) {
     code = existing.code ?? generateHouseholdCode();
-    const { error } = await supabaseAdmin
+    // Atomic claim: only matches while the cooldown is free
+    const cutoff = new Date(now - RESEND_COOLDOWN_MS).toISOString();
+    const { data: claimed, error } = await supabaseAdmin
       .from("household_invitations")
       .update(existing.code ? timing : { ...timing, code })
-      .eq("id", existing.id);
+      .eq("id", existing.id)
+      .or(`last_sent_at.is.null,last_sent_at.lt.${cutoff}`)
+      .select("id");
 
     if (error) {
       return res.status(400).json({ error: error.message });
+    }
+    if (!claimed?.length) {
+      return res.status(429).json({
+        error: "You just sent this invitation. Try again in a few minutes.",
+      });
     }
   } else {
     // Insert invitation (admin client: the head was verified above)
@@ -272,7 +283,6 @@ async function inviteHandler(req: Request, res: Response) {
           status: "pending",
           code,
           ...timing,
-          last_sent_at: null,
         });
       insertError = error;
       if (!error || error.code !== UNIQUE_VIOLATION) break;
@@ -300,22 +310,19 @@ async function inviteHandler(req: Request, res: Response) {
     );
   } catch (err) {
     console.error("[households] invitation email failed:", err);
+    // Hand the cooldown back (unless a later send claimed it since), so the
+    // head can retry straight away
+    const { error: restoreError } = await supabaseAdmin
+      .from("household_invitations")
+      .update({ last_sent_at: existing ? (existing.last_sent_at ?? null) : null })
+      .eq("code", code)
+      .eq("last_sent_at", sentAt);
+    if (restoreError) {
+      console.error("[households] releasing resend cooldown failed:", restoreError);
+    }
     return res
       .status(502)
       .json({ error: "Couldn't send the invitation email. Try again." });
-  }
-
-  // Only one pending invitation exists per household and email (the resend
-  // path above reuses it), so this marks exactly the one just sent.
-  const { error: sentError } = await supabaseAdmin
-    .from("household_invitations")
-    .update({ last_sent_at: new Date(now).toISOString() })
-    .eq("household_id", householdId)
-    .eq("email", email)
-    .eq("status", "pending");
-  if (sentError) {
-    // The email went out; only the resend cooldown is missing
-    console.error("[households] recording last_sent_at failed:", sentError);
   }
 
   return res.status(created ? 201 : 200).json({ message: "Invitation sent" });

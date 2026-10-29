@@ -66,6 +66,7 @@ function makeFrom(results: () => Record<string, Result>, calls: () => Call[]) {
       "gt",
       "order",
       "in",
+      "or",
     ]) {
       chain[op] = record(op);
     }
@@ -190,7 +191,10 @@ beforeEach(() => {
   };
   adminResults = {
     "household_invitations.insert": { list: EMPTY },
-    "household_invitations.update": { list: EMPTY },
+    // A conditional update that matched (claims return the row)
+    "household_invitations.update": {
+      list: { data: [{ id: INVITATION_ID }], error: null },
+    },
     "household_invitations.select": { list: { data: [], error: null } },
     "household_invitations.delete": {
       list: { data: [{ id: INVITATION_ID }], error: null },
@@ -399,6 +403,20 @@ describe("POST /api/household/invite", () => {
     expect(adminOps("household_invitations", "delete")).toHaveLength(0);
   });
 
+  // A head of their own, so these tests don't spend the 20/hour invite budget
+  // the earlier tests share
+  let heads = 0;
+  const asOwnHead = () => {
+    const id = `cooldown-head-${++heads}`;
+    asUser(id);
+    rlsResults["households.select"] = {
+      single: {
+        data: { ...householdData, head_of_household_id: id },
+        error: null,
+      },
+    };
+  };
+
   // The row as the database would hold it after the writes recorded so far
   const savedInvitation = () => {
     const row = { ...adminOps("household_invitations", "insert")[0].args[0] };
@@ -409,6 +427,7 @@ describe("POST /api/household/invite", () => {
   };
 
   it("lets the head retry straight after a failed send (no cooldown)", async () => {
+    asOwnHead();
     mockSendEmail.mockImplementation(() => Promise.reject(new Error("boom")));
     const first = await invite();
     expect(first.status).toBe(502);
@@ -423,21 +442,72 @@ describe("POST /api/household/invite", () => {
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
   });
 
-  it("records last_sent_at only after the email is sent", async () => {
+  it("claims the cooldown on insert (the new row carries last_sent_at)", async () => {
+    asOwnHead();
     const res = await invite();
     expect(res.status).toBe(201);
-    const updates = adminOps("household_invitations", "update");
-    expect(updates.at(-1)!.args[0].last_sent_at).toBeDefined();
+    const row = adminOps("household_invitations", "insert")[0].args[0];
+    expect(typeof row.last_sent_at).toBe("string");
+    expect(adminOps("household_invitations", "update")).toHaveLength(0);
   });
 
-  it("keeps the previous last_sent_at when a resend fails", async () => {
+  it("claims the cooldown on resend with a conditional update", async () => {
+    asOwnHead();
     setExisting(existingRow());
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(200);
+    const claim = adminOps("household_invitations", "update")[0].args[0];
+    expect(typeof claim.last_sent_at).toBe("string");
+    const or = adminOps("household_invitations", "or")[0].args[0] as string;
+    expect(or).toMatch(/^last_sent_at\.is\.null,last_sent_at\.lt\./);
+    const cutoff = new Date(or.split("last_sent_at.lt.")[1]).getTime();
+    expect(Math.abs(cutoff - (Date.now() - 10 * 60_000))).toBeLessThan(5000);
+  });
+
+  it("answers 429 without sending when another resend claimed it first", async () => {
+    asOwnHead();
+    setExisting(existingRow());
+    adminResults["household_invitations.update"] = {
+      list: { data: [], error: null },
+    };
+    const res = await invite("again@example.com");
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "You just sent this invitation. Try again in a few minutes.",
+    });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("sends only once for two concurrent resends of the same invitation", async () => {
+    asOwnHead();
+    setExisting(existingRow());
+    // The conditional update matches for whichever request gets there first
+    let claimed = false;
+    adminResults["household_invitations.update"] = {
+      get list() {
+        const won = !claimed;
+        claimed = true;
+        return { data: won ? [{ id: INVITATION_ID }] : [], error: null };
+      },
+    };
+    const statuses = (
+      await Promise.all([invite("again@example.com"), invite("again@example.com")])
+    )
+      .map((r) => r.status)
+      .sort();
+    expect(statuses).toEqual([200, 429]);
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores the previous last_sent_at when a resend fails", async () => {
+    asOwnHead();
+    const previous = past();
+    setExisting(existingRow({ last_sent_at: previous }));
     mockSendEmail.mockImplementation(() => Promise.reject(new Error("boom")));
     const res = await invite("again@example.com");
     expect(res.status).toBe(502);
-    for (const u of adminOps("household_invitations", "update")) {
-      expect("last_sent_at" in u.args[0]).toBe(false);
-    }
+    const updates = adminOps("household_invitations", "update");
+    expect(updates.at(-1)!.args[0]).toEqual({ last_sent_at: previous });
   });
 
   it("answers 502 when a resend fails, keeping the row", async () => {
