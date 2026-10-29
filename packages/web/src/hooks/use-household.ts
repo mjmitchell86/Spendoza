@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
+import { isNotFoundError } from "@/lib/api-error";
 import type {
   CreateHouseholdInput,
   Household,
@@ -19,9 +20,11 @@ export function useHousehold() {
     queryFn: async () => {
       try {
         return await apiClient("/household");
-      } catch {
-        // User may not be in a household — return null
-        return null;
+      } catch (err) {
+        // 404: the user isn't in a household. Anything else (a plan refusal,
+        // a server error) is a real error, not "no household".
+        if (isNotFoundError(err)) return null;
+        throw err;
       }
     },
   });
@@ -220,6 +223,9 @@ export function useDeleteHousehold() {
       queryClient.setQueryData<HouseholdData | null>(["household"], null);
       queryClient.removeQueries({ queryKey: ["household", "invitations"] });
       void queryClient.invalidateQueries({ queryKey: ["household"] });
+      // Household-scoped data went with it
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "household"] });
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
     },
   });
 }

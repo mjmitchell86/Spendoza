@@ -8,7 +8,6 @@ import {
   useCreateHousehold,
   useJoinHousehold,
 } from "@/hooks/use-household";
-import { MyInvitations } from "@/components/household/my-invitations";
 import { SharingConfig } from "@/components/household/sharing-config";
 
 interface HouseholdStepProps {
@@ -99,8 +98,6 @@ export function HouseholdStep({ onNext, onSkip }: HouseholdStepProps) {
           {error}
         </div>
       )}
-
-      <MyInvitations onAccepted={() => setHouseholdCreated(true)} />
 
       <Tabs defaultValue="create" className="w-full">
         <TabsList className="grid w-full grid-cols-2">

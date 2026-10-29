@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+// The signed-in user's household name, for the "You've joined" notice.
+async function joinedHouseholdName(): Promise<string> {
+  try {
+    const data = (await apiClient("/household")) as { household?: { name?: string } } | null;
+    return data?.household?.name || "the household";
+  } catch {
+    return "the household";
+  }
+}
 
 export function SignupPage() {
   const { signUp } = useAuth();
@@ -39,7 +49,9 @@ export function SignupPage() {
     try {
       const result = await signUp(email, password, displayName, inviteCode);
       if (result?.joined_household) {
-        navigate("/household", { replace: true });
+        // A new account goes through onboarding first (the auth guard sends
+        // every page there), so say they joined before continuing.
+        setNotice(`You've joined ${await joinedHouseholdName()}`);
       } else if (result?.household_full) {
         setNotice("That household is full now");
       } else if (result?.household_not_on_plan) {

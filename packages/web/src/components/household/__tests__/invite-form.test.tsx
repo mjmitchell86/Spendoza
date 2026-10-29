@@ -3,6 +3,7 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import { renderWithQuery } from "@/test/render";
+import { ApiError } from "@/lib/api-error";
 
 const apiClient = mock();
 mock.module("@/lib/api", () => ({ apiClient }));
@@ -88,6 +89,33 @@ describe("InviteForm invite code card", () => {
       (queryClient.getQueryData(["household"]) as { household: { invite_code: string } })
         .household.invite_code,
     ).toBe("kmnpqrstvw");
+  });
+
+  it("offers only Get a new code when the household has no code yet", async () => {
+    apiClient.mockResolvedValue({ invite_code: "kmnpqrstvw" });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(["household"], { household: { id: "h1" }, members: [] });
+    renderWithQuery(<InviteForm />, queryClient);
+    expect(screen.queryByRole("button", { name: /copy/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /share/i })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Get a new code" }));
+    await userEvent.click(confirmButton());
+    await waitFor(() => expect(screen.getByText("KMNPQ-RSTVW")).toBeTruthy());
+  });
+
+  it("shows the plan message when rotation is not on the plan", async () => {
+    apiClient.mockRejectedValue(
+      new ApiError("Upgrade required", 403, { error: "Upgrade required", required_tier: "pro" }),
+    );
+    setup();
+    await userEvent.click(screen.getByRole("button", { name: "Get a new code" }));
+    await userEvent.click(confirmButton());
+    await waitFor(() =>
+      expect(screen.getByText(/Not available on your plan yet/)).toBeTruthy(),
+    );
+    expect(screen.queryByText("Upgrade required")).toBeNull();
   });
 
   it("shows the server error verbatim when rotation fails", async () => {

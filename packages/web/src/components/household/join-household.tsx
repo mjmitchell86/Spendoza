@@ -10,12 +10,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ActionError } from "@/components/plan-error";
 import { useJoinHousehold } from "@/hooks/use-household";
 
 export function JoinHousehold() {
   const joinHousehold = useJoinHousehold();
   const [inviteCode, setInviteCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -24,9 +25,7 @@ export function JoinHousehold() {
       await joinHousehold.mutateAsync({ invite_code: inviteCode.trim() });
       setInviteCode("");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to join household"
-      );
+      setError(err);
     }
   }
 
@@ -41,11 +40,7 @@ export function JoinHousehold() {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="flex flex-col gap-4">
-          {error && (
-            <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+          <ActionError error={error} fallback="Failed to join household" />
           <div className="flex flex-col gap-2">
             <Label htmlFor="invite_code">Invite Code</Label>
             <Input

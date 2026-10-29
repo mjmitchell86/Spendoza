@@ -25,7 +25,13 @@ describe("PendingInvitations", () => {
     renderWithQuery(<PendingInvitations />);
     await waitFor(() => expect(screen.getByText("pat@example.com")).toBeTruthy());
     expect(screen.getByText("Pending invitations")).toBeTruthy();
-    expect(screen.getByText(/^Expires /)).toBeTruthy();
+    expect(
+      screen.getByText(
+        `Sent ${new Date(invitation.created_at).toLocaleDateString()} · Expires ${new Date(
+          invitation.expires_at,
+        ).toLocaleDateString()}`,
+      ),
+    ).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() =>
       expect(apiClient).toHaveBeenCalledWith("/household/invitations/i1", { method: "DELETE" }),

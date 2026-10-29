@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ActionError } from "@/components/plan-error";
 import {
   useAcceptInvitation,
   useDeclineInvitation,
@@ -12,16 +13,14 @@ import {
 function InvitationRow({
   invitation,
   initialCode,
-  onAccepted,
 }: {
   invitation: MyInvitation;
   initialCode: string;
-  onAccepted?: () => void;
 }) {
   const accept = useAcceptInvitation();
   const decline = useDeclineInvitation();
   const [code, setCode] = useState(initialCode);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ err: unknown; action: string } | null>(null);
   const busy = accept.isPending || decline.isPending;
 
   async function run(action: "accept" | "decline") {
@@ -31,9 +30,8 @@ function InvitationRow({
         id: invitation.id,
         code: code.trim(),
       });
-      if (action === "accept") onAccepted?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action} invitation`);
+      setError({ err, action });
     }
   }
 
@@ -53,9 +51,7 @@ function InvitationRow({
         Enter the code from your invitation email.
       </p>
       {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
+        <ActionError error={error.err} fallback={`Failed to ${error.action} invitation`} />
       )}
       <div className="flex gap-2">
         <Button size="sm" disabled={busy || !code.trim()} onClick={() => void run("accept")}>
@@ -74,7 +70,7 @@ function InvitationRow({
   );
 }
 
-export function MyInvitations({ onAccepted }: { onAccepted?: () => void }) {
+export function MyInvitations() {
   const { data: invitations } = useMyInvitations();
   const [searchParams] = useSearchParams();
   const prefill = searchParams.get("invitation") ?? "";
@@ -88,7 +84,6 @@ export function MyInvitations({ onAccepted }: { onAccepted?: () => void }) {
           key={invitation.id}
           invitation={invitation}
           initialCode={invitations.length === 1 ? prefill : ""}
-          onAccepted={onAccepted}
         />
       ))}
     </ul>

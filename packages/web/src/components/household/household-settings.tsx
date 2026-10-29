@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ActionError } from "@/components/plan-error";
 import { useDeleteHousehold, useRenameHousehold } from "@/hooks/use-household";
 
 function ErrorBanner({ message }: { message: string }) {
@@ -29,7 +30,7 @@ export function HouseholdSettings({ name }: HouseholdSettingsProps) {
   const rename = useRenameHousehold();
   const remove = useDeleteHousehold();
   const [newName, setNewName] = useState(name);
-  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameError, setRenameError] = useState<unknown>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmName, setConfirmName] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export function HouseholdSettings({ name }: HouseholdSettingsProps) {
     try {
       await rename.mutateAsync({ name: newName.trim() });
     } catch (err) {
-      setRenameError(err instanceof Error ? err.message : "Failed to rename household");
+      setRenameError(err);
     }
   }
 
@@ -58,7 +59,7 @@ export function HouseholdSettings({ name }: HouseholdSettingsProps) {
     <div className="flex flex-col gap-6">
       <form onSubmit={(e) => void handleRename(e)} className="flex flex-col gap-2">
         <Label htmlFor="household_name">Household name</Label>
-        {renameError && <ErrorBanner message={renameError} />}
+        <ActionError error={renameError} fallback="Failed to rename household" />
         <div className="flex gap-2">
           <Input
             id="household_name"

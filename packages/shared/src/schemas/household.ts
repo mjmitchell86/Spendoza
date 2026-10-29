@@ -87,7 +87,9 @@ export interface Household {
   id: string;
   name: string;
   head_of_household_id: string;
-  invite_code: string;
+  // Sent to the head only (it lives in the head-only household_invite_codes
+  // table), and absent when the household has no code row yet.
+  invite_code?: string;
   created_at: string;
 }
 

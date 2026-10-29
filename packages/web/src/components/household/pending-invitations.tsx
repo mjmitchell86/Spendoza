@@ -33,7 +33,9 @@ export function PendingInvitations() {
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{invitation.email}</p>
               <p className="text-xs text-muted-foreground">
-                Expires {new Date(invitation.expires_at).toLocaleDateString()}
+                {`Sent ${new Date(invitation.created_at).toLocaleDateString()} · Expires ${new Date(
+                  invitation.expires_at,
+                ).toLocaleDateString()}`}
               </p>
             </div>
             <Button

@@ -12,25 +12,27 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ActionError } from "@/components/plan-error";
 import { useInviteToHousehold, useRotateInviteCode } from "@/hooks/use-household";
 
 interface InviteFormProps {
-  inviteCode: string;
+  /** Absent when the household has no code yet: only "Get a new code" is offered. */
+  inviteCode?: string;
 }
 
 export function InviteForm({ inviteCode }: InviteFormProps) {
   const invite = useInviteToHousehold();
   const rotate = useRotateInviteCode();
   const [email, setEmail] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [success, setSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [rotateError, setRotateError] = useState<string | null>(null);
+  const [rotateError, setRotateError] = useState<unknown>(null);
   // Show the freshly rotated code right away, until the prop catches up.
-  const [rotated, setRotated] = useState<{ from: string; code: string } | null>(null);
+  const [rotated, setRotated] = useState<{ from?: string; code: string } | null>(null);
   const currentCode = rotated && rotated.from === inviteCode ? rotated.code : inviteCode;
-  const displayCode = formatInviteCode(currentCode);
+  const displayCode = currentCode ? formatInviteCode(currentCode) : "";
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   async function handleSubmit(e: FormEvent) {
@@ -42,9 +44,7 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
       setEmail("");
       setSuccess(true);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Couldn't send the invitation email. Try again.",
-      );
+      setError(err);
     }
   }
 
@@ -69,7 +69,7 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
       setRotated({ from: inviteCode, code: result.invite_code });
       setConfirmOpen(false);
     } catch (err) {
-      setRotateError(err instanceof Error ? err.message : "Failed to generate a new code");
+      setRotateError(err);
     }
   }
 
@@ -78,15 +78,19 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
       {/* Invite code section */}
       <div className="flex flex-col gap-2">
         <Label>Invite Code</Label>
-        <div className="rounded-md border bg-muted/40 px-4 py-3 text-center font-mono text-2xl tracking-widest">
-          {displayCode}
-        </div>
+        {displayCode && (
+          <div className="rounded-md border bg-muted/40 px-4 py-3 text-center font-mono text-2xl tracking-widest">
+            {displayCode}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => void handleCopyCode()}>
-            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-            Copy
-          </Button>
-          {canShare && (
+          {displayCode && (
+            <Button variant="outline" size="sm" onClick={() => void handleCopyCode()}>
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              Copy
+            </Button>
+          )}
+          {displayCode && canShare && (
             <Button variant="outline" size="sm" onClick={() => void handleShare()}>
               <Share2 className="size-4" />
               Share
@@ -105,7 +109,9 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Share this code with people you want to join your household.
+          {displayCode
+            ? "Share this code with people you want to join your household."
+            : "Your household has no code yet. Get a new code to share one."}
         </p>
       </div>
 
@@ -118,11 +124,7 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
               household stay.
             </DialogDescription>
           </DialogHeader>
-          {rotateError && (
-            <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {rotateError}
-            </div>
-          )}
+          <ActionError error={rotateError} fallback="Failed to generate a new code" />
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
@@ -137,11 +139,7 @@ export function InviteForm({ inviteCode }: InviteFormProps) {
       {/* Email invite */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <Label htmlFor="invite_email">Invite by email</Label>
-        {error && (
-          <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        <ActionError error={error} fallback="Couldn't send the invitation email. Try again." />
         {success && (
           <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
             Invitation sent
