@@ -393,6 +393,121 @@ describe("GET /api/households/:id", () => {
 });
 
 // ===========================================================================
+// Invite code visibility and rotation
+// ===========================================================================
+describe("invite code visibility", () => {
+  it("includes invite_code for the head", async () => {
+    const res = await fetch(`${baseUrl}/api/households/${HOUSEHOLD_ID}`, {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+    const body = await res.json();
+    expect(body.household.invite_code).toBe(INVITE_CODE);
+  });
+
+  it("omits the invite_code key entirely for non-heads", async () => {
+    rlsResults.households.selectSingle = {
+      data: { ...householdData, head_of_household_id: "someone-else" },
+      error: null,
+    };
+    const res = await fetch(`${baseUrl}/api/households/${HOUSEHOLD_ID}`, {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect("invite_code" in body.household).toBe(false);
+    expect(body.household.name).toBe("Test Household");
+  });
+});
+
+describe("POST /api/households/:id/invite-code", () => {
+  const post = (path: string) =>
+    fetch(`${baseUrl}/api/households/${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+  const householdUpdates = () =>
+    [...rlsCalls, ...adminCalls].filter(
+      (c) => c.table === "households" && c.op === "update"
+    );
+
+  it("rotates the code for the head", async () => {
+    const res = await post(`${HOUSEHOLD_ID}/invite-code`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.invite_code).toBe(NEW_HOUSEHOLD_CODE);
+    expect(body.invite_code).toHaveLength(10);
+    const updates = householdUpdates();
+    expect(updates).toHaveLength(1);
+    expect(updates[0].args).toEqual({ invite_code: NEW_HOUSEHOLD_CODE });
+  });
+
+  it("works on the resolved-household route too", async () => {
+    const res = await post("invite-code");
+    expect(res.status).toBe(200);
+    expect((await res.json()).invite_code).toBe(NEW_HOUSEHOLD_CODE);
+  });
+
+  it("returns 403 for a non-head and does not update", async () => {
+    rlsResults.households.selectSingle = {
+      data: { ...householdData, head_of_household_id: "someone-else" },
+      error: null,
+    };
+    adminResults.households.selectSingle = {
+      data: { ...householdData, head_of_household_id: "someone-else" },
+      error: null,
+    };
+    const res = await post(`${HOUSEHOLD_ID}/invite-code`);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(
+      "Only the head of household can change the invite code"
+    );
+    expect(householdUpdates()).toHaveLength(0);
+  });
+
+  it("retries once on a unique violation", async () => {
+    const results = [
+      { data: null, error: { code: "23505", message: "duplicate" } },
+      { data: null, error: null },
+    ];
+    const cfg = {
+      ...adminResults.households,
+      get updateResult() {
+        return results.shift() ?? { data: null, error: null };
+      },
+    };
+    adminResults.households = cfg;
+    rlsResults.households = cfg;
+    const res = await post(`${HOUSEHOLD_ID}/invite-code`);
+    expect(res.status).toBe(200);
+    expect(householdUpdates()).toHaveLength(2);
+  });
+
+  it("gives up after 3 unique violations with a 500", async () => {
+    const cfg = {
+      ...adminResults.households,
+      updateResult: { data: null, error: { code: "23505", message: "dup" } },
+    };
+    adminResults.households = cfg;
+    rlsResults.households = cfg;
+    const res = await post(`${HOUSEHOLD_ID}/invite-code`);
+    expect(res.status).toBe(500);
+    expect(householdUpdates()).toHaveLength(3);
+  });
+
+  it("does not retry other errors", async () => {
+    const cfg = {
+      ...adminResults.households,
+      updateResult: { data: null, error: { code: "XX000", message: "boom" } },
+    };
+    adminResults.households = cfg;
+    rlsResults.households = cfg;
+    const res = await post(`${HOUSEHOLD_ID}/invite-code`);
+    expect(res.status).toBe(500);
+    expect(householdUpdates()).toHaveLength(1);
+  });
+});
+
+// ===========================================================================
 // POST /api/households/:id/invite — invite by email
 // ===========================================================================
 describe("POST /api/households/:id/invite", () => {

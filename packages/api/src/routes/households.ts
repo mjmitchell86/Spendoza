@@ -82,7 +82,57 @@ async function getHouseholdHandler(req: Request, res: Response) {
     return res.status(400).json({ error: membersError.message });
   }
 
+  // Only the head receives the invite code
+  if (household.head_of_household_id !== user.id) {
+    const { invite_code: _omitted, ...withoutCode } = household;
+    return res
+      .status(200)
+      .json({ household: withoutCode, members: members ?? [] });
+  }
+
   return res.status(200).json({ household, members: members ?? [] });
+}
+
+const UNIQUE_VIOLATION = "23505";
+const ROTATE_ATTEMPTS = 3;
+
+async function rotateInviteCode(householdId: string): Promise<string> {
+  for (let attempt = 0; attempt < ROTATE_ATTEMPTS; attempt++) {
+    const code = generateHouseholdCode();
+    const { error } = await supabaseAdmin
+      .from("households")
+      .update({ invite_code: code })
+      .eq("id", householdId);
+
+    if (!error) return code;
+    if (error.code !== UNIQUE_VIOLATION) throw new Error(error.message);
+  }
+  throw new Error("Could not generate a unique invite code");
+}
+
+async function rotateInviteCodeHandler(req: Request, res: Response) {
+  const { user, supabase: db } = req as AuthenticatedRequest;
+  const householdId = req.params.id;
+
+  const { data: household } = await db
+    .from("households")
+    .select("*")
+    .eq("id", householdId)
+    .single();
+
+  if (!household || household.head_of_household_id !== user.id) {
+    return res
+      .status(403)
+      .json({ error: "Only the head of household can change the invite code" });
+  }
+
+  try {
+    const invite_code = await rotateInviteCode(householdId);
+    return res.status(200).json({ invite_code });
+  } catch (err) {
+    console.error("[households] rotate invite code failed:", err);
+    return res.status(500).json({ error: "Failed to generate a new code" });
+  }
 }
 
 async function inviteHandler(req: Request, res: Response) {
@@ -299,11 +349,9 @@ async function leaveHandler(req: Request, res: Response) {
 
   if (household?.head_of_household_id === user.id) {
     if ((allMembers?.length ?? 0) > 1) {
-      return res
-        .status(400)
-        .json({
-          error: "Head of household cannot leave. Transfer ownership first.",
-        });
+      return res.status(400).json({
+        error: "Head of household cannot leave. Transfer ownership first.",
+      });
     }
 
     // Sole member — remove from household then delete it
@@ -425,6 +473,7 @@ router.post(
   validate(inviteToHouseholdSchema),
   inviteHandler
 );
+router.post("/invite-code", resolveHousehold, rotateInviteCodeHandler);
 router.post("/leave", resolveHousehold, leaveHandler);
 // The code alone is the credential here, so cap failed guesses per user.
 const joinByCodeLimiter = rateLimit({
@@ -453,6 +502,7 @@ router.delete("/members/:userId", resolveHousehold, removeMemberHandler);
 // ---------------------------------------------------------------------------
 router.get("/:id", getHouseholdHandler);
 router.post("/:id/invite", validate(inviteToHouseholdSchema), inviteHandler);
+router.post("/:id/invite-code", rotateInviteCodeHandler);
 router.post("/:id/join", validate(joinHouseholdSchema), joinHandler);
 router.post(
   "/:id/transfer",
