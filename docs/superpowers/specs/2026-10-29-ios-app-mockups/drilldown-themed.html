@@ -1,0 +1,159 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Public+Sans:wght@400;600&display=swap" rel="stylesheet">
+
+<h2>The drill-down, built on the theme</h2>
+<p class="subtitle">Health → one part of the score → one spending category. Engraved dial, Banknote colors, floating glass tab bar.</p>
+
+<style>
+  :root { --paper:#E9EEE6; --note:#1E4A3B; --ink:#1A2620; --line:#9DB3A6; --amber:#A8701A; --oxblood:#8E2B2B; --soft:#4A5A52; --card:#F4F7F2; }
+  .flow { display: flex; gap: 18px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+  .arr { align-self: center; font-size: 26px; color: #94a3b8; }
+  .stepc { text-align: center; }
+  .stepc .cap { font-size: 13px; font-weight: 600; margin: 12px 0 0; }
+  .stepc .cap span { display: block; font-weight: 400; opacity: .7; font-size: 12px; margin-top: 2px; }
+  .dev { width: 268px; border-radius: 42px; padding: 9px; background: #1c1d20; box-shadow: 0 24px 48px -24px rgba(0,0,0,.55); text-align: left; }
+  .scr { border-radius: 34px; overflow: hidden; height: 600px; position: relative; background: var(--paper); color: var(--ink); font-family: "Public Sans", sans-serif; }
+  .island { width: 84px; height: 24px; border-radius: 12px; background: #000; margin: 8px auto 6px; }
+  .pad { padding: 2px 20px 16px; }
+  .back { font-size: 13px; color: var(--note); margin: 0 0 2px; display: flex; align-items: center; gap: 2px; }
+  .ttl { font-family: "Newsreader", serif; font-size: 26px; font-weight: 600; margin: 2px 0 2px; letter-spacing: -.01em; line-height: 1.15; }
+  .sub { font-size: 12px; color: var(--soft); margin: 0 0 6px; }
+  .dial { width: 228px; height: 148px; display: block; margin: 2px auto 0; }
+  .band { text-align: center; font-size: 13px; margin: 0 0 10px; }
+  .band b { color: var(--amber); font-weight: 600; }
+  .rows { border-top: 1px solid var(--line); }
+  .row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .row .pts { font-family: "Newsreader", serif; font-size: 16px; }
+  .row .d { font-size: 12px; margin-left: 6px; color: var(--oxblood); }
+  .row .d.z { color: #6B7A72; }
+  .row .d.g { color: var(--note); }
+  .row .chev { color: var(--line); margin-left: 6px; }
+  .row .meta { font-size: 11px; color: var(--soft); display: block; }
+  .row.hl { background: linear-gradient(90deg, rgba(168,112,26,.12), transparent); }
+  .tip { margin-top: 10px; padding: 12px 14px; border-radius: 4px; background: var(--note); color: #EAF1EC; font-size: 13px; line-height: 1.4; }
+  .tip b { font-family: "Newsreader", serif; font-size: 15px; font-weight: 600; display: block; margin-bottom: 2px; }
+  .fig { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 2px; }
+  .fig .n { font-family: "Newsreader", serif; font-size: 40px; font-weight: 600; line-height: 1; font-variant-numeric: lining-nums tabular-nums; }
+  .fig .of { font-size: 13px; color: var(--soft); white-space: nowrap; }
+  .fig .d { margin-left: auto; font-size: 13px; color: var(--oxblood); font-weight: 600; white-space: nowrap; }
+  .rule { font-size: 12px; color: var(--soft); line-height: 1.45; margin: 0 0 8px; }
+  .meter { height: 8px; border-radius: 4px; background: #D3DDD5; position: relative; margin: 10px 0 4px; }
+  .meter i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; background: var(--amber); }
+  .meter u { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); text-decoration: none; }
+  .meter-l { display: flex; justify-content: space-between; font-size: 10px; color: var(--soft); }
+  .hist { display: flex; align-items: flex-end; gap: 6px; height: 64px; margin: 10px 0 2px; padding: 0 2px; border-bottom: 1px solid var(--line); }
+  .hist i { flex: 1; background: repeating-linear-gradient(135deg, rgba(30,74,59,.55) 0 1px, rgba(30,74,59,.18) 1px 3px); border-radius: 2px 2px 0 0; }
+  .hist i.now { background: var(--amber); }
+  .hist-l { display: flex; justify-content: space-between; font-size: 10px; color: var(--soft); margin-bottom: 8px; }
+  .sec { font-family: "Newsreader", serif; font-size: 15px; font-weight: 600; margin: 10px 0 4px; }
+  .act { display: flex; gap: 8px; margin-top: 10px; }
+  .btn { flex: 1; text-align: center; background: var(--note); color: #F4F7F2; border-radius: 4px; padding: 10px 0; font-size: 12px; font-weight: 600; }
+  .btn.ghost { background: transparent; color: var(--note); box-shadow: inset 0 0 0 1px var(--note); }
+  .ico { width: 22px; height: 22px; display: block; margin: 0 auto 2px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .glass { position: absolute; left: 16px; right: 16px; bottom: 14px; height: 60px; border-radius: 30px; display: flex; align-items: center; justify-content: space-around; padding: 0 6px;
+    background: linear-gradient(180deg, rgba(244,247,242,.78), rgba(233,238,230,.62)); backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    border: 1px solid rgba(255,255,255,.7); box-shadow: 0 10px 24px -10px rgba(26,38,32,.45), inset 0 1px 0 rgba(255,255,255,.9), inset 0 -1px 0 rgba(157,179,166,.5); }
+  .glass span { font-size: 10px; color: #5C6B63; text-align: center; width: 46px; padding: 6px 0 4px; border-radius: 22px; }
+  .glass span.on { color: var(--note); font-weight: 600; background: rgba(30,74,59,.10); box-shadow: inset 0 0 0 1px rgba(30,74,59,.18); }
+  .fade { position: absolute; left: 0; right: 0; bottom: 0; height: 100px; background: linear-gradient(180deg, rgba(233,238,230,0), rgba(233,238,230,.96) 62%); pointer-events: none; }
+  .widgets { margin-top: 36px; display: flex; gap: 20px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .wallpaper { padding: 18px; border-radius: 24px; display: flex; gap: 16px; align-items: center; background: linear-gradient(135deg,#8fb0c4,#c9b39b); }
+  .w { width: 140px; height: 140px; border-radius: 24px; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 6px 16px -8px rgba(0,0,0,.45); font-family: "Public Sans", sans-serif; }
+  .w svg { width: 118px; height: 76px; }
+  .w small { font-size: 11px; color: var(--soft); margin-top: 2px; }
+  .lock { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,.25); display: flex; align-items: center; justify-content: center; }
+  .lock svg { width: 52px; height: 52px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-health" viewBox="0 0 24 24"><path d="M3 17a9 9 0 0 1 18 0"/><path d="M12 17l4-6"/><circle cx="12" cy="17" r="1.4"/></symbol>
+  <symbol id="i-money" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="1.5"/><circle cx="12" cy="12" r="2.6"/><path d="M5.5 9v6M18.5 9v6"/></symbol>
+  <symbol id="i-plan" viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 3.5L16 11H5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-me" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+  <g id="nav-inner"></g>
+</svg>
+
+<div class="flow">
+
+  <!-- 1 · Health -->
+  <div class="stepc"><div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <p class="ttl">Your money's health</p>
+      <p class="sub">October check-up</p>
+      <svg class="dial" viewBox="0 0 240 156"><defs><clipPath id="d1"><rect x="0" y="0" width="240" height="130"/></clipPath></defs><g clip-path="url(#d1)" fill="none" stroke="#1E4A3B" stroke-width=".45" opacity=".5"><ellipse cx="120" cy="130" rx="86" ry="38"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(15 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(30 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(45 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(60 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(75 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(90 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(105 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(120 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(135 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(150 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(165 120 130)"/></g><path d="M24 130 A96 96 0 0 1 89.3 39.7" fill="none" stroke="#8E2B2B" stroke-width="7"/><path d="M91.2 39.2 A96 96 0 0 1 175.2 51.6" fill="none" stroke="#A8701A" stroke-width="7"/><path d="M176.8 52.9 A96 96 0 0 1 216 130" fill="none" stroke="#1E4A3B" stroke-width="7"/><line x1="120" y1="130" x2="173" y2="70" stroke="#1A2620" stroke-width="1" stroke-dasharray="2 3" opacity=".45"/><line x1="120" y1="130" x2="154" y2="58" stroke="#1A2620" stroke-width="2.5" stroke-linecap="round"/><circle cx="120" cy="130" r="30" fill="#E9EEE6"/><text x="120" y="139" text-anchor="middle" font-family="Newsreader, serif" font-size="34" font-weight="600" fill="#1A2620">64</text><text x="120" y="153" text-anchor="middle" font-family="Public Sans, sans-serif" font-size="9" fill="#4A5A52">of 100</text></svg>
+      <p class="band"><b>Fair</b>, down 9 since September</p>
+      <div class="rows">
+        <div class="row"><span>Savings rate</span><span><span class="pts">16</span>/25<span class="d">−3</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Needs</span><span><span class="pts">20</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+        <div class="row hl"><span>Wants</span><span><span class="pts">9</span>/15<span class="d">−6</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Emergency fund</span><span><span class="pts">10</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Debt vs. income</span><span><span class="pts">9</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+      </div>
+      <div class="tip"><b>Dining out cost you 6 points</b>A $250 monthly budget for it would win back about 4.</div>
+    </div>
+    <div class="fade"></div>
+    <nav class="glass"><span class="on"><svg class="ico"><use href="#i-health"/></svg>Health</span><span><svg class="ico"><use href="#i-money"/></svg>Money</span><span><svg class="ico"><use href="#i-plan"/></svg>Plan</span><span><svg class="ico"><use href="#i-home"/></svg>Home</span><span><svg class="ico"><use href="#i-me"/></svg>Me</span></nav>
+  </div></div><p class="cap">Health<span>Tap Wants to see why it dropped</span></p></div>
+
+  <div class="arr">›</div>
+
+  <!-- 2 · Wants -->
+  <div class="stepc"><div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <p class="back">‹ Health</p>
+      <p class="ttl">Wants</p>
+      <div class="fig"><span class="n">9</span><span class="of">of 15</span><span class="d">−6 since Sep</span></div>
+      <p class="rule">Full points while wants stay at or under 30% of your income. October came in at 34%.</p>
+      <div class="meter"><i style="width:68%"></i><u style="left:60%"></u></div>
+      <div class="meter-l"><span>0%</span><span>30% line</span><span>50%</span></div>
+      <div class="hist"><i style="height:78%"></i><i style="height:84%"></i><i style="height:80%"></i><i style="height:100%"></i><i class="now" style="height:60%"></i></div>
+      <div class="hist-l"><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span></div>
+      <p class="sec">What moved it</p>
+      <div class="rows">
+        <div class="row hl"><span>Dining out<span class="meta">$448 this month</span></span><span><span class="d">+$310</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Entertainment<span class="meta">$96 this month</span></span><span><span class="d">+$41</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Personal<span class="meta">$127 this month</span></span><span><span class="d g">−$22</span><span class="chev">›</span></span></div>
+      </div>
+      <div class="act"><span class="btn">Set a dining budget</span><span class="btn ghost">Ask the advisor</span></div>
+    </div>
+    <div class="fade"></div>
+    <nav class="glass"><span class="on"><svg class="ico"><use href="#i-health"/></svg>Health</span><span><svg class="ico"><use href="#i-money"/></svg>Money</span><span><svg class="ico"><use href="#i-plan"/></svg>Plan</span><span><svg class="ico"><use href="#i-home"/></svg>Home</span><span><svg class="ico"><use href="#i-me"/></svg>Me</span></nav>
+  </div></div><p class="cap">One part of the score<span>The rule, where you are against it, its trend, what moved it</span></p></div>
+
+  <div class="arr">›</div>
+
+  <!-- 3 · Dining out -->
+  <div class="stepc"><div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <p class="back">‹ Wants</p>
+      <p class="ttl">Dining out</p>
+      <div class="fig"><span class="n">$448</span><span class="of">in October</span><span class="d">+$310</span></div>
+      <p class="rule">You usually spend about $140 a month here.</p>
+      <div class="hist"><i style="height:30%"></i><i style="height:28%"></i><i style="height:34%"></i><i style="height:31%"></i><i class="now" style="height:100%"></i></div>
+      <div class="hist-l"><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span></div>
+      <p class="sec">Transactions</p>
+      <div class="rows">
+        <div class="row"><span>Steakhouse 1820<span class="meta">Oct 18 · Chase ••4821</span></span><span><span class="pts" style="font-size:14px">$212.40</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Olive Garden<span class="meta">Oct 23</span></span><span><span class="pts" style="font-size:14px">$86.09</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Dominos Pizza<span class="meta">Oct 2</span></span><span><span class="pts" style="font-size:14px">$25.30</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Panera Bread<span class="meta">Oct 1</span></span><span><span class="pts" style="font-size:14px">$26.27</span><span class="chev">›</span></span></div>
+      </div>
+      <div class="act"><span class="btn">Set a $250 budget</span></div>
+    </div>
+    <div class="fade"></div>
+    <nav class="glass"><span class="on"><svg class="ico"><use href="#i-health"/></svg>Health</span><span><svg class="ico"><use href="#i-money"/></svg>Money</span><span><svg class="ico"><use href="#i-plan"/></svg>Plan</span><span><svg class="ico"><use href="#i-home"/></svg>Home</span><span><svg class="ico"><use href="#i-me"/></svg>Me</span></nav>
+  </div></div><p class="cap">One spending category<span>Its trend, every transaction (tap to recategorize), a budget</span></p></div>
+
+</div>
+
+<div class="widgets">
+  <div class="wallpaper">
+    <div class="w"><svg viewBox="0 0 120 76"><path d="M10 70 A50 50 0 0 1 44 23" fill="none" stroke="#8E2B2B" stroke-width="6"/><path d="M45 22 A50 50 0 0 1 89 29" fill="none" stroke="#A8701A" stroke-width="6"/><path d="M90 30 A50 50 0 0 1 110 70" fill="none" stroke="#1E4A3B" stroke-width="6"/><line x1="60" y1="70" x2="78" y2="32" stroke="#1A2620" stroke-width="2.5" stroke-linecap="round"/><circle cx="60" cy="70" r="16" fill="#E9EEE6"/><text x="60" y="76" text-anchor="middle" font-family="Newsreader, serif" font-size="18" font-weight="600" fill="#1A2620">64</text></svg><small>Fair · down 9</small></div>
+    <div class="lock"><svg viewBox="0 0 52 52"><path d="M8 38 A20 20 0 1 1 44 38" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="4" stroke-linecap="round"/><path d="M8 38 A20 20 0 0 1 36 10" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><text x="26" y="32" text-anchor="middle" font-family="Newsreader, serif" font-size="15" font-weight="600" fill="#fff">64</text></svg></div>
+  </div>
+  <p style="max-width:36ch;font-size:14px;opacity:.8;margin:0">The home-screen and lock-screen widgets show only the score, its band, and the direction it moved. No amounts, categories or merchant names.</p>
+</div>

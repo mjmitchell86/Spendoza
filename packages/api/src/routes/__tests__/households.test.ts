@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, mock } from "bun:test";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  mock,
+} from "bun:test";
 import type { Server } from "http";
 import type { Router } from "express";
 
@@ -65,22 +73,35 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
       select: (...selectArgs: any[]) => {
         calls.push({ table, op: "select", args: selectArgs });
         return {
-          eq: (...eqArgs: any[]) => ({
-            single: () =>
-              Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-            eq: () => ({
+          eq: (...eqArgs: any[]) => {
+            calls.push({ table, op: "select.eq", args: eqArgs });
+            return {
               single: () =>
-                Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
-            }),
-            // For member list: .select("...").eq("household_id", id)
-            ...(cfg.selectList
-              ? Promise.resolve(cfg.selectList)
-              : Promise.resolve({ data: [], error: null })),
-            then: (cfg.selectList ?? { data: [], error: null }).then
-              ? undefined
-              : (resolve: any) =>
-                  resolve(cfg.selectList ?? { data: [], error: null }),
-          }),
+                Promise.resolve(
+                  cfg.selectSingle ?? { data: null, error: null }
+                ),
+              maybeSingle: () =>
+                Promise.resolve(
+                  "selectMaybeSingle" in cfg
+                    ? cfg.selectMaybeSingle
+                    : (cfg.selectSingle ?? { data: null, error: null })
+                ),
+              eq: () => ({
+                single: () =>
+                  Promise.resolve(
+                    cfg.selectSingle ?? { data: null, error: null }
+                  ),
+              }),
+              // For member list: .select("...").eq("household_id", id)
+              ...(cfg.selectList
+                ? Promise.resolve(cfg.selectList)
+                : Promise.resolve({ data: [], error: null })),
+              then: (cfg.selectList ?? { data: [], error: null }).then
+                ? undefined
+                : (resolve: any) =>
+                    resolve(cfg.selectList ?? { data: [], error: null }),
+            };
+          },
           single: () =>
             Promise.resolve(cfg.selectSingle ?? { data: null, error: null }),
         };
@@ -106,9 +127,7 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
           eq: () => makeEq(),
           select: () => ({
             single: () =>
-              Promise.resolve(
-                cfg.updateSingle ?? { data: null, error: null }
-              ),
+              Promise.resolve(cfg.updateSingle ?? { data: null, error: null }),
           }),
           then: (resolve: any, reject?: any) => {
             const result = cfg.updateResult ?? { data: null, error: null };
@@ -282,6 +301,14 @@ beforeEach(() => {
 describe("POST /api/households", () => {
   const url = () => `${baseUrl}/api/households`;
 
+  beforeEach(() => {
+    // Creating requires that the caller is not in a household yet
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+  });
+
   it("returns 201 with household data", async () => {
     const res = await fetch(url(), {
       method: "POST",
@@ -298,6 +325,58 @@ describe("POST /api/households", () => {
     expect(body.name).toBe("Test Household");
     expect(body.invite_code).toBe(INVITE_CODE);
     expect(body.head_of_household_id).toBe(TEST_USER_ID);
+  });
+
+  // Clients can no longer insert households or set profiles.household_id
+  // themselves (column grants), so both writes go through the service role.
+  it("inserts the household and sets the caller's household_id with the service role", async () => {
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "Test Household" }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(adminCalls).toContainEqual({
+      table: "households",
+      op: "insert",
+      args: {
+        name: "Test Household",
+        head_of_household_id: TEST_USER_ID,
+        invite_code: INVITE_CODE,
+      },
+    });
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "update",
+      args: { household_id: HOUSEHOLD_ID },
+    });
+    expect(rlsCalls.some((c) => c.op === "insert" || c.op === "update")).toBe(false);
+  });
+
+  it("returns 400 when the caller is already in a household", async () => {
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: "other-household" },
+      error: null,
+    };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "Second Household" }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Already a member of a household");
+    expect(adminCalls.some((c) => c.op === "insert")).toBe(false);
+    expect(rlsCalls.some((c) => c.op === "insert")).toBe(false);
   });
 
   it("returns 400 with invalid data", async () => {
@@ -449,6 +528,122 @@ describe("POST /api/households/:id/join", () => {
 });
 
 // ===========================================================================
+// POST /api/households/join — join with only the invite code
+// ===========================================================================
+describe("POST /api/households/join", () => {
+  const post = (body: unknown) =>
+    fetch(`${baseUrl}/api/households/join`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+  it("adds the caller to the household whose code matches", async () => {
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+
+    const res = await post({ invite_code: INVITE_CODE });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.message).toBe("Joined household successfully");
+    expect(adminCalls).toContainEqual({
+      table: "households",
+      op: "select.eq",
+      args: ["invite_code", INVITE_CODE],
+    });
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "update",
+      args: { household_id: HOUSEHOLD_ID },
+    });
+  });
+
+  it("returns 400 Invalid invite code when no household has that code", async () => {
+    adminResults.households.selectMaybeSingle = { data: null, error: null };
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+
+    const res = await post({ invite_code: "nomatch1" });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid invite code" });
+    expect(adminCalls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("returns 400 when the caller is already in a household", async () => {
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: "other-household" },
+      error: null,
+    };
+
+    const res = await post({ invite_code: INVITE_CODE });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "Already a member of a household",
+    });
+  });
+
+  it("returns 400 when the household has 10 members", async () => {
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, household_id: null },
+      error: null,
+    };
+    adminResults.profiles.selectList = {
+      data: Array.from({ length: 10 }, (_, i) => ({ id: `user-${i}` })),
+      error: null,
+    };
+
+    const res = await post({ invite_code: INVITE_CODE });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "Household has reached the 10-member limit",
+    });
+  });
+
+  it("returns 429 after 5 failed attempts by the same user", async () => {
+    // A different caller, so earlier tests' failures don't count toward this one
+    mockGetUser.mockImplementation(() =>
+      Promise.resolve({
+        data: { user: { id: "guesser-1", email: "guesser@example.com" } },
+        error: null,
+      })
+    );
+    adminResults.households.selectMaybeSingle = { data: null, error: null };
+    adminResults.profiles.selectSingle = {
+      data: { ...memberProfile, id: "guesser-1", household_id: null },
+      error: null,
+    };
+
+    for (let i = 0; i < 5; i++) {
+      expect((await post({ invite_code: `guess${i}` })).status).toBe(400);
+    }
+    const res = await post({ invite_code: "guess5" });
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Too many attempts. Try again in 15 minutes.",
+    });
+  });
+
+  it("validates the body", async () => {
+    const res = await post({});
+
+    expect(res.status).toBe(400);
+    expect(adminCalls.some((c) => c.table === "households")).toBe(false);
+  });
+});
+
+// ===========================================================================
 // DELETE /api/households/:id/members/:userId — remove member
 // ===========================================================================
 describe("DELETE /api/households/:id/members/:userId", () => {
@@ -520,5 +715,66 @@ describe("PUT /api/households/:id/sharing", () => {
     expect(body.income_sharing_mode).toBe("partial");
     expect(body.shared_income_amount).toBe(2000);
     expect(body.expense_sharing_mode).toBe("category");
+  });
+});
+
+// ===========================================================================
+// POST /api/households/leave — leave the caller's household
+// profiles.household_id is not client-writable, so leaving clears it with the
+// service role.
+// ===========================================================================
+describe("POST /api/households/leave", () => {
+  const url = () => `${baseUrl}/api/households/leave`;
+
+  it("clears a member's household_id with the service role", async () => {
+    adminResults.households.selectSingle = {
+      data: { head_of_household_id: "someone-else" },
+      error: null,
+    };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.message).toBe("Left household successfully");
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "update",
+      args: { household_id: null },
+    });
+    expect(rlsCalls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("clears a sole head's household_id with the service role and deletes the household", async () => {
+    adminResults.profiles.selectList = { data: [memberProfile], error: null };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.message).toBe("Left and deleted household successfully");
+    expect(adminCalls).toContainEqual({
+      table: "profiles",
+      op: "update",
+      args: { household_id: null },
+    });
+    expect(adminCalls).toContainEqual({ table: "households", op: "delete" });
+    expect(rlsCalls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("returns 400 for a head with other members", async () => {
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(400);
+    expect(adminCalls.some((c) => c.op === "update")).toBe(false);
   });
 });

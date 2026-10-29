@@ -1,0 +1,199 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Public+Sans:wght@400;600&family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+
+<h2>Banknote colors with the Gauge dial</h2>
+<p class="subtitle">Three ways to blend them. All use the Banknote palette — sage paper, note green, ink, amber for fair, oxblood for low — and a needle dial. They differ in how engraved the dial is, which face the numbers use, and where the dial sits.</p>
+
+<style>
+  :root { --paper:#E9EEE6; --note:#1E4A3B; --ink:#1A2620; --line:#9DB3A6; --amber:#A8701A; --oxblood:#8E2B2B; --soft:#4A5A52; --card:#F4F7F2; }
+  .mx { display: grid; grid-template-columns: 280px 1fr; gap: 32px; align-items: start; padding: 28px 0 36px; border-bottom: 1px solid rgba(127,127,127,.25); }
+  .mx:last-of-type { border-bottom: 0; }
+  @media (max-width: 760px) { .mx { grid-template-columns: 1fr; } }
+  .mx h3 { margin: 0 0 4px; }
+  .mx .lede { margin: 0 0 14px; max-width: 62ch; opacity: .85; }
+  .mx ul { margin: 0 0 16px; padding-left: 18px; max-width: 62ch; font-size: 14px; line-height: 1.5; }
+  .dev { width: 268px; border-radius: 42px; padding: 9px; background: #1c1d20; box-shadow: 0 24px 48px -24px rgba(0,0,0,.55); }
+  .scr { border-radius: 34px; overflow: hidden; min-height: 600px; position: relative; padding-bottom: 56px; box-sizing: border-box; background: var(--paper); color: var(--ink); font-family: "Public Sans", sans-serif; }
+  .island { width: 84px; height: 24px; border-radius: 12px; background: #000; margin: 8px auto 6px; }
+  .pad { padding: 4px 20px 16px; }
+  .serif { font-family: "Newsreader", serif; font-variant-numeric: lining-nums tabular-nums; }
+  .meter { font-family: "Archivo", sans-serif; font-variation-settings: "wdth" 70; font-variant-numeric: tabular-nums; font-weight: 800; }
+  .title { font-family: "Newsreader", serif; font-size: 26px; font-weight: 600; margin: 4px 0 2px; letter-spacing: -.01em; }
+  .sub { font-size: 12px; color: var(--soft); margin: 0 0 4px; }
+  .dial { width: 228px; height: 148px; display: block; margin: 2px auto 0; }
+  .band { text-align: center; font-size: 13px; margin: 0 0 10px; }
+  .band b { color: var(--amber); font-weight: 600; }
+  .rows { border-top: 1px solid var(--line); }
+  .row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .row .pts { font-family: "Newsreader", serif; font-size: 16px; }
+  .row .d { font-size: 12px; margin-left: 6px; color: var(--oxblood); }
+  .row .d.z { color: #6B7A72; }
+  .row .chev { color: var(--line); margin-left: 6px; }
+  .row.hl { background: linear-gradient(90deg, rgba(168,112,26,.12), transparent); }
+  .tip { margin-top: 10px; padding: 12px 14px; border-radius: 4px; background: var(--note); color: #EAF1EC; font-size: 13px; line-height: 1.4; }
+  .tip b { font-family: "Newsreader", serif; font-size: 15px; font-weight: 600; display: block; margin-bottom: 2px; }
+  .tabs { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; padding: 8px 6px 18px; background: rgba(233,238,230,.94); border-top: 1px solid var(--line); font-size: 10px; color: #5C6B63; }
+  .tabs .on { color: var(--note); font-weight: 600; }
+  .grid5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 2px 0 10px; }
+  .cell { border: 1px solid var(--line); border-radius: 4px; padding: 6px 2px 5px; text-align: center; background: var(--card); }
+  .cell .v { font-family: "Archivo", sans-serif; font-variation-settings: "wdth" 70; font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .cell .k { font-size: 9px; color: var(--soft); line-height: 1.2; }
+  .cell .t { height: 3px; border-radius: 2px; margin: 4px 6px 0; }
+  .cell.hl { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+  .why { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font-size: 12px; line-height: 1.45; background: var(--card); }
+  .btn { display: block; margin-top: 10px; text-align: center; background: var(--note); color: #F4F7F2; border-radius: 4px; padding: 10px 0; font-size: 13px; font-weight: 600; }
+  .head { background: var(--note); color: #EAF1EC; padding: 8px 20px 14px; }
+  .head .island { margin-top: 0; }
+  .wcap { font-size: 12px; opacity: .7; margin: 6px 0 0; }
+  .head .title { color: #F4F7F2; }
+  .head .sub { color: #A9C2B5; }
+  .head .band { color: #CFE0D6; }
+  .head .band b { color: #E2B25A; }
+  .widgets { display: flex; gap: 14px; flex-wrap: wrap; }
+  .wallpaper { padding: 16px; border-radius: 20px; display: flex; gap: 14px; background: linear-gradient(135deg,#9fb8c9,#c9b8a3); }
+  .w { width: 132px; height: 132px; border-radius: 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 6px 16px -8px rgba(0,0,0,.45); font-family: "Public Sans", sans-serif; }
+  .w svg { width: 112px; height: 72px; }
+  .w small { font-size: 11px; margin-top: 2px; }
+  .w.paper { background: var(--paper); color: var(--ink); }
+  .w.paper small { color: var(--soft); }
+  .w.green { background: var(--note); color: #F4F7F2; }
+  .w.green small { color: #A9C2B5; }
+  .lock { width: 160px; height: 64px; border-radius: 18px; background: rgba(255,255,255,.28); display: flex; align-items: center; gap: 10px; padding: 0 12px; box-sizing: border-box; color: #fff; font-size: 12px; }
+  .lock svg { width: 46px; height: 30px; flex: none; }
+</style>
+
+<!-- ============ A · Engraved dial ============ -->
+<section class="mx" data-choice="engraved" onclick="toggleSelect(this)">
+  <div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <p class="title">Your money's health</p>
+      <p class="sub">October check-up</p>
+      <svg class="dial" viewBox="0 0 240 156" aria-label="Score 64 of 100, down from 73">
+        <defs><clipPath id="topA"><rect x="0" y="0" width="240" height="130"/></clipPath></defs>
+        <g clip-path="url(#topA)" fill="none" stroke="#1E4A3B" stroke-width=".45" opacity=".5">
+          <ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(0 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(15 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(30 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(45 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(60 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(75 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(90 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(105 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(120 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(135 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(150 120 130)"/><ellipse cx="120" cy="130" rx="86" ry="38" transform="rotate(165 120 130)"/>
+        </g>
+        <path d="M24 130 A96 96 0 0 1 89.3 39.7" fill="none" stroke="#8E2B2B" stroke-width="7"/>
+        <path d="M91.2 39.2 A96 96 0 0 1 175.2 51.6" fill="none" stroke="#A8701A" stroke-width="7"/>
+        <path d="M176.8 52.9 A96 96 0 0 1 216 130" fill="none" stroke="#1E4A3B" stroke-width="7"/>
+        <g stroke="#1A2620" stroke-width="1">
+          <line x1="120" y1="22" x2="120" y2="30" transform="rotate(-90 120 130)"/><line x1="120" y1="22" x2="120" y2="30" transform="rotate(-45 120 130)"/><line x1="120" y1="22" x2="120" y2="30"/><line x1="120" y1="22" x2="120" y2="30" transform="rotate(45 120 130)"/><line x1="120" y1="22" x2="120" y2="30" transform="rotate(90 120 130)"/>
+        </g>
+        <line x1="120" y1="130" x2="173" y2="70" stroke="#1A2620" stroke-width="1" stroke-dasharray="2 3" opacity=".45"/>
+        <line x1="120" y1="130" x2="154" y2="58" stroke="#1A2620" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="120" cy="130" r="30" fill="#E9EEE6"/>
+        <text x="120" y="139" text-anchor="middle" font-family="Newsreader, serif" font-size="34" font-weight="600" fill="#1A2620">64</text>
+        <text x="120" y="153" text-anchor="middle" font-family="Public Sans, sans-serif" font-size="9" fill="#4A5A52">of 100</text>
+      </svg>
+      <p class="band"><b>Fair</b>, down 9 since September</p>
+      <div class="rows">
+        <div class="row"><span>Savings rate</span><span><span class="pts">16</span>/25<span class="d">−3</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Needs</span><span><span class="pts">20</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+        <div class="row hl"><span>Wants</span><span><span class="pts">9</span>/15<span class="d">−6</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Emergency fund</span><span><span class="pts">10</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Debt vs. income</span><span><span class="pts">9</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+      </div>
+      <div class="tip"><b>Dining out cost you 6 points</b>A $250 monthly budget for it would win back about 4.</div>
+    </div>
+    <div class="tabs"><span class="on">Health</span><span>Money</span><span>Plan</span><span>Home</span><span>Me</span></div>
+  </div></div>
+  <div>
+    <h3>A · Engraved dial</h3>
+    <p class="lede">Closest to Banknote. The dial face carries the guilloché engraving, the needle is ink-thin, and the score sits in a serif at the dial's hub like a mint mark. Rows stay ruled, the suggestion stays in a green panel.</p>
+    <ul><li>Most distinctive; nobody else's finance app looks like this</li><li>Serif numbers everywhere — formal, a little old-world</li><li>The engraving needs care at small sizes (the widget drops it)</li></ul>
+    <div class="widgets"><div class="wallpaper">
+      <div class="w paper"><svg viewBox="0 0 120 76"><path d="M10 70 A50 50 0 0 1 44 23" fill="none" stroke="#8E2B2B" stroke-width="6"/><path d="M45 22 A50 50 0 0 1 89 29" fill="none" stroke="#A8701A" stroke-width="6"/><path d="M90 30 A50 50 0 0 1 110 70" fill="none" stroke="#1E4A3B" stroke-width="6" opacity=".35"/><line x1="60" y1="70" x2="78" y2="32" stroke="#1A2620" stroke-width="2.5" stroke-linecap="round"/><circle cx="60" cy="70" r="16" fill="#E9EEE6"/><text x="60" y="76" text-anchor="middle" font-family="Newsreader, serif" font-size="18" font-weight="600" fill="#1A2620">64</text></svg><small>Fair · down 9</small></div>
+      <div class="lock"><svg viewBox="0 0 60 36"><path d="M5 33 A25 25 0 0 1 55 33" fill="none" stroke="#fff" stroke-width="4" opacity=".35"/><path d="M5 33 A25 25 0 0 1 39 10" fill="none" stroke="#fff" stroke-width="4"/></svg><div><b style="font-family:Newsreader,serif;font-size:18px">64</b><br>Fair</div></div>
+    </div></div>
+    <p class="wcap">Home screen widget, and lock screen widget. Neither shows amounts.</p>
+  </div>
+</section>
+
+<!-- ============ B · Instrument on paper ============ -->
+<section class="mx" data-choice="instrument" onclick="toggleSelect(this)">
+  <div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <p class="title">Health</p>
+      <p class="sub">October · five readings</p>
+      <svg class="dial" viewBox="0 0 240 150" aria-label="Score 64 of 100, down from 73">
+        <path d="M24 130 A96 96 0 0 1 89.3 39.7" fill="none" stroke="#8E2B2B" stroke-width="10"/>
+        <path d="M91.2 39.2 A96 96 0 0 1 175.2 51.6" fill="none" stroke="#A8701A" stroke-width="10"/>
+        <path d="M176.8 52.9 A96 96 0 0 1 216 130" fill="none" stroke="#1E4A3B" stroke-width="10"/>
+        <g stroke="#1A2620" stroke-width="1">
+          <line x1="120" y1="40" x2="120" y2="48" transform="rotate(-90 120 130)"/><line x1="120" y1="42" x2="120" y2="48" transform="rotate(-72 120 130)"/><line x1="120" y1="42" x2="120" y2="48" transform="rotate(-54 120 130)"/><line x1="120" y1="42" x2="120" y2="48" transform="rotate(-36 120 130)"/><line x1="120" y1="42" x2="120" y2="48" transform="rotate(-18 120 130)"/><line x1="120" y1="40" x2="120" y2="48"/><line x1="120" y1="42" x2="120" y2="48" transform="rotate(18 120 130)"/><line x1="120" y1="42" x2="120" y2="48" transform="rotate(36 120 130)"/><line x1="120" y1="42" x2="120" y2="48" transform="rotate(54 120 130)"/><line x1="120" y1="42" x2="120" y2="48" transform="rotate(72 120 130)"/><line x1="120" y1="40" x2="120" y2="48" transform="rotate(90 120 130)"/>
+        </g>
+        <g font-family="Archivo, sans-serif" font-size="9" fill="#4A5A52" text-anchor="middle"><text x="18" y="146">0</text><text x="120" y="18">50</text><text x="222" y="146">100</text></g>
+        <line x1="120" y1="130" x2="173" y2="70" stroke="#1A2620" stroke-width="1" stroke-dasharray="2 3" opacity=".45"/>
+        <line x1="120" y1="130" x2="156" y2="54" stroke="#A8701A" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="120" cy="130" r="8" fill="#1A2620"/><circle cx="120" cy="130" r="3" fill="#A8701A"/>
+      </svg>
+      <div style="text-align:center;margin:-10px 0 8px"><span class="meter" style="font-size:52px;line-height:1">64</span><div class="band" style="margin:2px 0 0"><b>Fair</b> · was 73 in September</div></div>
+      <div class="grid5">
+        <div class="cell"><div class="v">16</div><div class="k">Savings<br>/25</div><div class="t" style="background:#A8701A"></div></div>
+        <div class="cell"><div class="v">20</div><div class="k">Needs<br>/20</div><div class="t" style="background:#1E4A3B"></div></div>
+        <div class="cell hl"><div class="v">9</div><div class="k">Wants<br>/15</div><div class="t" style="background:#A8701A"></div></div>
+        <div class="cell"><div class="v">10</div><div class="k">Emergency<br>/20</div><div class="t" style="background:#A8701A"></div></div>
+        <div class="cell"><div class="v">9</div><div class="k">Debt<br>/20</div><div class="t" style="background:#8E2B2B"></div></div>
+      </div>
+      <div class="why"><b>Wants fell 6 points.</b> Dining out ran $310 over September, pushing wants to 34% of income — 4 over the line.</div>
+      <span class="btn">Set a dining budget</span>
+    </div>
+    <div class="tabs"><span class="on">Health</span><span>Money</span><span>Plan</span><span>Home</span><span>Me</span></div>
+  </div></div>
+  <div>
+    <h3>B · Instrument on paper</h3>
+    <p class="lede">Closest to Gauge, recolored. A clean ticked dial with an amber needle, the narrow meter numerals from Gauge, and the five parts as a row of readouts — all printed in Banknote's greens on sage paper.</p>
+    <ul><li>Fastest to read at a glance; the dial is the hero</li><li>Meter numerals feel technical and precise</li><li>Less ornament, so it relies on color and spacing for character</li></ul>
+    <div class="widgets"><div class="wallpaper">
+      <div class="w paper"><svg viewBox="0 0 120 76"><path d="M10 70 A50 50 0 0 1 44 23" fill="none" stroke="#8E2B2B" stroke-width="7"/><path d="M45 22 A50 50 0 0 1 89 29" fill="none" stroke="#A8701A" stroke-width="7"/><path d="M90 30 A50 50 0 0 1 110 70" fill="none" stroke="#1E4A3B" stroke-width="7"/><line x1="60" y1="70" x2="78" y2="32" stroke="#A8701A" stroke-width="3" stroke-linecap="round"/><circle cx="60" cy="70" r="5" fill="#1A2620"/></svg><span class="meter" style="font-size:28px;line-height:1;margin-top:-4px">64</span><small>Fair · down 9</small></div>
+      <div class="lock"><svg viewBox="0 0 60 36"><path d="M5 33 A25 25 0 0 1 55 33" fill="none" stroke="#fff" stroke-width="4" opacity=".35"/><path d="M5 33 A25 25 0 0 1 39 10" fill="none" stroke="#fff" stroke-width="4"/></svg><div><b class="meter" style="font-size:20px">64</b><br>Fair</div></div>
+    </div></div>
+    <p class="wcap">Home screen widget, and lock screen widget. Neither shows amounts.</p>
+  </div>
+</section>
+
+<!-- ============ C · Vault dial ============ -->
+<section class="mx" data-choice="vault" onclick="toggleSelect(this)">
+  <div class="dev"><div class="scr">
+    <div class="head">
+      <div class="island"></div>
+      <p class="title">Your money's health</p>
+      <p class="sub">October check-up</p>
+      <svg class="dial" viewBox="0 0 240 150" aria-label="Score 64 of 100, down from 73">
+        <circle cx="120" cy="130" r="112" fill="none" stroke="#2C5E4C" stroke-width="1"/>
+        <path d="M24 130 A96 96 0 0 1 216 130" fill="none" stroke="#2C5E4C" stroke-width="12"/>
+        <path d="M24 130 A96 96 0 0 1 156 41" fill="none" stroke="#E2B25A" stroke-width="12"/>
+        <g stroke="#CFE0D6" stroke-width="1" opacity=".8">
+          <line x1="120" y1="12" x2="120" y2="22" transform="rotate(-90 120 130)"/><line x1="120" y1="14" x2="120" y2="20" transform="rotate(-67.5 120 130)"/><line x1="120" y1="12" x2="120" y2="22" transform="rotate(-45 120 130)"/><line x1="120" y1="14" x2="120" y2="20" transform="rotate(-22.5 120 130)"/><line x1="120" y1="12" x2="120" y2="22"/><line x1="120" y1="14" x2="120" y2="20" transform="rotate(22.5 120 130)"/><line x1="120" y1="12" x2="120" y2="22" transform="rotate(45 120 130)"/><line x1="120" y1="14" x2="120" y2="20" transform="rotate(67.5 120 130)"/><line x1="120" y1="12" x2="120" y2="22" transform="rotate(90 120 130)"/>
+        </g>
+        <path d="M173 70 l4 -6" stroke="#CFE0D6" stroke-width="2" opacity=".6"/>
+        <text x="120" y="118" text-anchor="middle" font-family="Newsreader, serif" font-size="50" font-weight="600" fill="#F4F7F2">64</text>
+        <text x="120" y="138" text-anchor="middle" font-family="Public Sans, sans-serif" font-size="10" fill="#A9C2B5">of 100 · was 73</text>
+      </svg>
+      <p class="band" style="margin:2px 0 0"><b>Fair</b>, down 9 since September</p>
+    </div>
+    <div class="pad" style="padding-top:12px">
+      <div class="rows">
+        <div class="row"><span>Savings rate</span><span><span class="pts">16</span>/25<span class="d">−3</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Needs</span><span><span class="pts">20</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+        <div class="row hl"><span>Wants</span><span><span class="pts">9</span>/15<span class="d">−6</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Emergency fund</span><span><span class="pts">10</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+        <div class="row"><span>Debt vs. income</span><span><span class="pts">9</span>/20<span class="d z">±0</span><span class="chev">›</span></span></div>
+      </div>
+      <div class="why" style="margin-top:10px"><b class="serif" style="font-size:14px">Dining out cost you 6 points.</b> A $250 monthly budget for it would win back about 4.</div>
+    </div>
+    <div class="tabs"><span class="on">Health</span><span>Money</span><span>Plan</span><span>Home</span><span>Me</span></div>
+  </div></div>
+  <div>
+    <h3>C · Vault dial</h3>
+    <p class="lede">The dial lives in a note-green header, like the face of a safe: the arc fills in amber up to your score, ticks are etched in pale green, and the number is set large in the serif. Below the fold it's calm sage paper with ruled rows.</p>
+    <ul><li>Strongest first impression; reads as premium</li><li>Fill-up arc instead of a needle — simpler, still a scale</li><li>The dark header makes the widget a matching green tile</li></ul>
+    <div class="widgets"><div class="wallpaper">
+      <div class="w green"><svg viewBox="0 0 120 76"><path d="M10 70 A50 50 0 0 1 110 70" fill="none" stroke="#2C5E4C" stroke-width="8"/><path d="M10 70 A50 50 0 0 1 79 24" fill="none" stroke="#E2B25A" stroke-width="8"/><text x="60" y="68" text-anchor="middle" font-family="Newsreader, serif" font-size="28" font-weight="600" fill="#F4F7F2">64</text></svg><small>Fair · down 9</small></div>
+      <div class="lock"><svg viewBox="0 0 60 36"><path d="M5 33 A25 25 0 0 1 55 33" fill="none" stroke="#fff" stroke-width="4" opacity=".35"/><path d="M5 33 A25 25 0 0 1 39 10" fill="none" stroke="#fff" stroke-width="4"/></svg><div><b style="font-family:Newsreader,serif;font-size:18px">64</b><br>Fair</div></div>
+    </div></div>
+    <p class="wcap">Home screen widget, and lock screen widget. Neither shows amounts.</p>
+  </div>
+</section>

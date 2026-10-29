@@ -1,0 +1,192 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Public+Sans:wght@400;600&display=swap" rel="stylesheet">
+
+<h2>The other four tabs, on the same theme</h2>
+<p class="subtitle">Money, Plan, Home and Me — the first screen of each, with every web feature reachable from one of them. Plans & billing is a single link to the website for now.</p>
+
+<style>
+  :root { --paper:#E9EEE6; --note:#1E4A3B; --ink:#1A2620; --line:#9DB3A6; --amber:#A8701A; --oxblood:#8E2B2B; --soft:#4A5A52; --card:#F4F7F2; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 268px); gap: 22px; justify-content: center; }
+  @media (max-width: 1220px) { .grid4 { grid-template-columns: repeat(2, 268px); } }
+  @media (max-width: 620px) { .grid4 { grid-template-columns: 268px; } }
+  .stepc { text-align: center; }
+  .stepc .cap { font-size: 13px; font-weight: 600; margin: 12px 0 0; }
+  .stepc .cap span { display: block; font-weight: 400; opacity: .7; font-size: 12px; margin-top: 2px; text-align: left; line-height: 1.45; }
+  .dev { width: 268px; border-radius: 42px; padding: 9px; background: #1c1d20; box-shadow: 0 24px 48px -24px rgba(0,0,0,.55); text-align: left; box-sizing: border-box; }
+  .scr { border-radius: 34px; overflow: hidden; height: 600px; position: relative; background: var(--paper); color: var(--ink); font-family: "Public Sans", sans-serif; }
+  .island { width: 84px; height: 24px; border-radius: 12px; background: #000; margin: 8px auto 6px; }
+  .pad { padding: 2px 18px 16px; }
+  .ttl { font-family: "Newsreader", serif; font-size: 26px; font-weight: 600; margin: 2px 0 2px; letter-spacing: -.01em; line-height: 1.15; }
+  .sub { font-size: 12px; color: var(--soft); margin: 0 0 8px; }
+  .serif { font-family: "Newsreader", serif; font-variant-numeric: lining-nums tabular-nums; }
+  .seg { display: flex; background: rgba(30,74,59,.08); border-radius: 8px; padding: 2px; margin: 0 0 10px; font-size: 11px; }
+  .seg span { flex: 1; text-align: center; padding: 5px 0; border-radius: 6px; color: var(--soft); }
+  .seg span.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(26,38,32,.15); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .pair div { padding: 8px 2px; }
+  .pair div + div { border-left: 1px solid var(--line); padding-left: 10px; }
+  .pair small { display: block; font-size: 11px; color: var(--soft); }
+  .pair b { font-family: "Newsreader", serif; font-size: 22px; font-weight: 600; }
+  .sec { font-family: "Newsreader", serif; font-size: 15px; font-weight: 600; margin: 10px 0 4px; display: flex; justify-content: space-between; align-items: baseline; }
+  .sec a { font-family: "Public Sans", sans-serif; font-size: 11px; color: var(--note); font-weight: 600; text-decoration: none; }
+  .rows { border-top: 1px solid var(--line); }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 7px 2px; border-bottom: 1px solid var(--line); font-size: 12.5px; gap: 8px; }
+  .row .meta { font-size: 11px; color: var(--soft); display: block; }
+  .row .chev { color: var(--line); margin-left: 4px; }
+  .row .amt { font-family: "Newsreader", serif; font-size: 15px; white-space: nowrap; }
+  .row .tag { font-size: 9px; color: var(--note); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-left: 4px; }
+  .catbar { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
+  .catbar span:first-child { width: 78px; }
+  .catbar .t { flex: 1; height: 7px; background: #D3DDD5; border-radius: 4px; position: relative; overflow: hidden; }
+  .catbar .t i { position: absolute; left: 0; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgba(30,74,59,.75) 0 1px, rgba(30,74,59,.35) 1px 3px); }
+  .catbar .t i.hot { background: var(--amber); }
+  .catbar .serif { width: 44px; text-align: right; font-size: 13px; }
+  .prog { height: 7px; background: #D3DDD5; border-radius: 4px; margin: 4px 0 2px; overflow: hidden; }
+  .prog i { display: block; height: 100%; background: var(--note); }
+  .goal { padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .goal .top { display: flex; justify-content: space-between; align-items: baseline; }
+  .goal .meta { font-size: 11px; color: var(--soft); }
+  .advisor { margin-top: 10px; padding: 12px 14px; border-radius: 4px; background: var(--note); color: #EAF1EC; font-size: 12.5px; line-height: 1.4; }
+  .advisor b { font-family: "Newsreader", serif; font-size: 15px; font-weight: 600; display: block; margin-bottom: 4px; }
+  .advisor .ask { margin-top: 8px; background: rgba(244,247,242,.12); border: 1px solid rgba(207,224,214,.35); border-radius: 18px; padding: 6px 10px; color: #CFE0D6; font-size: 11.5px; }
+  .members { display: flex; gap: 10px; margin: 2px 0 6px; }
+  .mem { text-align: center; font-size: 10px; color: var(--soft); width: 56px; }
+  .av { width: 40px; height: 40px; border-radius: 50%; margin: 0 auto 3px; display: flex; align-items: center; justify-content: center; font-family: "Newsreader", serif; font-size: 17px; font-weight: 600; color: #F4F7F2; background: var(--note); box-shadow: inset 0 0 0 2px var(--paper), 0 0 0 1px var(--line); }
+  .av.b { background: #6B4A1A; }
+  .av.add { background: transparent; color: var(--note); box-shadow: inset 0 0 0 1px var(--note); font-family: "Public Sans"; }
+  .mini { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .mini svg { width: 84px; height: 54px; flex: none; }
+  .mini .t { font-size: 12px; line-height: 1.4; }
+  .mini .t b { color: var(--amber); }
+  .prof { display: flex; align-items: center; gap: 12px; margin: 4px 0 10px; }
+  .prof .av { width: 52px; height: 52px; font-size: 22px; margin: 0; }
+  .prof b { font-family: "Newsreader", serif; font-size: 19px; font-weight: 600; display: block; }
+  .prof small { font-size: 11px; color: var(--soft); }
+  .grp { font-size: 11px; color: var(--soft); margin: 10px 0 2px; }
+  .row.danger { color: var(--oxblood); }
+  .ico { width: 22px; height: 22px; display: block; margin: 0 auto 2px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .glass { position: absolute; left: 16px; right: 16px; bottom: 14px; height: 60px; border-radius: 30px; display: flex; align-items: center; justify-content: space-around; padding: 0 6px;
+    background: linear-gradient(180deg, rgba(244,247,242,.78), rgba(233,238,230,.62)); backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    border: 1px solid rgba(255,255,255,.7); box-shadow: 0 10px 24px -10px rgba(26,38,32,.45), inset 0 1px 0 rgba(255,255,255,.9), inset 0 -1px 0 rgba(157,179,166,.5); }
+  .glass span { font-size: 10px; color: #5C6B63; text-align: center; width: 46px; padding: 6px 0 4px; border-radius: 22px; }
+  .glass span.on { color: var(--note); font-weight: 600; background: rgba(30,74,59,.10); box-shadow: inset 0 0 0 1px rgba(30,74,59,.18); }
+  .fade { position: absolute; left: 0; right: 0; bottom: 0; height: 100px; background: linear-gradient(180deg, rgba(233,238,230,0), rgba(233,238,230,.96) 62%); pointer-events: none; }
+  .fab { position: absolute; right: 18px; bottom: 86px; height: 40px; padding: 0 14px; border-radius: 20px; background: var(--note); color: #F4F7F2; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; box-shadow: 0 8px 18px -8px rgba(26,38,32,.6); }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-health" viewBox="0 0 24 24"><path d="M3 17a9 9 0 0 1 18 0"/><path d="M12 17l4-6"/><circle cx="12" cy="17" r="1.4"/></symbol>
+  <symbol id="i-money" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="1.5"/><circle cx="12" cy="12" r="2.6"/><path d="M5.5 9v6M18.5 9v6"/></symbol>
+  <symbol id="i-plan" viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 3.5L16 11H5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-me" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+</svg>
+
+<div class="grid4">
+
+  <!-- Money -->
+  <div class="stepc"><div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <p class="ttl">Money</p>
+      <p class="sub">October ⌄</p>
+      <div class="seg"><span class="on">Overview</span><span>Transactions</span><span>Bills</span></div>
+      <div class="pair"><div><small>Came in</small><b>$4,539</b></div><div><small>Went out</small><b>$3,583</b></div></div>
+      <p class="sec">Where it went <a>Categories ›</a></p>
+      <div class="catbar"><span>Housing</span><span class="t"><i style="width:100%"></i></span><span class="serif">$1,800</span></div>
+      <div class="catbar"><span>Groceries</span><span class="t"><i style="width:27%"></i></span><span class="serif">$485</span></div>
+      <div class="catbar"><span>Dining out</span><span class="t"><i class="hot" style="width:25%"></i></span><span class="serif">$448</span></div>
+      <div class="catbar"><span>Insurance</span><span class="t"><i style="width:19%"></i></span><span class="serif">$348</span></div>
+      <p class="sec">Coming up <a>All bills ›</a></p>
+      <div class="rows">
+        <div class="row"><span>Greystar rent<span class="tag">auto</span><span class="meta">Nov 1</span></span><span class="amt">$1,800</span></div>
+        <div class="row"><span>Duke Energy<span class="tag">auto</span><span class="meta">Nov 1</span></span><span class="amt">$150</span></div>
+      </div>
+      <p class="sec" style="margin-top:12px">Statements <a>2 this month ›</a></p>
+    </div>
+    <div class="fab">＋ Add statement</div>
+    <div class="fade"></div>
+    <nav class="glass"><span><svg class="ico"><use href="#i-health"/></svg>Health</span><span class="on"><svg class="ico"><use href="#i-money"/></svg>Money</span><span><svg class="ico"><use href="#i-plan"/></svg>Plan</span><span><svg class="ico"><use href="#i-home"/></svg>Home</span><span><svg class="ico"><use href="#i-me"/></svg>Me</span></nav>
+  </div></div>
+  <p class="cap">Money<span>Overview: in vs. out, spending by category, upcoming auto-detected bills. Transactions: search, filter, recategorize. Bills: recurring expenses and income. Statements: upload (Files, share sheet), status, retry, remove. Categories manage from "Categories ›". PDF export from the month menu.</span></p></div>
+
+  <!-- Plan -->
+  <div class="stepc"><div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <p class="ttl">Plan</p>
+      <p class="sub">Goals, debts and the advisor</p>
+      <p class="sec">Goals <a>＋ New</a></p>
+      <div class="goal"><div class="top"><span>Emergency fund</span><span class="serif" style="font-size:14px">$2,400 / $10,000</span></div><div class="prog"><i style="width:24%"></i></div><span class="meta">1.4 months covered · aim for 3 to earn 5 more points</span></div>
+      <div class="goal"><div class="top"><span>Dining budget</span><span class="serif" style="font-size:14px">$448 / $250</span></div><div class="prog"><i style="width:100%;background:var(--oxblood)"></i></div><span class="meta">Over by $198 this month</span></div>
+      <div class="goal" style="border-bottom:0"><span class="meta">Suggested: Save $300/month toward the emergency fund</span></div>
+      <p class="sec">Debts <a>＋ Add</a></p>
+      <div class="rows">
+        <div class="row"><span>Chase Sapphire<span class="meta">24.99% · paid off by Jul 2027 at $400/mo</span></span><span class="amt">$4,800</span></div>
+      </div>
+      <div class="advisor"><b>Ask the advisor</b>Questions about your own numbers, answered with them. 2 left today.<div class="ask">Should I pay the card or save first?</div></div>
+    </div>
+    <div class="fade"></div>
+    <nav class="glass"><span><svg class="ico"><use href="#i-health"/></svg>Health</span><span><svg class="ico"><use href="#i-money"/></svg>Money</span><span class="on"><svg class="ico"><use href="#i-plan"/></svg>Plan</span><span><svg class="ico"><use href="#i-home"/></svg>Home</span><span><svg class="ico"><use href="#i-me"/></svg>Me</span></nav>
+  </div></div>
+  <p class="cap">Plan<span>Goals (savings, budgets, long-term) with progress and AI suggestions. Debts with payoff projections. Advisor: chat threads with follow-ups and history; daily question count shown.</span></p></div>
+
+  <!-- Home -->
+  <div class="stepc"><div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <p class="ttl">Our household</p>
+      <p class="sub">Household · you're the head</p>
+      <div class="members">
+        <div class="mem"><div class="av">M</div>You<br>shares all</div>
+        <div class="mem"><div class="av b">J</div>Jamie<br>shares all</div>
+        <div class="mem"><div class="av add">＋</div>Invite</div>
+      </div>
+      <div class="mini">
+        <svg viewBox="0 0 120 76"><path d="M10 70 A50 50 0 0 1 44 23" fill="none" stroke="#8E2B2B" stroke-width="6"/><path d="M45 22 A50 50 0 0 1 89 29" fill="none" stroke="#A8701A" stroke-width="6"/><path d="M90 30 A50 50 0 0 1 110 70" fill="none" stroke="#1E4A3B" stroke-width="6"/><line x1="60" y1="70" x2="86" y2="38" stroke="#1A2620" stroke-width="2.5" stroke-linecap="round"/><circle cx="60" cy="70" r="14" fill="#E9EEE6"/><text x="60" y="75" text-anchor="middle" font-family="Newsreader, serif" font-size="15" font-weight="600" fill="#1A2620">71</text></svg>
+        <div class="t">Household health <b>71</b><br><span style="color:var(--soft)">Combined income, spending and goals from what each of you shares.</span></div>
+      </div>
+      <div class="pair" style="margin-top:8px"><div><small>Came in</small><b>$8,920</b></div><div><small>Went out</small><b>$6,140</b></div></div>
+      <p class="sec">Shared goals & debts <a>All ›</a></p>
+      <div class="rows">
+        <div class="row"><span>Vacation fund<span class="meta">$1,150 of $3,000</span></span><span class="chev">›</span></div>
+        <div class="row"><span>Car loan<span class="meta">$9,400 · Jamie added</span></span><span class="chev">›</span></div>
+      </div>
+      <p class="sec">Your sharing <a>Change ›</a></p>
+    </div>
+    <div class="fade"></div>
+    <nav class="glass"><span><svg class="ico"><use href="#i-health"/></svg>Health</span><span><svg class="ico"><use href="#i-money"/></svg>Money</span><span><svg class="ico"><use href="#i-plan"/></svg>Plan</span><span class="on"><svg class="ico"><use href="#i-home"/></svg>Home</span><span><svg class="ico"><use href="#i-me"/></svg>Me</span></nav>
+  </div></div>
+  <p class="cap">Home<span>Household dashboard with its own score and drill-down, members and what each shares, invite code / join with a code, leave, remove members, hand over ownership, shared goals and debts, household PDF reports. Without a household: create or join.</span></p></div>
+
+  <!-- Me -->
+  <div class="stepc"><div class="dev"><div class="scr">
+    <div class="island"></div>
+    <div class="pad">
+      <div class="prof"><div class="av">M</div><div><b>Matt</b><small>you@example.com<br>Member since Feb 2026</small></div></div>
+      <div class="grp">Reports</div>
+      <div class="rows">
+        <div class="row"><span>Report emails<span class="meta">Saturdays at 9:00</span></span><span class="chev">›</span></div>
+        <div class="row"><span>PDF reports</span><span class="chev">›</span></div>
+      </div>
+      <div class="grp">Account</div>
+      <div class="rows">
+        <div class="row"><span>Profile & photo</span><span class="chev">›</span></div>
+        <div class="row"><span>Appearance & Face ID</span><span class="chev">›</span></div>
+        <div class="row"><span>Invite codes<span class="meta">2 of 3 left</span></span><span class="chev">›</span></div>
+        <div class="row"><span>AI assistants<span class="meta">Setup and disconnect</span></span><span class="chev">›</span></div>
+        <div class="row"><span>Plans & billing<span class="meta">Opens spendoza.io</span></span><span class="chev">↗</span></div>
+        <div class="row"><span>Admin<span class="meta">Admins only</span></span><span class="chev">›</span></div>
+      </div>
+      <div class="grp">Help</div>
+      <div class="rows">
+        <div class="row"><span>Support · Privacy</span><span class="chev">›</span></div>
+        <div class="row danger"><span>Delete my account</span><span class="chev">›</span></div>
+      </div>
+    </div>
+    <div class="fade"></div>
+    <nav class="glass"><span><svg class="ico"><use href="#i-health"/></svg>Health</span><span><svg class="ico"><use href="#i-money"/></svg>Money</span><span><svg class="ico"><use href="#i-plan"/></svg>Plan</span><span><svg class="ico"><use href="#i-home"/></svg>Home</span><span class="on"><svg class="ico"><use href="#i-me"/></svg>Me</span></nav>
+  </div></div>
+  <p class="cap">Me<span>Report email schedule and on/off, PDF exports, profile and photo, theme and Face ID lock, invite codes, AI assistants (setup steps + Disconnect), Plans & billing link, Admin dashboard and users (admins only), support, privacy, sign out, delete account.</span></p></div>
+
+</div>
