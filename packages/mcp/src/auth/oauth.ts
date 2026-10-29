@@ -201,9 +201,10 @@ export class SpendozaOAuthProvider implements OAuthServerProvider {
       throw new Error("Invalid or expired authorization code");
     }
 
-    // Check expiry (codes valid for 10 minutes)
+    // Check expiry (codes valid for 10 minutes). A code with no readable
+    // creation time is treated as expired.
     const createdAt = new Date(data.created_at).getTime();
-    if (Date.now() - createdAt > 10 * 60 * 1000) {
+    if (!Number.isFinite(createdAt) || Date.now() - createdAt > 10 * 60 * 1000) {
       await supabaseAdmin
         .from("mcp_auth_codes")
         .update({ used: true })
