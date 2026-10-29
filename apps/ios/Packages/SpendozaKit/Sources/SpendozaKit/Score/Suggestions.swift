@@ -14,15 +14,19 @@ public enum SuggestionAction: Sendable, Equatable {
 
 /// Deterministic suggestions from the parts, at most three.
 ///
-/// `history` holds the reports for the months before `current`, newest first (up to four); `history.first`
-/// is the previous month.
+/// `previous` is the report for the calendar month just before `current` (nil when that month has none). It alone
+/// drives part deltas, category deltas, the ranking by points lost and the "since <month>" wording, so a gap in the
+/// months never produces a comparison with an older month.
+///
+/// `history` holds the reports for the months before `current`, newest first (up to four, gaps allowed); it is
+/// only used for the budget amount below.
 ///
 /// Budget amount rule: the average of the category's amount across the `history` months (a month with a
 /// report but no row for the category counts as 0), rounded UP to the nearest 50. With no history, the
 /// current month's amount is rounded up to the nearest 50.
-public func suggestions(current: Report, history: [Report], categories: [BudgetCategory]) -> [Suggestion] {
+public func suggestions(current: Report, previous previousReport: Report?, history: [Report],
+                        categories: [BudgetCategory]) -> [Suggestion] {
     guard let health = current.data.health else { return [] }
-    let previousReport = history.first
     let changes = partChanges(current: health, previous: previousReport?.data.health)
 
     // Worst first: the biggest point loss, else the biggest shortfall from full points.
@@ -43,7 +47,7 @@ public func suggestions(current: Report, history: [Report], categories: [BudgetC
         let value = health.parts[change.part]?.value ?? 0
         switch change.part {
         case .needs, .wants:
-            return budgetSuggestion(change, current: current, history: history, categories: categories)
+            return budgetSuggestion(change, current: current, previous: previousReport, history: history, categories: categories)
         case .emergencyFund:
             return value < 3 ? emergencySuggestion(value: value) : nil
         case .savingsRate:
@@ -79,10 +83,10 @@ private func emergencySuggestion(value: Double) -> Suggestion {
 }
 
 private func budgetSuggestion(
-    _ change: PartChange, current: Report, history: [Report], categories: [BudgetCategory]
+    _ change: PartChange, current: Report, previous previousReport: Report?, history: [Report],
+    categories: [BudgetCategory]
 ) -> Suggestion? {
     guard let budgetClass = change.part.budgetClass else { return nil }
-    let previousReport = history.first
     let rows = categoryChanges(
         current: current.data, previous: previousReport?.data, budgetClass: budgetClass, categories: categories)
     let pick: CategoryChange?

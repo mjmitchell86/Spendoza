@@ -244,7 +244,7 @@ final class HealthModel {
         let parts = report.data.health.map {
             partChanges(current: $0, previous: previous?.data.health)
         } ?? []
-        let suggestion = suggestions(current: report, history: history, categories: categories).first
+        let suggestion = suggestions(current: report, previous: previous, history: history, categories: categories).first
         let soFar = month < current ? reports[current] : nil
         // Older data when this month came from the cache, or a newer finished month couldn't be checked.
         let isCached = cachedMonths.contains(month)

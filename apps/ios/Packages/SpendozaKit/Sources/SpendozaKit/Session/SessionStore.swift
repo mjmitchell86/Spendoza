@@ -159,11 +159,15 @@ public final class SessionStore {
         let token = accountScope.token()
         do {
             let profile = try await api.profile()
+            // Signed out (or switched account) while the request was in flight: don't resurrect a signed-in state.
+            guard accountScope.isCurrent(token) else { return }
             profileCache?.store(profile, token: token)
             self.profile = profile
             loadError = nil
             accountReadyEmail = nil
             phase = appPhase(session: true, profile: profile)
+        } catch where !accountScope.isCurrent(token) {
+            return
         } catch APIError.unauthorized {
             await signOut()
         } catch APIError.offline {

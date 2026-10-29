@@ -264,3 +264,60 @@ private typealias UnusedAPI = OfflineAPI
 extension OfflineAPI {
     init() { self.init(result: .failure(.offline)) }
 }
+
+/// Holds `profile()` open until the test lets it go.
+private final class Gate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _arrived = false
+    private var _open = false
+    var arrived: Bool { lock.withLock { _arrived } }
+    func pass() async {
+        lock.withLock { _arrived = true }
+        while !lock.withLock({ _open }) { try? await Task.sleep(for: .milliseconds(5)) }
+    }
+    func open() { lock.withLock { _open = true } }
+}
+
+private struct GatedAPI: SpendozaAPI {
+    let gate: Gate
+    let result: Profile
+    func profile() async throws -> Profile { await gate.pass(); return result }
+    func completeOnboarding() async throws {}
+    func updateProfile(_ change: ProfileChange) async throws -> Profile { result }
+    func personalReport(_ month: Month) async throws -> Report? { nil }
+    func categories() async throws -> [BudgetCategory] { [] }
+    func transactions(from: Date, to: Date) async throws -> [Transaction] { [] }
+    func transactions(statementID: String) async throws -> [Transaction] { [] }
+    func setCategory(transactionID: String, category: String) async throws {}
+    func createBudgetGoal(name: String, categoryID: String, amount: Int) async throws {}
+    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement { throw APIError.offline }
+    func statements() async throws -> [Statement] { [] }
+    func reprocessStatement(id: String) async throws {}
+    func removeStatement(id: String) async throws {}
+    func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws {}
+    func joinWaitlist(name: String, email: String) async throws {}
+}
+
+@MainActor
+struct RefreshRaceTests {
+    @Test func signOutDuringARefreshLeavesTheStoreSignedOut() async {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("p-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let scope = AccountScope(userID: "user-a")
+        let cache = ProfileCache(directory: dir, scope: scope)
+        let gate = Gate()
+        let profile = Profile(id: "user-a", displayName: "A", onboardingCompleted: true, isAdmin: false,
+                              emailReportsEnabled: true, householdID: nil)
+        let store = SessionStore(api: GatedAPI(gate: gate, result: profile), userID: "user-a",
+                                 accountScope: scope, profileCache: cache)
+        let refresh = Task { await store.refresh() }
+        while !gate.arrived { await Task.yield() }
+        await store.signOut()
+        gate.open()
+        await refresh.value
+        #expect(store.phase == .signedOut)
+        #expect(store.profile == nil)
+        scope.begin(userID: "user-a")
+        #expect(cache.load() == nil)
+    }
+}
