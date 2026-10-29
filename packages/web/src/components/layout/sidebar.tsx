@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   Info,
   Cpu,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProfile } from "@/hooks/use-profile";
@@ -50,6 +51,7 @@ const navSections = [
       { to: "/billing", label: "Billing", icon: CreditCard },
       { to: "/mcp", label: "MCP", icon: Cpu },
       { to: "/about", label: "About", icon: Info },
+      { to: "/support", label: "Support", icon: LifeBuoy },
     ],
   },
 ];

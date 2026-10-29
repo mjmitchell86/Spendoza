@@ -25,6 +25,8 @@ import { AdminUsersPage } from "@/pages/admin-users";
 import { PublicLayout } from "@/components/layout/public-layout";
 import { AboutPage } from "@/pages/about";
 import { GettingStartedPage } from "@/pages/getting-started";
+import { SupportPage } from "@/pages/support";
+import { PrivacyPage } from "@/pages/privacy";
 import { AdvicePage } from "@/pages/advice";
 import { McpPage } from "@/pages/mcp";
 import { Toaster } from "@/components/ui/sonner";
@@ -44,6 +46,8 @@ function App() {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/getting-started" element={<GettingStartedPage />} />
+              <Route path="/support" element={<SupportPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
             </Route>
             <Route element={<AuthGuard />}>
               <Route element={<TimePeriodProvider><AppShell /></TimePeriodProvider>}>
