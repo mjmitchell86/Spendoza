@@ -53,7 +53,9 @@ targets:
         CODE_SIGN_STYLE: Automatic
       configs:
         Debug:
-          CODE_SIGNING_ALLOWED: NO
+          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGNING_REQUIRED: NO
+          CODE_SIGNING_ALLOWED: YES
   SpendozaTests:
     type: bundle.unit-test
     platform: iOS
