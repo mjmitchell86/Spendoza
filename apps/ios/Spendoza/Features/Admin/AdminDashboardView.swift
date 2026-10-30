@@ -169,10 +169,38 @@ private struct SignupsChart: View {
 private struct ActivityChart: View {
     let series: [(month: String, metric: String, count: Int)]
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.displayScale) private var displayScale
 
     private var months: [String] { Array(NSOrderedSet(array: series.map(\.month))) as? [String] ?? [] }
 
-    private static let colors: [String: Color] = ["transactions": Theme.note, "reports": Theme.amber, "emails": Theme.ink]
+    /// Transactions and reports are solid; emails are the engraved hatch, so the series differ by pattern, not only colour.
+    private func style(_ metric: String) -> AnyShapeStyle {
+        switch metric {
+        case "transactions": AnyShapeStyle(Theme.note)
+        case "reports": AnyShapeStyle(Theme.amber)
+        default: AnyShapeStyle(hatch)
+        }
+    }
+
+    /// Diagonal `ink` lines over `card`, rendered once per scheme into a repeating tile (3:1 against the paper).
+    private var hatch: ImagePaint {
+        let tile = Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.card))
+            var path = Path()
+            for offset in stride(from: -size.height, through: size.width, by: 3) {
+                path.move(to: CGPoint(x: offset, y: size.height))
+                path.addLine(to: CGPoint(x: offset + size.height, y: 0))
+            }
+            context.stroke(path, with: .color(Theme.ink), lineWidth: 1.5)
+        }
+        .frame(width: 6, height: 6)
+        .environment(\.colorScheme, scheme)
+        let renderer = ImageRenderer(content: tile)
+        renderer.scale = displayScale
+        guard let image = renderer.uiImage else { return ImagePaint(image: Image(uiImage: UIImage())) }
+        return ImagePaint(image: Image(uiImage: image), scale: 1 / displayScale)
+    }
 
     var body: some View {
         ChartBlock(title: "Activity trends", summary: summary) {
@@ -183,7 +211,7 @@ private struct ActivityChart: View {
                         .foregroundStyle(by: .value("Metric", point.metric))
                 }
                 .chartForegroundStyleScale(domain: AdminDashboardModel.activityMetrics,
-                                           range: AdminDashboardModel.activityMetrics.map { Self.colors[$0]! })
+                                           range: AdminDashboardModel.activityMetrics.map(style))
                 .chartLegend(.hidden)
                 .chartXAxis {
                     AxisMarks(values: months) { axisLabel($0, showing: axisMonths(months, size: typeSize)) }
@@ -202,7 +230,8 @@ private struct ActivityChart: View {
     private var legend: some View {
         let items = ForEach(AdminDashboardModel.activityMetrics, id: \.self) { metric in
             HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 1).fill(Self.colors[metric]!).frame(width: 10, height: 10)
+                RoundedRectangle(cornerRadius: 1).fill(style(metric)).frame(width: 12, height: 12)
+                    .overlay(RoundedRectangle(cornerRadius: 1).strokeBorder(Theme.ink.opacity(metric == "emails" ? 1 : 0), lineWidth: 0.5))
                 Text(metric.capitalized)
                     .font(.sans(12, relativeTo: .caption))
                     .foregroundStyle(Theme.soft)

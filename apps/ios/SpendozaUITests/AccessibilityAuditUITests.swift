@@ -42,6 +42,17 @@ final class AccessibilityAuditUITests: XCTestCase {
         XCTAssertTrue(last.exists, "\(screen.rawValue): '\(screen.lastElementPrefix)' isn't in the hierarchy")
         try app.performAccessibilityAudit()
         attach(app, "task14-\(screen.rawValue)-\(appearance.rawValue)-top")
+        if screen == .admin {
+            // The activity chart (series told apart by pattern as well as colour) for the screenshots.
+            let chart = app.staticTexts["Activity trends"]
+            var swipes = 0
+            while !chart.isHittable, swipes < 12 { app.swipeUp(velocity: .slow); swipes += 1 }
+            // Nudge the title to the top edge so the whole chart is on screen.
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+            from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)),
+                       withVelocity: .slow, thenHoldForDuration: 0.3)
+            attach(app, "task14-\(screen.rawValue)-\(appearance.rawValue)-chart")
+        }
         app.scrollToEnd()
         attach(app, "task14-\(screen.rawValue)-\(appearance.rawValue)-end")
     }
