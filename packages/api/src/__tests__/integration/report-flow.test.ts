@@ -452,12 +452,14 @@ describe("Report Flow: Generate -> Verify -> Rate Limit -> Cache", () => {
     expect(body.insights).toBeDefined();
   });
 
-  it("Step 6: Returns 404 when no report exists for a month", async () => {
+  it("Step 6: Returns 404 when no report exists for a month without transactions", async () => {
     resetMocks();
 
     mockGetReport.mockImplementation(() =>
       Promise.resolve({ data: null, error: null })
     );
+    // skipIfEmpty: a month with no transactions generates nothing
+    mockGenerateUserReport.mockImplementation((() => Promise.resolve(null)) as any);
 
     const res = await fetch(`${baseUrl}/api/reports/personal?month=2025-06-01`, {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
