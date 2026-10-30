@@ -17,7 +17,7 @@ struct AIAssistantsView: View {
     static let codeCommand = "claude mcp add spendoza --transport http https://mcp.spendoza.io/mcp"
 
     enum Client: String, CaseIterable, Identifiable {
-        case claudeDesktop = "Claude Desktop", claudeCode = "Claude Code", openAI = "OpenAI", other = "Other"
+        case claudeDesktop = "Claude Desktop", claudeCode = "Claude Code", openAIOther = "OpenAI / Other"
         var id: Self { self }
     }
 
@@ -53,6 +53,7 @@ struct AIAssistantsView: View {
 
     @State private var model: AIAssistantsModel
     @State private var client: Client = .claudeDesktop
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     init(api: any SpendozaAPI) {
         _model = State(initialValue: AIAssistantsModel(api: api))
@@ -132,7 +133,7 @@ struct AIAssistantsView: View {
                 step(1, "Run this command in your terminal")
                 codeBlock(Self.codeCommand, copyLabel: "Copy command")
                 body("Claude Code will prompt you to authenticate in your browser the first time you use a Spendoza tool.")
-            case .openAI, .other:
+            case .openAIOther:
                 step(1, "Add this MCP server URL to your client")
                 codeBlock(Self.mcpURL, copyLabel: "Copy server URL")
                 body("Any MCP-compatible client can connect using this URL. The server uses OAuth 2.1 for authentication — your client will open a browser window to log in.")
@@ -140,16 +141,19 @@ struct AIAssistantsView: View {
         }
     }
 
-    /// A theme-tinted segmented control: two by two so "Claude Desktop" never truncates, at any text size.
+    /// A theme-tinted segmented control: one row of three, stacked at accessibility text sizes so no label truncates.
     private var clientPicker: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
             ForEach(Client.allCases) { option in
                 let selected = option == client
                 Button { client = option } label: {
                     Text(option.rawValue)
-                        .font(.sans(15, weight: .semibold, relativeTo: .callout))
+                        .font(.sans(14, weight: .semibold, relativeTo: .callout))
                         .foregroundStyle(selected ? Theme.onNote : Theme.note)
                         .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 4)
                         .frame(maxWidth: .infinity, minHeight: 44)
                         .background(selected ? Theme.note : .clear, in: RoundedRectangle(cornerRadius: Theme.corner))
                         .hairlineBorder(Theme.note)
