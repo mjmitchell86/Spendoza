@@ -30,6 +30,12 @@ struct AdminUserDetailView: View {
                     Text(model.user.email ?? "No email")
                         .font(.sans(16, relativeTo: .body))
                         .foregroundStyle(Theme.soft)
+                        // One line, shrunk to fit: an address broken mid-word reads as gibberish.
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        // The address as a value: the audit rejects it as a label ("not human-readable").
+                        .accessibilityLabel("Email")
+                        .accessibilityValue(model.user.email ?? "none")
                 }
                 if let error = model.error {
                     Text(error)

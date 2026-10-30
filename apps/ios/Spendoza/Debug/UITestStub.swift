@@ -45,8 +45,17 @@ enum UITestStub {
         // (The profile then starts with weekly reports on, so the failing change is turning them off.)
         let updateOffline = CommandLine.arguments.contains("-uiTestProfileUpdateOffline")
         if updateOffline { api.updateProfileError = .offline }
+        // The photo URL points at nothing that answers, so the avatar falls back to initials without the network.
         api.profileResult = Profile(id: "ui-test-user", displayName: "Test", onboardingCompleted: true,
-                                    isAdmin: CommandLine.arguments.contains("-uiTestAdmin"), emailReportsEnabled: updateOffline, householdID: nil)
+                                    isAdmin: CommandLine.arguments.contains("-uiTestAdmin"), emailReportsEnabled: updateOffline, householdID: nil,
+                                    avatarURL: URL(string: "http://127.0.0.1:9/avatar.jpg"), subscriptionTier: "pro",
+                                    createdAt: Date(timeIntervalSince1970: 1_780_000_000))
+        // Two of the three invite codes: one available, one used.
+        api.inviteCodeList = [
+            InviteCode(id: "i1", code: "SPEND-7K2Q", createdAt: Date(timeIntervalSince1970: 1_790_000_000)),
+            InviteCode(id: "i2", code: "SPEND-M4XD", usedAt: Date(timeIntervalSince1970: 1_791_000_000),
+                       createdAt: Date(timeIntervalSince1970: 1_785_000_000), usedBy: "u9"),
+        ]
         // `-uiTestAdmin`: an admin account, with a year of platform trends for the dashboard.
         if CommandLine.arguments.contains("-uiTestAdmin") {
             api.adminTrendsResult = .success(adminTrends())

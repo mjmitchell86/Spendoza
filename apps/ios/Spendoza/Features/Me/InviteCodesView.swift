@@ -57,18 +57,17 @@ struct InviteCodesView: View {
     private func row(_ invite: InviteCode) -> some View {
         RuledRow {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text(invite.code)
-                        .font(.system(.title3, design: .monospaced, weight: .medium))
-                        .foregroundStyle(invite.isUsed ? Theme.soft : Theme.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                        .textSelection(.enabled)
-                    Spacer(minLength: 8)
-                    Text(invite.isUsed ? "Used" : "Available")
-                        .font(.sans(14, relativeTo: .subheadline))
-                        .foregroundStyle(Theme.soft)
-                        .fixedSize()
+                // Side by side when they fit; stacked at the large text sizes, where the code would clip.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        codeText(invite).fixedSize()
+                        Spacer(minLength: 8)
+                        status(invite)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        codeText(invite)
+                        status(invite)
+                    }
                 }
                 if !invite.isUsed {
                     HStack(spacing: 12) {
@@ -84,5 +83,20 @@ struct InviteCodesView: View {
             }
             .frame(minHeight: 34)
         }
+    }
+
+    private func codeText(_ invite: InviteCode) -> some View {
+        Text(invite.code)
+            .font(.system(.title3, design: .monospaced, weight: .medium))
+            .foregroundStyle(invite.isUsed ? Theme.soft : Theme.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+
+    private func status(_ invite: InviteCode) -> some View {
+        Text(invite.isUsed ? "Used" : "Available")
+            .font(.sans(14, relativeTo: .subheadline))
+            .foregroundStyle(Theme.soft)
+            .fixedSize()
     }
 }

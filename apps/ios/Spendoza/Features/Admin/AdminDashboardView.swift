@@ -172,7 +172,7 @@ private struct ActivityChart: View {
 
     private var months: [String] { Array(NSOrderedSet(array: series.map(\.month))) as? [String] ?? [] }
 
-    private static let colors: [String: Color] = ["transactions": Theme.note, "reports": Theme.amber, "emails": Theme.engraving]
+    private static let colors: [String: Color] = ["transactions": Theme.note, "reports": Theme.amber, "emails": Theme.ink]
 
     var body: some View {
         ChartBlock(title: "Activity trends", summary: summary) {

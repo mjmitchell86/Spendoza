@@ -12,6 +12,40 @@ final class AccessibilityAuditUITests: XCTestCase {
     @MainActor func testDiningOutLight() throws { try audit(.diningOut, .light) }
     @MainActor func testDiningOutDark() throws { try audit(.diningOut, .dark) }
 
+    @MainActor func testMeLight() throws { try audit(.me, .light) }
+    @MainActor func testMeDark() throws { try audit(.me, .dark) }
+    @MainActor func testInviteCodesLight() throws { try audit(.inviteCodes, .light) }
+    @MainActor func testInviteCodesDark() throws { try audit(.inviteCodes, .dark) }
+    @MainActor func testAssistantsLight() throws { try audit(.assistants, .light) }
+    @MainActor func testAssistantsDark() throws { try audit(.assistants, .dark) }
+    @MainActor func testSupportLight() throws { try audit(.support, .light) }
+    @MainActor func testSupportDark() throws { try audit(.support, .dark) }
+    @MainActor func testAdminLight() throws { try audit(.admin, .light) }
+    @MainActor func testAdminDark() throws { try audit(.admin, .dark) }
+    @MainActor func testAdminUserLight() throws { try audit(.adminUser, .light) }
+    @MainActor func testAdminUserDark() throws { try audit(.adminUser, .dark) }
+
+    /// A Me screen, audited from its top at the largest text size (the tab bar hidden, as for Health), then walked
+    /// to its end for screenshots.
+    @MainActor
+    private func audit(_ screen: MeScreen, _ appearance: Launch.Appearance) throws {
+        let app = Launch.stubbed(appearance: appearance, textSize: Launch.largestText, hideTabBar: true, admin: screen.needsAdmin, startOnMe: true)
+        app.open(screen)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        let brightness = app.backgroundBrightness()
+        switch appearance {
+        case .light: XCTAssertGreaterThan(brightness, 0.8, "Expected light paper")
+        case .dark: XCTAssertLessThan(brightness, 0.3, "Expected dark paper")
+        }
+        let last = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", screen.lastElementPrefix)).firstMatch
+        XCTAssertTrue(last.exists, "\(screen.rawValue): '\(screen.lastElementPrefix)' isn't in the hierarchy")
+        try app.performAccessibilityAudit()
+        attach(app, "task14-\(screen.rawValue)-\(appearance.rawValue)-top")
+        app.scrollToEnd()
+        attach(app, "task14-\(screen.rawValue)-\(appearance.rawValue)-end")
+    }
+
     @MainActor
     private func audit(_ screen: Screen, _ appearance: Launch.Appearance) throws {
         let app = Launch.stubbed(appearance: appearance, textSize: Launch.largestText, hideTabBar: true)

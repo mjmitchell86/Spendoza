@@ -253,6 +253,7 @@ private struct OutlinedDestructiveButtonStyle: ButtonStyle {
         configuration.label
             .font(.sans(15, weight: .semibold, relativeTo: .callout))
             .foregroundStyle(Theme.oxblood)
+            .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, minHeight: 44)
             .hairlineBorder(Theme.oxblood)
             .opacity(configuration.isPressed ? 0.7 : 1)
