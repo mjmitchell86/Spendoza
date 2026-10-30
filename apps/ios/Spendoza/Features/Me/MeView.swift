@@ -22,7 +22,8 @@ struct MeView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     ProfileHeader(model: model, email: store.email)
                     ReportsSection(model: model, api: store.api)
-                    AccountSection(tier: model.profile?.subscriptionTier ?? "free", lock: lock, api: store.api)
+                    AccountSection(tier: model.profile?.subscriptionTier ?? "free", isAdmin: model.profile?.isAdmin == true,
+                                   lock: lock, api: store.api)
                     HelpSection()
                     Button("Sign out") { Task { await store.signOut() } }
                         .buttonStyle(SecondaryButtonStyle())
@@ -98,6 +99,7 @@ struct MeRowLabel: View {
 
 private struct AccountSection: View {
     let tier: String
+    let isAdmin: Bool
     let lock: AppLock
     let api: any SpendozaAPI
     static let pricingURL = URL(string: "https://www.spendoza.io/pricing")!
@@ -127,6 +129,14 @@ private struct AccountSection: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens in your browser")
+            if isAdmin {
+                NavigationLink {
+                    AdminDashboardView(api: api)
+                } label: {
+                    MeRowLabel(title: "Admin", glyph: "›")
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }

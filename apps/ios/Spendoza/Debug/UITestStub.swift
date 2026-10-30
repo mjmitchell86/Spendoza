@@ -46,8 +46,33 @@ enum UITestStub {
         let updateOffline = CommandLine.arguments.contains("-uiTestProfileUpdateOffline")
         if updateOffline { api.updateProfileError = .offline }
         api.profileResult = Profile(id: "ui-test-user", displayName: "Test", onboardingCompleted: true,
-                                    isAdmin: false, emailReportsEnabled: updateOffline, householdID: nil)
+                                    isAdmin: CommandLine.arguments.contains("-uiTestAdmin"), emailReportsEnabled: updateOffline, householdID: nil)
+        // `-uiTestAdmin`: an admin account, with a year of platform trends for the dashboard.
+        if CommandLine.arguments.contains("-uiTestAdmin") {
+            api.adminTrendsResult = .success(adminTrends())
+        }
         return api
+    }
+
+    private static func adminTrends() -> AdminTrends {
+        var months: [String] = []
+        var signups: [AdminTrends.UserTrend] = []
+        var activity: [AdminTrends.ActivityTrend] = []
+        for i in 0..<12 {
+            let index = i + 9
+            let month = String(format: "%04d-%02d-01", 2025 + index / 12, index % 12 + 1)
+            months.append(month)
+            signups.append(.init(month: month, newUsers: 2 + (i * 5) % 9))
+            activity.append(.init(month: month, metric: "transactions", count: 800 + i * 150))
+            activity.append(.init(month: month, metric: "reports", count: 20 + i * 3))
+            activity.append(.init(month: month, metric: "emails", count: 40 + i * 9))
+        }
+        let last = months[11]
+        let categorize = AdminTrends.LLMStat(month: last, callType: "categorize", callCount: 412, totalTokens: 1_240_500,
+                                             avgTokens: 3_011, minTokens: 820, maxTokens: 9_800, totalCost: 0.0123)
+        let insights = AdminTrends.LLMStat(month: last, callType: "insights", callCount: 38, totalTokens: 96_200,
+                                           avgTokens: 2_531, minTokens: 1_100, maxTokens: 4_900, totalCost: nil)
+        return AdminTrends(userTrends: signups, activityTrends: activity, llmStats: [categorize, insights])
     }
 
     private static func tx(_ id: String, _ date: String, _ description: String, _ amount: Double) -> Transaction {
