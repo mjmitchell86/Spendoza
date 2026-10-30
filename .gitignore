@@ -11,3 +11,8 @@ dist/
 
 # Brainstorming companion scratch files
 .superpowers/
+
+# Apple credentials (App Store Connect API keys, certificates, profiles)
+*.p8
+*.p12
+*.mobileprovision
