@@ -372,10 +372,11 @@ describe("GET /api/reports/personal", () => {
     expect(body.report_data.total_income).toBe(6500);
   });
 
-  it("returns 404 when no report exists", async () => {
+  it("returns 404 when no report exists and the month has no transactions", async () => {
     mockGetReport.mockImplementation(() =>
       Promise.resolve({ data: null, error: null })
     );
+    mockGenerateUserReport.mockImplementation(() => Promise.resolve(null));
 
     const res = await fetch(url("2026-01-01"), {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
@@ -384,6 +385,98 @@ describe("GET /api/reports/personal", () => {
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error).toContain("not found");
+  });
+
+  it("returns a fresh stored report without generating", async () => {
+    await fetch(url("2026-01-01"), {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(mockGenerateUserReport).not.toHaveBeenCalled();
+  });
+
+  it("generates the report when none is stored for the month", async () => {
+    mockGetReport.mockImplementation(() =>
+      Promise.resolve({ data: null, error: null })
+    );
+
+    const res = await fetch(url("2026-01-01"), {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.report_data.total_income).toBe(6500);
+
+    const months = mockGenerateUserReport.mock.calls.map((call: any[]) => {
+      const date = call[1] as Date;
+      return `${date.getFullYear()}-${date.getMonth() + 1}`;
+    });
+    // The previous month first, so the new report's month-over-month and previous score have a base.
+    expect(months).toEqual(["2025-12", "2026-1"]);
+    for (const call of mockGenerateUserReport.mock.calls as any[][]) {
+      expect(call[0]).toBe(TEST_USER_ID);
+      expect(call[2]).toBe(false);
+      expect(call[4]).toEqual({ skipIfEmpty: true });
+    }
+  });
+
+  it("regenerates a report marked as having new data", async () => {
+    mockGetReport.mockImplementation(() =>
+      Promise.resolve({ data: { ...sampleReport, has_new_data: true }, error: null })
+    );
+    mockGenerateUserReport.mockImplementation(() =>
+      Promise.resolve({ ...sampleReport, ai_insights: "fresh" })
+    );
+
+    const res = await fetch(url("2026-01-01"), {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ai_insights).toBe("fresh");
+  });
+
+  it("falls back to the stored report when regeneration fails", async () => {
+    mockGetReport.mockImplementation(() =>
+      Promise.resolve({ data: { ...sampleReport, has_new_data: true }, error: null })
+    );
+    mockGenerateUserReport.mockImplementation(() => Promise.reject(new Error("boom")));
+
+    const res = await fetch(url("2026-01-01"), {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.id).toBe("rpt-1");
+  });
+
+  it("returns 500 when generation fails and nothing is stored", async () => {
+    mockGetReport.mockImplementation(() =>
+      Promise.resolve({ data: null, error: null })
+    );
+    mockGenerateUserReport.mockImplementation(() => Promise.reject(new Error("boom")));
+
+    const res = await fetch(url("2026-01-01"), {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(500);
+  });
+
+  it("does not generate for a malformed month", async () => {
+    mockGetReport.mockImplementation(() =>
+      Promise.resolve({ data: null, error: null })
+    );
+
+    const res = await fetch(url("not-a-month"), {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(404);
+    expect(mockGenerateUserReport).not.toHaveBeenCalled();
   });
 
   it("returns 401 without auth token", async () => {
