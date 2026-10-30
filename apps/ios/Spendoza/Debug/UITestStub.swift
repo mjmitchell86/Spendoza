@@ -41,9 +41,68 @@ enum UITestStub {
         if CommandLine.arguments.contains("-uiTestBudgetNotOnPlan") {
             api.budgetError = .notOnPlan(requiredTier: "starter")
         }
+        // `-uiTestProfileUpdateOffline`: saving the profile fails as if offline.
+        // (The profile then starts with weekly reports on, so the failing change is turning them off.)
+        let updateOffline = CommandLine.arguments.contains("-uiTestProfileUpdateOffline")
+        if updateOffline { api.updateProfileError = .offline }
+        // The photo URL points at nothing that answers, so the avatar falls back to initials without the network.
         api.profileResult = Profile(id: "ui-test-user", displayName: "Test", onboardingCompleted: true,
-                                    isAdmin: false, emailReportsEnabled: false, householdID: nil)
+                                    isAdmin: CommandLine.arguments.contains("-uiTestAdmin"), emailReportsEnabled: updateOffline, householdID: nil,
+                                    avatarURL: URL(string: "http://127.0.0.1:9/avatar.jpg"), subscriptionTier: "pro",
+                                    createdAt: Date(timeIntervalSince1970: 1_780_000_000))
+        // Two of the three invite codes: one available, one used.
+        api.inviteCodeList = [
+            InviteCode(id: "i1", code: "SPEND-7K2Q", createdAt: Date(timeIntervalSince1970: 1_790_000_000)),
+            InviteCode(id: "i2", code: "SPEND-M4XD", usedAt: Date(timeIntervalSince1970: 1_791_000_000),
+                       createdAt: Date(timeIntervalSince1970: 1_785_000_000), usedBy: "u9"),
+        ]
+        // `-uiTestAdmin`: an admin account, with a year of platform trends for the dashboard.
+        if CommandLine.arguments.contains("-uiTestAdmin") {
+            api.adminTrendsResult = .success(adminTrends())
+            let pages = adminUsers()
+            api.adminUsersPages = Dictionary(uniqueKeysWithValues: pages.map { ($0.page, $0) })
+        }
         return api
+    }
+
+    /// Two pages of users (30 in all): the signed-in admin, a disabled one, one with no email and a long name,
+    /// then plain ones, so the list has to load more.
+    private static func adminUsers() -> [AdminUserPage] {
+        func user(_ id: String, _ name: String, _ email: String?, tier: String, admin: Bool = false, disabled: Bool = false) -> AdminUser {
+            AdminUser(id: id, displayName: name, email: email, tier: tier, isAdmin: admin, disabled: disabled,
+                      createdAt: Date(timeIntervalSince1970: 1_780_000_000))
+        }
+        let special = [
+            user("ui-test-user", "Test", "test@example.com", tier: "pro", admin: true),
+            user("u2", "Ann Baker", "ann.baker@example.com", tier: "starter"),
+            user("u3", "Carlos Ibarra-Villanueva-Montgomery", "carlos.ibarra.villanueva@example.com", tier: "free", disabled: true),
+            user("u4", "Dee", nil, tier: "free"),
+        ]
+        let plain = (5...30).map { user("u\($0)", "User \($0)", "user\($0)@example.com", tier: "free") }
+        let all = special + plain
+        return [AdminUserPage(users: Array(all[0..<25]), total: 30, page: 1, limit: 25),
+                AdminUserPage(users: Array(all[25...]), total: 30, page: 2, limit: 25)]
+    }
+
+    private static func adminTrends() -> AdminTrends {
+        var months: [String] = []
+        var signups: [AdminTrends.UserTrend] = []
+        var activity: [AdminTrends.ActivityTrend] = []
+        for i in 0..<12 {
+            let index = i + 9
+            let month = String(format: "%04d-%02d-01", 2025 + index / 12, index % 12 + 1)
+            months.append(month)
+            signups.append(.init(month: month, newUsers: 2 + (i * 5) % 9))
+            activity.append(.init(month: month, metric: "transactions", count: 800 + i * 150))
+            activity.append(.init(month: month, metric: "reports", count: 20 + i * 3))
+            activity.append(.init(month: month, metric: "emails", count: 40 + i * 9))
+        }
+        let last = months[11]
+        let categorize = AdminTrends.LLMStat(month: last, callType: "categorize", callCount: 412, totalTokens: 1_240_500,
+                                             avgTokens: 3_011, minTokens: 820, maxTokens: 9_800, totalCost: 0.0123)
+        let insights = AdminTrends.LLMStat(month: last, callType: "insights", callCount: 38, totalTokens: 96_200,
+                                           avgTokens: 2_531, minTokens: 1_100, maxTokens: 4_900, totalCost: nil)
+        return AdminTrends(userTrends: signups, activityTrends: activity, llmStats: [categorize, insights])
     }
 
     private static func tx(_ id: String, _ date: String, _ description: String, _ amount: Double) -> Transaction {

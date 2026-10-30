@@ -22,9 +22,12 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useAdminUsers, useUpdateAdminUser, useDeleteAdminUser, useAdminGenerateReport, useAdminDetectRecurring, useAdminSendQuarterlyReport, useAdminSendAnnualReport } from "@/hooks/use-admin";
+import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import type { AdminUserRow } from "@spendoza/shared";
 import { Loader2 } from "lucide-react";
+
+const SELF_LOCKOUT = "You can't disable or remove admin from your own account";
 
 export function AdminUsersPage() {
   const [page, setPage] = useState(1);
@@ -39,6 +42,7 @@ export function AdminUsersPage() {
     search: search || undefined,
     tier: tierFilter || undefined,
   });
+  const { data: me } = useProfile();
   const updateUser = useUpdateAdminUser();
   const deleteUser = useDeleteAdminUser();
   const generateReport = useAdminGenerateReport();
@@ -69,6 +73,12 @@ export function AdminUsersPage() {
     deleteUser.mutate(deleteTarget.id, {
       onSuccess: () => setDeleteTarget(null),
     });
+  }
+
+  function handleDeleteOpenChange(open: boolean) {
+    if (open) return;
+    setDeleteTarget(null);
+    deleteUser.reset();
   }
 
   const totalPages = data ? Math.ceil(data.total / data.limit) : 1;
@@ -159,6 +169,8 @@ export function AdminUsersPage() {
                       <td className="px-4 py-3">
                         <Switch
                           checked={user.is_admin}
+                          disabled={user.id === me?.id}
+                          title={user.id === me?.id ? SELF_LOCKOUT : undefined}
                           onCheckedChange={() => handleAdminToggle(user.id, user.is_admin)}
                         />
                       </td>
@@ -169,6 +181,8 @@ export function AdminUsersPage() {
                           </Badge>
                           <Switch
                             checked={!user.disabled}
+                            disabled={user.id === me?.id}
+                            title={user.id === me?.id ? SELF_LOCKOUT : undefined}
                             onCheckedChange={() => handleDisableToggle(user.id, user.disabled)}
                           />
                         </div>
@@ -254,7 +268,10 @@ export function AdminUsersPage() {
                             variant="ghost"
                             size="icon"
                             className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleteTarget(user)}
+                            onClick={() => {
+                              deleteUser.reset();
+                              setDeleteTarget(user);
+                            }}
                           >
                             <Trash2 className="size-4" />
                           </Button>
@@ -302,7 +319,7 @@ export function AdminUsersPage() {
       )}
 
       {/* Delete confirmation dialog */}
-      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+      <Dialog open={!!deleteTarget} onOpenChange={handleDeleteOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete User</DialogTitle>
@@ -310,8 +327,15 @@ export function AdminUsersPage() {
               This will permanently delete <strong>{deleteTarget?.display_name}</strong> ({deleteTarget?.email}) and all their data. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
+          {deleteUser.isError && (
+            <p className="text-sm text-destructive">
+              {deleteUser.error instanceof Error
+                ? deleteUser.error.message
+                : "Failed to delete user"}
+            </p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+            <Button variant="outline" onClick={() => handleDeleteOpenChange(false)}>
               Cancel
             </Button>
             <Button

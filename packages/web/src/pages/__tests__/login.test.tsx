@@ -41,6 +41,24 @@ async function login() {
   await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
 }
 
+describe("LoginPage disabled account notice", () => {
+  afterEach(cleanup);
+
+  it("shows the disabled message after being signed out for it", () => {
+    renderIt("/login?notice=account_disabled");
+    expect(
+      screen.getByText(
+        "This account has been disabled. Email hello@gravitaz.net if you think this is a mistake.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows no notice otherwise", () => {
+    renderIt("/login");
+    expect(screen.queryByText(/has been disabled/)).toBeNull();
+  });
+});
+
 describe("LoginPage return-to", () => {
   beforeEach(() => signIn.mockReset().mockResolvedValue(undefined));
   afterEach(cleanup);

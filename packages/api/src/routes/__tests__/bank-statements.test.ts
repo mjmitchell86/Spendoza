@@ -451,6 +451,14 @@ describe("GET /api/bank-statements/:id", () => {
     // Mock: first call for statement, second for transactions
     let callCount = 0;
     mockFrom.mockImplementation((_table: string) => {
+      // requireAuth's disabled-account lookup comes first; it isn't one of the numbered calls.
+      if (_table === "profiles" && callCount === 0) {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }),
+          }),
+        };
+      }
       callCount++;
       if (callCount === 1) {
         // bank_statements table

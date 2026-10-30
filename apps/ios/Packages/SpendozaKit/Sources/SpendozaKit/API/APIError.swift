@@ -8,6 +8,8 @@ public enum APIError: Error, Equatable, Sendable {
     /// The server's `error` text.
     case message(String)
     case offline
+    /// The server refused the account because it was disabled; the text says so and where to write.
+    case accountDisabled(String)
 
     /// Copy for the screen.
     public var userMessage: String {
@@ -16,6 +18,7 @@ public enum APIError: Error, Equatable, Sendable {
         case .notOnPlan: "Not available on your plan yet"
         case .fileTooLarge(let maxMB): "This file is too large (max \(maxMB) MB)"
         case .message(let text): text
+        case .accountDisabled(let text): text
         case .offline: "You're offline. Check your connection and try again."
         }
     }

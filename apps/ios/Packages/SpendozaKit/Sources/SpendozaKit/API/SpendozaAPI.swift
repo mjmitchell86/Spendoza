@@ -1,7 +1,7 @@
 import Foundation
 
 /// Everything the app asks of the Spendoza server. App models depend on this protocol so tests can stub it.
-public protocol SpendozaAPI: Sendable {
+public protocol SpendozaAPI: AccountAPI, AdminAPI {
     func profile() async throws -> Profile
     func completeOnboarding() async throws
     func updateProfile(_ change: ProfileChange) async throws -> Profile

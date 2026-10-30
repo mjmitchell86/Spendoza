@@ -9,7 +9,7 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "bun test src"
+    "test": "bun test src/lib && bun test src/components src/pages src/hooks src/contexts"
   },
   "dependencies": {
     "@spendoza/shared": "workspace:*",

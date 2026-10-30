@@ -114,10 +114,20 @@ private final class FailGate: @unchecked Sendable {
     func open() { lock.withLock { _open = true } }
 }
 
+/// Counts the calls a double receives.
+private final class CallCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value = 0
+    var value: Int { lock.withLock { _value } }
+    func bump() { lock.withLock { _value += 1 } }
+}
+
 private struct FailingAPI: SpendozaAPI {
     var gate: FailGate?
     let error: APIError
-    func profile() async throws -> Profile { await gate?.pass(); throw error }
+    var calls: CallCount?
+    func profile() async throws -> Profile { calls?.bump(); await gate?.pass(); throw error }
+    func deleteAccount() async throws { calls?.bump() }
     func completeOnboarding() async throws {}
     func updateProfile(_ change: ProfileChange) async throws -> Profile { throw error }
     func personalReport(_ month: Month) async throws -> Report? { nil }
@@ -162,6 +172,45 @@ struct RefreshErrorRaceTests {
         gate.open()
         await refresh.value
         #expect(signedOut == 1)
+    }
+}
+
+@MainActor
+struct AccountDisabledTests {
+    private let text = "This account has been disabled. Email hello@gravitaz.net if you think this is a mistake."
+
+    @Test func aDisabledAccountSignsOutAndLeavesANotice() async {
+        let store = SessionStore(api: FailingAPI(error: .accountDisabled(text)), userID: "user-a")
+        var signedOut = 0
+        store.onSignOut = { signedOut += 1 }
+        await store.refresh()
+        #expect(store.phase == .signedOut)
+        #expect(store.signedOutNotice == text)
+        #expect(store.loadError == nil)
+        #expect(signedOut == 1)
+    }
+
+    @Test func aDisabledAnswerFromADataCallEndsTheSessionWithTheNotice() async {
+        let scope = AccountScope(userID: "user-a")
+        let store = SessionStore(api: FailingAPI(error: .offline), userID: "user-a", accountScope: scope)
+        var signedOut = 0
+        var ended = 0
+        store.onSignOut = { signedOut += 1 }
+        store.onSessionEnded = { ended += 1 }
+        await store.accountDisabled(text)
+        #expect(store.phase == .signedOut)
+        #expect(store.profile == nil)
+        #expect(store.signedOutNotice == text)
+        #expect(signedOut == 1)
+        #expect(ended == 1)
+        #expect(scope.userID == nil)
+    }
+
+    @Test func theNoticeSurvivesTheSignOutThatRaisedIt() async {
+        let store = SessionStore(api: FailingAPI(error: .accountDisabled(text)), userID: "user-a")
+        await store.refresh()
+        await store.signOut()
+        #expect(store.signedOutNotice == text)
     }
 }
 
@@ -234,5 +283,51 @@ struct SignOutListenerTests {
         // Let a second listener (if one was started) run too.
         for _ in 0..<20 { await Task.yield() }
         #expect(cleared == 1)
+    }
+}
+
+@MainActor
+struct AccountDeletedTests {
+    private let profile = Profile(id: "user-a", displayName: "A", onboardingCompleted: true, isAdmin: false,
+                                  emailReportsEnabled: true, householdID: nil)
+
+    /// The server already deleted the account: the store drops everything locally and never calls the server.
+    @Test func deletingTheAccountSignsOutLocallyWithoutCallingTheServer() async {
+        let calls = CallCount()
+        let scope = AccountScope(userID: "user-a")
+        let store = SessionStore(api: FailingAPI(error: .offline, calls: calls), userID: "user-a", accountScope: scope)
+        store.apply(profile)
+        var signedOut = 0
+        var ended = 0
+        store.onSignOut = { signedOut += 1 }
+        store.onSessionEnded = { ended += 1 }
+
+        await store.accountDeleted()
+
+        #expect(store.profile == nil)
+        #expect(store.phase == .signedOut)
+        #expect(store.loadError == nil)
+        #expect(signedOut == 1)
+        #expect(ended == 1)
+        #expect(scope.userID == nil)
+        #expect(calls.value == 0)
+    }
+
+    @Test func applyReplacesTheProfileAndTheEmailComesFromTheSession() {
+        let store = SessionStore(api: FailingAPI(error: .offline), userID: "user-a", email: "a@example.com")
+        #expect(store.email == "a@example.com")
+        #expect(store.profile == nil)
+        store.apply(profile)
+        #expect(store.profile == profile)
+    }
+
+    /// A late save that lands after sign-out or another sign-in belongs to nobody on this device now.
+    @Test func applyIgnoresAProfileOfAnotherUser() {
+        let store = SessionStore(api: FailingAPI(error: .offline), userID: "user-b")
+        store.apply(profile)
+        #expect(store.profile == nil)
+        let signedOut = SessionStore(api: FailingAPI(error: .offline))
+        signedOut.apply(profile)
+        #expect(signedOut.profile == nil)
     }
 }

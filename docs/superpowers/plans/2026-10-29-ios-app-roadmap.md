@@ -12,7 +12,7 @@ The spec covers independent subsystems, so it is built as a sequence of plans. E
 | 4 | Plan | Goals (all types, suggestions), Debts (payoff projections), Advisor (threads, follow-ups, history, daily limit); turns on "Ask the advisor" and the Debt part's actions on Health | after Plan 2 |
 | 5a | [Household management and invite codes](2026-10-29-household-management.md) | API + web now (rotate code, rename, delete, invitations that arrive, accept/decline, remove-member fix); app Home tab: create / join / invitations / members / sharing / code / ownership / leave | API + web: ready; app tasks after Plan 2 |
 | 5b | Home — household numbers | Household dial and drill-down to category totals, shared goals and debts, household PDF | after Plans 2 and 5a |
-| 6 | [Me and Admin](2026-10-30-ios-me-admin.md) | Profile and photo, report emails, PDF reports, invite codes, AI assistants (setup + disconnect), Plans & billing link, Support and Privacy, delete account, Admin dashboard and users; refuse disabled accounts; web menu and admin-delete fixes | written; in progress (moved ahead of 3–5b at the owner's request, 2026-10-30) |
+| 6 | [Me and Admin](2026-10-30-ios-me-admin.md) | Profile and photo, report emails, PDF reports, invite codes, AI assistants (setup + disconnect), Plans & billing link, Support and Privacy, delete account, Admin dashboard and users; refuse disabled accounts; web menu and admin-delete fixes | shipped 2026-10-30 (moved ahead of 3–5b at the owner's request) |
 
 Plan 1 has no dependency on the app and can ship first.
 

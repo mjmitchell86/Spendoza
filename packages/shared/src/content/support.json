@@ -1,0 +1,79 @@
+{
+  "title": "Support",
+  "intro": [
+    "Spendoza is a personal and household finance tracker, made by Gravitaz LLC. Upload your bank statements and it sorts your spending into categories, so you can set goals based on what you actually spend. Signing up needs an invite code, or you can join the waitlist."
+  ],
+  "sections": [
+    {
+      "heading": "How it works",
+      "blocks": [
+        {
+          "ol": [
+            "Upload a bank statement, as a PDF or CSV file up to 10 MB.",
+            "Spendoza reads it, finds the transactions and sorts them into categories. Check them, and change any category it got wrong.",
+            "See where the money went on the dashboard: income against expenses, spending by category, and the recurring bills it found.",
+            "Set savings and budget goals, and track debts, on the Starter or Pro plan.",
+            "Invite your household with a code, on the Pro plan."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "If a statement fails",
+      "blocks": [
+        {
+          "p": "Bank Statements shows what went wrong. Choose Retry to process it again, or Remove to delete it, including the file. If the same statement keeps failing, email [hello@gravitaz.net](mailto:hello@gravitaz.net) with the bank name and the file type, but not the statement itself."
+        }
+      ]
+    },
+    {
+      "heading": "Report emails",
+      "blocks": [
+        {
+          "p": "Spendoza emails a weekly report, plus quarterly and yearly ones. Choose the day and time, or turn them off, in Profile. Every report email also has an unsubscribe link."
+        }
+      ]
+    },
+    {
+      "heading": "Plans and billing",
+      "blocks": [
+        {
+          "p": "See the plans on the [pricing page](/pricing). To change or cancel a paid plan, go to Billing and choose Manage Subscription. Payments are handled by Stripe."
+        }
+      ]
+    },
+    {
+      "heading": "Households",
+      "blocks": [
+        {
+          "p": "On the Pro plan, the head of a household shares its invite code, and others join with it. Each member chooses what income and expenses to share. Members can leave at any time, and the head can remove members or hand the household to someone else."
+        }
+      ]
+    },
+    {
+      "heading": "Connecting an AI assistant",
+      "blocks": [
+        {
+          "p": "Spendoza works with AI assistants such as Claude and ChatGPT through its MCP server. In the app, MCP has setup steps and example questions. The assistant can read and change your Spendoza data, so only connect one you trust. To disconnect it, choose Disconnect AI assistants on the MCP page; that also signs you out on your other devices."
+        }
+      ]
+    },
+    {
+      "heading": "Delete your account",
+      "blocks": [
+        {
+          "p": "Go to Profile and choose Delete my account. It permanently deletes your account and your data, and cancels your subscription. If you're the head of a household with other members, hand the household to someone else first."
+        }
+      ]
+    },
+    {
+      "heading": "Get in touch",
+      "blocks": [
+        {
+          "p": "For help, bug reports and feature ideas, email [hello@gravitaz.net](mailto:hello@gravitaz.net)."
+        }
+      ]
+    }
+  ],
+  "footer": "Read the [privacy policy](/privacy)."
+}

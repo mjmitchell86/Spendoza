@@ -4,7 +4,7 @@ import type { SubscriptionTier } from "@spendoza/shared";
 
 /**
  * Creates a ServiceContext from a Supabase access token.
- * Returns null if the token is invalid or the user cannot be resolved.
+ * Returns null if the token is invalid, the user cannot be resolved or the account is disabled.
  */
 export async function createSessionFromToken(
   accessToken: string
@@ -14,6 +14,14 @@ export async function createSessionFromToken(
     error,
   } = await supabaseAdmin.auth.getUser(accessToken);
   if (error || !user) return null;
+
+  // Only an explicit `disabled === true` blocks; a failed lookup fails open.
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("disabled")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.disabled === true) return null;
 
   return {
     supabase: createSupabaseClient(accessToken),

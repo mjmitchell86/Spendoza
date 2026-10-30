@@ -1,6 +1,6 @@
 import Foundation
 
-enum HTTPMethod: String { case get = "GET", post = "POST", put = "PUT", delete = "DELETE" }
+enum HTTPMethod: String { case get = "GET", post = "POST", patch = "PATCH", put = "PUT", delete = "DELETE" }
 
 /// One API call: method, path, query and (optionally) a JSON body.
 struct Endpoint {
@@ -27,6 +27,36 @@ struct Endpoint {
 
     static func personalReport(_ month: Month) -> Endpoint {
         .get("/api/reports/personal", query: [URLQueryItem(name: "month", value: month.apiString)])
+    }
+
+    static func personalReportPDF(_ period: ReportPeriod) -> Endpoint {
+        .get("/api/reports/export/personal", query: period.query)
+    }
+
+    static let avatarPath = "/api/profile/avatar"
+    static let signOutOthers = Endpoint(method: .post, path: "/api/profile/sign-out-others")
+    static let deleteAccount = Endpoint.json(.delete, "/api/profile", ["confirm": "DELETE"])
+    static let inviteCodes = Endpoint.get("/api/invite-codes")
+    static let createInviteCode = Endpoint.json(.post, "/api/invite-codes", [String: String]())
+    static let sendTestEmail = Endpoint(method: .post, path: "/api/emails/send-test")
+
+    static let adminStats = Endpoint.get("/api/admin/stats")
+
+    static func adminTrends(months: Int) -> Endpoint {
+        .get("/api/admin/stats/trends", query: [URLQueryItem(name: "months", value: String(months))])
+    }
+
+    static func adminUsers(_ query: AdminUserQuery) -> Endpoint { .get("/api/admin/users", query: query.queryItems) }
+
+    static func adminUpdateUser(id: String, _ change: AdminUserChange) -> Endpoint {
+        .json(.patch, "/api/admin/users/\(id)", change)
+    }
+
+    static func adminDeleteUser(id: String) -> Endpoint { Endpoint(method: .delete, path: "/api/admin/users/\(id)") }
+
+    /// `action` is the route's last segment, e.g. "generate-report". No body: the server picks the period.
+    static func adminAction(_ action: String, userID: String) -> Endpoint {
+        Endpoint(method: .post, path: "/api/admin/users/\(userID)/\(action)")
     }
 
     static func transactions(from: String, to: String) -> Endpoint {

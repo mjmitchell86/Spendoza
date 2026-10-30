@@ -212,6 +212,20 @@ struct HealthModelTests {
         #expect(ended == 1)
     }
 
+    @Test func aDisabledAnswerSignsOutWithTheNotice() async {
+        let api = StubAPI()
+        api.reportError = .accountDisabled("This account has been disabled.")
+        let h = harness(api)
+        defer { h.cleanup() }
+        var notice: String?
+        var ended = 0
+        h.model.onSessionEnded = { ended += 1 }
+        h.model.onAccountDisabled = { notice = $0 }
+        await h.model.load(now: now)
+        #expect(notice == "This account has been disabled.")
+        #expect(ended == 0)
+    }
+
     /// 9.43: one month failing for real doesn't hide an older check-up that loaded.
     @Test func aFailureOlderThanTheCheckupStillShowsIt() async throws {
         let api = StubAPI()

@@ -15,6 +15,7 @@ enum AppServices {
         reportCache.clear()
         profileCache.clear()
         snapshots.clear()
+        PDFReportsModel.clearExports()
         CheckupRefresh.clearLastNotified()
         WidgetCenter.shared.reloadAllTimelines()
     }
