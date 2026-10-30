@@ -1,11 +1,9 @@
 import SpendozaKit
 import SwiftUI
-import UIKit
 
 /// The invite codes screen: the codes with Copy and Share on the available ones, and Create code.
 struct InviteCodesView: View {
     @State private var model: InviteCodesModel
-    @State private var copiedID: InviteCode.ID?
 
     init(api: any SpendozaAPI) {
         _model = State(initialValue: InviteCodesModel(api: api))
@@ -73,27 +71,18 @@ struct InviteCodesView: View {
                         .fixedSize()
                 }
                 if !invite.isUsed {
-                    HStack(spacing: 20) {
-                        Button(copiedID == invite.id ? "Copied" : "Copy") { copy(invite) }
-                            .accessibilityLabel(copiedID == invite.id ? "Copied" : "Copy code")
+                    HStack(spacing: 12) {
+                        CopyButton(text: invite.code, label: "Copy code")
                         ShareLink(item: InviteCodesModel.shareText(invite.code)) { Text("Share") }
+                            .font(.sans(14, relativeTo: .subheadline))
+                            .foregroundStyle(Theme.note)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                             .accessibilityLabel("Share code")
                     }
-                    .font(.sans(14, relativeTo: .subheadline))
-                    .foregroundStyle(Theme.note)
                 }
             }
             .frame(minHeight: 34)
-        }
-    }
-
-    private func copy(_ invite: InviteCode) {
-        UIPasteboard.general.setItems([[UIPasteboard.typeAutomatic: invite.code]],
-                                      options: [.expirationDate: Date.now.addingTimeInterval(300)])
-        copiedID = invite.id
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            if copiedID == invite.id { copiedID = nil }
         }
     }
 }

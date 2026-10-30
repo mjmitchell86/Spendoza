@@ -102,6 +102,12 @@ private struct AccountSection: View {
                 MeRowLabel(title: "Invite codes", glyph: "›")
             }
             .buttonStyle(.plain)
+            NavigationLink {
+                AIAssistantsView(api: api)
+            } label: {
+                MeRowLabel(title: "AI assistants", glyph: "›")
+            }
+            .buttonStyle(.plain)
             Link(destination: Self.pricingURL) {
                 MeRowLabel(title: "Plans & billing", detail: "\(tier.capitalized) plan", glyph: "↗\u{FE0E}")
             }
