@@ -15,6 +15,10 @@ struct FlexibleNumber: Decodable {
         } else {
             throw DecodingError.dataCorruptedError(in: c, debugDescription: "Expected a number or a numeric string")
         }
+        // "NaN", "Infinity" and "1e400" parse as Doubles but would trap in `Int(_:)`.
+        guard double.isFinite, double.rounded() >= -9.223372036854775808e18, double.rounded() < 9.223372036854775808e18 else {
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "Number out of range")
+        }
     }
 }
 

@@ -56,5 +56,8 @@ struct PDFReportsView: View {
         .background(Theme.paper.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .quickLookPreview($preview)
+        .onChange(of: preview) { old, new in
+            if new == nil, let old { PDFReportsModel.discard(old) }
+        }
     }
 }

@@ -45,10 +45,17 @@ struct AdminUserDetailView: View {
                 }
                 VStack(spacing: 0) {
                     tierRow
-                    toggleRow("Admin", isOn: model.user.isAdmin) { await model.setAdmin($0) }
-                    toggleRow("Disabled", isOn: model.user.disabled) { await model.setDisabled($0) }
+                    if model.canChangeAccess {
+                        toggleRow("Admin", isOn: model.user.isAdmin) { await model.setAdmin($0) }
+                        toggleRow("Disabled", isOn: model.user.disabled) { await model.setDisabled($0) }
+                    }
                 }
                 .topRule()
+                if !model.canChangeAccess {
+                    Text(model.selfLockoutNote)
+                        .font(.sans(14, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.soft)
+                }
                 VStack(spacing: 0) {
                     ForEach(AdminAction.allCases, id: \.self) { actionRow($0) }
                 }

@@ -22,9 +22,12 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useAdminUsers, useUpdateAdminUser, useDeleteAdminUser, useAdminGenerateReport, useAdminDetectRecurring, useAdminSendQuarterlyReport, useAdminSendAnnualReport } from "@/hooks/use-admin";
+import { useProfile } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import type { AdminUserRow } from "@spendoza/shared";
 import { Loader2 } from "lucide-react";
+
+const SELF_LOCKOUT = "You can't disable or remove admin from your own account";
 
 export function AdminUsersPage() {
   const [page, setPage] = useState(1);
@@ -39,6 +42,7 @@ export function AdminUsersPage() {
     search: search || undefined,
     tier: tierFilter || undefined,
   });
+  const { data: me } = useProfile();
   const updateUser = useUpdateAdminUser();
   const deleteUser = useDeleteAdminUser();
   const generateReport = useAdminGenerateReport();
@@ -165,6 +169,8 @@ export function AdminUsersPage() {
                       <td className="px-4 py-3">
                         <Switch
                           checked={user.is_admin}
+                          disabled={user.id === me?.id}
+                          title={user.id === me?.id ? SELF_LOCKOUT : undefined}
                           onCheckedChange={() => handleAdminToggle(user.id, user.is_admin)}
                         />
                       </td>
@@ -175,6 +181,8 @@ export function AdminUsersPage() {
                           </Badge>
                           <Switch
                             checked={!user.disabled}
+                            disabled={user.id === me?.id}
+                            title={user.id === me?.id ? SELF_LOCKOUT : undefined}
                             onCheckedChange={() => handleDisableToggle(user.id, user.disabled)}
                           />
                         </div>

@@ -218,8 +218,18 @@ public final class SessionStore {
         clear()
     }
 
-    /// Replaces the profile after an edit, caching it the way a profile load does.
+    /// The server says this account was disabled: drop the local session and show `text` on Sign in.
+    public func accountDisabled(_ text: String) async {
+        if let auth { try? await auth.signOut(scope: .local) }
+        clear()
+        signedOutNotice = text
+    }
+
+    /// Replaces the profile after an edit, caching it the way a profile load does. A profile of anyone but the
+    /// current session's user is dropped: a late save landing after sign-out or another sign-in must not overwrite
+    /// the new user's profile or cache.
     public func apply(_ profile: Profile) {
+        guard profile.id == sessionUserID() else { return }
         profileCache?.store(profile, token: accountScope.token())
         self.profile = profile
     }
@@ -251,9 +261,7 @@ public final class SessionStore {
         } catch APIError.unauthorized {
             await signOut()
         } catch APIError.accountDisabled(let text) {
-            if let auth { try? await auth.signOut(scope: .local) }
-            clear()
-            signedOutNotice = text
+            await accountDisabled(text)
         } catch APIError.offline {
             // Offline launch: the last profile this user had decides the phase, so the cached check-up is reachable.
             if accountScope.isCurrent(token), let cached = profileCache?.load() {

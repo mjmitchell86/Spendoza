@@ -102,6 +102,13 @@ struct AdminUserDetailModelTests {
         #expect(api.calls.isEmpty)
     }
 
+    @Test func yourOwnAccessCannotBeChanged() async {
+        let m = model(StubAPI(), isSelf: true)
+        #expect(!m.canChangeAccess)
+        #expect(m.selfLockoutNote == "You can't disable or remove admin from your own account")
+        #expect(model(StubAPI()).canChangeAccess)
+    }
+
     @Test func theConfirmationNamesTheUserAndEmail() {
         let m = model(StubAPI())
         #expect(m.confirmation == "This will permanently delete Ann (u1@example.com) and all their data. This cannot be undone.")

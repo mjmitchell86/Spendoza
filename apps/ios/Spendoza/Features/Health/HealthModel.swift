@@ -69,6 +69,8 @@ final class HealthModel {
 
     /// Called when the server says the session has ended (401): sign out.
     @ObservationIgnored var onSessionEnded: (@MainActor () -> Void)?
+    /// Called when the server says the account was disabled mid-session: sign out with that text.
+    @ObservationIgnored var onAccountDisabled: (@MainActor (String) -> Void)?
 
     @ObservationIgnored private let api: any SpendozaAPI
     @ObservationIgnored private let cache: ReportCache
@@ -222,11 +224,18 @@ final class HealthModel {
         }
     }
 
-    /// A 401 means the session is over: hand it to the sign-out and show nothing more.
+    /// A 401 means the session is over, and a disabled account is signed out with its notice: hand it to the sign-out and show nothing more.
     private func endsSession(_ error: Error?) -> Bool {
-        guard (error as? APIError) == .unauthorized else { return false }
-        onSessionEnded?()
-        return true
+        switch error as? APIError {
+        case .unauthorized:
+            onSessionEnded?()
+            return true
+        case .accountDisabled(let text):
+            onAccountDisabled?(text)
+            return true
+        default:
+            return false
+        }
     }
 
     /// Whether the person has uploaded statements before (so an empty window doesn't mean they're new).

@@ -53,6 +53,10 @@ final class AdminUserDetailModel {
     /// The server refuses deleting yourself (400), so the screen doesn't offer it.
     var canDelete: Bool { !isSelf }
 
+    /// The server refuses disabling or un-admining yourself (400), so the screen doesn't offer it.
+    var canChangeAccess: Bool { !isSelf }
+    let selfLockoutNote = "You can't disable or remove admin from your own account"
+
     var confirmation: String {
         let who = user.email.map { "\(user.displayName) (\($0))" } ?? user.displayName
         return "This will permanently delete \(who) and all their data. This cannot be undone."

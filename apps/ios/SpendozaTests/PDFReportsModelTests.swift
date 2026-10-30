@@ -43,6 +43,30 @@ struct PDFReportsModelTests {
         #expect(m.error == nil)
     }
 
+    @Test func discardingAnExportRemovesItsFolderOnly() async throws {
+        defer { PDFReportsModel.clearExports() }
+        let m = model()
+        let first = try #require(await m.export(m.options[0]))
+        let second = try #require(await m.export(m.options[1]))
+        PDFReportsModel.discard(first)
+        #expect(!FileManager.default.fileExists(atPath: first.deletingLastPathComponent().path))
+        #expect(FileManager.default.fileExists(atPath: second.path))
+        // A file outside the exports root is never touched.
+        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("keep-\(UUID().uuidString)")
+        try Data("x".utf8).write(to: outside)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        PDFReportsModel.discard(outside)
+        #expect(FileManager.default.fileExists(atPath: outside.path))
+    }
+
+    @Test func clearingExportsRemovesTheWholeRoot() async throws {
+        let m = model()
+        let url = try #require(await m.export(m.options[0]))
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        PDFReportsModel.clearExports()
+        #expect(!FileManager.default.fileExists(atPath: PDFReportsModel.exportsRoot.path))
+    }
+
     @Test func aPeriodWithNoDataShowsTheServersWordsAndReturnsNil() async {
         let api = StubAPI()
         api.pdfResult = .failure(.message("No report data available for this period"))

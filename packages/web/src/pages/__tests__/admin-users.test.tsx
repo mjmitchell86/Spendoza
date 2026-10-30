@@ -23,6 +23,7 @@ function setup() {
     if (path === "/admin/users/u1" && options?.method === "DELETE") {
       return Promise.reject(new ApiError(MESSAGE, 409, { error: MESSAGE }));
     }
+    if (path === "/profile") return Promise.resolve({ id: "u1" });
     if (path.startsWith("/admin/users")) {
       return Promise.resolve({
         users: [
@@ -35,8 +36,17 @@ function setup() {
             disabled: false,
             created_at: "2026-10-01T00:00:00Z",
           },
+          {
+            id: "u2",
+            display_name: "Sam Other",
+            email: "sam@example.com",
+            subscription_tier: "free",
+            is_admin: true,
+            disabled: false,
+            created_at: "2026-10-02T00:00:00Z",
+          },
         ],
-        total: 1,
+        total: 2,
         page: 1,
         limit: 25,
       });
@@ -78,5 +88,20 @@ describe("AdminUsersPage delete", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await openDeleteDialog();
     expect(screen.queryByText(MESSAGE)).toBeNull();
+  });
+});
+
+describe("AdminUsersPage self-lockout", () => {
+  beforeEach(() => apiClient.mockReset());
+  afterEach(cleanup);
+
+  it("disables the admin and status switches on the caller's own row only", async () => {
+    setup();
+    await screen.findByText("Sam Other");
+    await waitFor(() => {
+      const switches = screen.getAllByRole("switch") as HTMLButtonElement[];
+      // Per row: admin, status. Rows: Pat (self), Sam.
+      expect(switches.map((s) => s.disabled)).toEqual([true, true, false, false]);
+    });
   });
 });

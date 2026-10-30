@@ -20,7 +20,8 @@ struct MainTabs: View {
         TabView(selection: $selection) {
             Tab("Health", systemImage: "gauge.with.needle", value: "Health") {
                 HealthView(api: store.api, cache: AppServices.reportCache, snapshots: AppServices.snapshots,
-                           scope: AppServices.accountScope, onSessionEnded: { Task { await store.signOut() } })
+                           scope: AppServices.accountScope, onSessionEnded: { Task { await store.signOut() } },
+                           onAccountDisabled: { text in Task { await store.accountDisabled(text) } })
                     .debugHidingTabBar()
             }
             Tab("Me", systemImage: "person", value: "Me") {

@@ -39,14 +39,31 @@ final class PDFReportsModel {
         self.options = options
     }
 
-    /// Downloads the report and writes it, under the server's file name, to a fresh temporary folder.
+    /// Every exported PDF lives in its own folder under this one, so signing out can remove them all.
+    nonisolated static var exportsRoot: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("pdf-exports", isDirectory: true)
+    }
+
+    /// Removes the folder of one exported file (when its preview closes). Anything outside the exports root is left alone.
+    nonisolated static func discard(_ file: URL) {
+        let folder = file.deletingLastPathComponent()
+        guard folder.deletingLastPathComponent().standardizedFileURL == exportsRoot.standardizedFileURL else { return }
+        try? FileManager.default.removeItem(at: folder)
+    }
+
+    /// Removes every exported PDF: sign-out and account deletion.
+    nonisolated static func clearExports() {
+        try? FileManager.default.removeItem(at: exportsRoot)
+    }
+
+    /// Downloads the report and writes it, under the server's file name, to a fresh folder under `exportsRoot`.
     func export(_ option: PDFOption) async -> URL? {
         error = nil
         exporting = option.id
         defer { exporting = nil }
         do {
             let file = try await api.personalReportPDF(option.period)
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            let folder = Self.exportsRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = folder.appendingPathComponent(file.filename)
             try file.data.write(to: url)

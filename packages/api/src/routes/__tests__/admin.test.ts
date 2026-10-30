@@ -314,6 +314,49 @@ describe("PATCH /api/admin/users/:id", () => {
     expect(body.subscription_tier).toBe("pro");
   });
 
+  it("refuses to disable or remove admin from the caller's own account", async () => {
+    for (const body of [{ disabled: true }, { is_admin: false }, { disabled: true, subscription_tier: "pro" }]) {
+      const res = await fetch(`http://localhost:${port}/api/admin/users/${TEST_ADMIN_ID}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("You can't disable or remove admin from your own account");
+    }
+  });
+
+  it("allows other changes on the caller's own account", async () => {
+    adminResults.profiles = {
+      ...adminResults.profiles,
+      updateSingle: {
+        data: { id: TEST_ADMIN_ID, is_admin: true, subscription_tier: "pro", disabled: false },
+        error: null,
+      },
+    };
+    for (const body of [{ subscription_tier: "pro" }, { is_admin: true, disabled: false }]) {
+      const res = await fetch(`http://localhost:${port}/api/admin/users/${TEST_ADMIN_ID}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("still lets the caller disable another user", async () => {
+    adminResults.profiles = {
+      ...adminResults.profiles,
+      updateSingle: { data: { id: "other", disabled: true }, error: null },
+    };
+    const res = await fetch(`http://localhost:${port}/api/admin/users/other`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ disabled: true, is_admin: false }),
+    });
+    expect(res.status).toBe(200);
+  });
+
   it("returns 400 with no valid fields", async () => {
     const res = await fetch(`http://localhost:${port}/api/admin/users/some-id`, {
       method: "PATCH",

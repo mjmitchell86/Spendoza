@@ -190,6 +190,22 @@ struct AccountDisabledTests {
         #expect(signedOut == 1)
     }
 
+    @Test func aDisabledAnswerFromADataCallEndsTheSessionWithTheNotice() async {
+        let scope = AccountScope(userID: "user-a")
+        let store = SessionStore(api: FailingAPI(error: .offline), userID: "user-a", accountScope: scope)
+        var signedOut = 0
+        var ended = 0
+        store.onSignOut = { signedOut += 1 }
+        store.onSessionEnded = { ended += 1 }
+        await store.accountDisabled(text)
+        #expect(store.phase == .signedOut)
+        #expect(store.profile == nil)
+        #expect(store.signedOutNotice == text)
+        #expect(signedOut == 1)
+        #expect(ended == 1)
+        #expect(scope.userID == nil)
+    }
+
     @Test func theNoticeSurvivesTheSignOutThatRaisedIt() async {
         let store = SessionStore(api: FailingAPI(error: .accountDisabled(text)), userID: "user-a")
         await store.refresh()
@@ -303,5 +319,15 @@ struct AccountDeletedTests {
         #expect(store.profile == nil)
         store.apply(profile)
         #expect(store.profile == profile)
+    }
+
+    /// A late save that lands after sign-out or another sign-in belongs to nobody on this device now.
+    @Test func applyIgnoresAProfileOfAnotherUser() {
+        let store = SessionStore(api: FailingAPI(error: .offline), userID: "user-b")
+        store.apply(profile)
+        #expect(store.profile == nil)
+        let signedOut = SessionStore(api: FailingAPI(error: .offline))
+        signedOut.apply(profile)
+        #expect(signedOut.profile == nil)
     }
 }
