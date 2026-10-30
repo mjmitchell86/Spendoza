@@ -23,6 +23,7 @@ struct LegalPageView: View {
             .padding(.vertical, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .id(name) // a new page starts at the top, not at the old page's scroll offset
         .background(Theme.paper.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .tint(Theme.ink)
