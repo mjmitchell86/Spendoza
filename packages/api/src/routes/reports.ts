@@ -32,15 +32,61 @@ function parseMonth(monthParam?: string): string {
   return `${y}-${m}-01`;
 }
 
+// On-demand regenerations reuse AI insights younger than this, so editing
+// transactions and reloading can't run up model calls.
+const REUSE_INSIGHTS_MS = 60 * 60 * 1000;
+
 // ---------------------------------------------------------------------------
-// GET /personal — get latest personal report
+// Helper: mid-month date for a YYYY-MM-01 string (null when malformed).
+// The 15th keeps report.service's startOfMonth in the right month in any timezone.
+// ---------------------------------------------------------------------------
+function midMonth(month: string, offsetMonths = 0): Date | null {
+  const match = /^(\d{4})-(\d{2})-01$/.exec(month);
+  if (!match) return null;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + offsetMonths, 15));
+}
+
+// ---------------------------------------------------------------------------
+// GET /personal — get the personal report for a month, generating it when it
+// is missing or has new data (months without transactions stay 404)
 // ---------------------------------------------------------------------------
 router.get("/personal", requireAuth, async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const month = parseMonth(req.query.month as string | undefined);
   const ctx = toServiceContext(authReq);
+  const userId = authReq.user.id;
 
-  const { data: report } = await getReport(ctx, "user", authReq.user.id, month);
+  const { data: stored } = await getReport(ctx, "user", userId, month);
+  if (stored && !stored.has_new_data) {
+    return res.status(200).json(stored);
+  }
+
+  const monthDate = midMonth(month);
+  if (!monthDate) {
+    return stored
+      ? res.status(200).json(stored)
+      : res.status(404).json({ error: "Report not found for this month" });
+  }
+
+  let report = stored;
+  try {
+    if (!stored) {
+      // The previous month first, so this report's month-over-month and previous score have a base.
+      await generateUserReport(userId, midMonth(month, -1)!, false, authReq.supabase, {
+        skipIfEmpty: true,
+        reuseInsightsFor: REUSE_INSIGHTS_MS,
+      });
+    }
+    report = await generateUserReport(userId, monthDate, false, authReq.supabase, {
+      skipIfEmpty: true,
+      reuseInsightsFor: REUSE_INSIGHTS_MS,
+    });
+  } catch (err) {
+    console.error(`[reports] on-demand generation failed for ${month}:`, err);
+    if (!stored) {
+      return res.status(500).json({ error: "Failed to generate report" });
+    }
+  }
 
   if (!report) {
     return res.status(404).json({ error: "Report not found for this month" });

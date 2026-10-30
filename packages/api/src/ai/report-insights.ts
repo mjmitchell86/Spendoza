@@ -54,6 +54,8 @@ export interface ReportData {
   allocation?: AllocationBreakdown;
   debt_summary?: DebtSummary;
   financial_health_score?: FinancialHealthScore;
+  /** When ai_insights were last generated (ISO); lets regenerations reuse recent insights. */
+  insights_generated_at?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -603,6 +603,52 @@ describe("skipIfEmpty", () => {
     expect(mockGenerateInsights).not.toHaveBeenCalled();
   });
 
+  it("generateUserReport reuses stored AI insights younger than reuseInsightsFor", async () => {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    adminResults.reports.selectMaybeSingle = {
+      data: {
+        ...cachedReport,
+        has_new_data: true,
+        ai_insights: "stored insights",
+        report_data: { ...cachedReport.report_data, insights_generated_at: tenMinutesAgo },
+      },
+      error: null,
+    };
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH, false, undefined, {
+      reuseInsightsFor: 60 * 60 * 1000,
+    });
+
+    expect(mockGenerateInsights).not.toHaveBeenCalled();
+    expect(result.ai_insights).toBe("stored insights");
+    expect(result.report_data.insights_generated_at).toBe(tenMinutesAgo);
+    // The numbers are still recomputed from transactions
+    expect(result.report_data.total_income).toBe(3000);
+  });
+
+  it("generateUserReport regenerates AI insights older than reuseInsightsFor", async () => {
+    adminResults.reports.selectMaybeSingle = {
+      data: {
+        ...cachedReport,
+        has_new_data: true,
+        ai_insights: "stored insights",
+        report_data: {
+          ...cachedReport.report_data,
+          insights_generated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        },
+      },
+      error: null,
+    };
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH, false, undefined, {
+      reuseInsightsFor: 60 * 60 * 1000,
+    });
+
+    expect(mockGenerateInsights).toHaveBeenCalledTimes(1);
+    expect(result.ai_insights).not.toBe("stored insights");
+    expect(Date.now() - Date.parse(result.report_data.insights_generated_at)).toBeLessThan(60 * 1000);
+  });
+
   it("generateUserReport still generates when the month has transactions", async () => {
     const result = await generateUserReport(
       TEST_USER_ID,

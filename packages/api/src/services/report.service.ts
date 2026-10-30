@@ -143,6 +143,8 @@ async function getEmergencyFundMonths(
 export interface GenerateReportOptions {
   /** Return null instead of creating a report for a month with no transactions. */
   skipIfEmpty?: boolean;
+  /** Keep the stored AI insights when they are younger than this many ms (numbers are still recomputed). */
+  reuseInsightsFor?: number;
 }
 
 export async function generateUserReport(
@@ -299,12 +301,27 @@ export async function generateUserReport(
     previousScore
   );
 
-  // 8. Generate AI insights (non-fatal — save report even if AI fails)
+  // 8. Generate AI insights (non-fatal — save report even if AI fails), or
+  //    reuse recent ones so frequent regenerations don't each call the model
   let aiInsights: string | null = null;
-  try {
-    aiInsights = await generateInsights(reportData, "user");
-  } catch (err) {
-    console.error("[report] AI insight generation failed, saving report without insights:", err);
+  const storedInsightsAt =
+    (existingReport?.report_data as ReportData | undefined)?.insights_generated_at ??
+    existingReport?.generated_at;
+  if (
+    options.reuseInsightsFor !== undefined &&
+    existingReport?.ai_insights &&
+    storedInsightsAt &&
+    Date.now() - Date.parse(storedInsightsAt) < options.reuseInsightsFor
+  ) {
+    aiInsights = existingReport.ai_insights;
+    reportData.insights_generated_at = storedInsightsAt;
+  } else {
+    try {
+      aiInsights = await generateInsights(reportData, "user");
+      reportData.insights_generated_at = new Date().toISOString();
+    } catch (err) {
+      console.error("[report] AI insight generation failed, saving report without insights:", err);
+    }
   }
 
   // 9. Upsert report
