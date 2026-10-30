@@ -22,6 +22,11 @@ final class MeModel {
         self.apply = apply
     }
 
+    /// Follows the session store's profile (a refresh, or any other screen's edit).
+    func sync(_ profile: Profile?) {
+        if self.profile != profile { self.profile = profile }
+    }
+
     /// Saves a trimmed display name. An empty name does nothing; one over 100 characters is refused.
     func saveName(_ name: String) async -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)

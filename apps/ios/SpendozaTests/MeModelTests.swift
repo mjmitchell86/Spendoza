@@ -70,3 +70,17 @@ struct MeModelTests {
         #expect(m.isUploading == false)
     }
 }
+
+extension MeModelTests {
+    @Test func syncFollowsTheStoresProfile() {
+        let m = MeModel(api: StubAPI(), profile: nil, apply: { _ in })
+        #expect(m.profile == nil)
+        m.sync(start)
+        #expect(m.profile == start)
+        let renamed = Profile(id: "u", displayName: "Sam", onboardingCompleted: true, isAdmin: false,
+                              emailReportsEnabled: true, householdID: nil, subscriptionTier: "starter")
+        m.sync(renamed)
+        #expect(m.profile?.displayName == "Sam")
+        #expect(m.profile?.subscriptionTier == "starter")
+    }
+}

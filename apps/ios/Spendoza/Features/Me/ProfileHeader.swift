@@ -7,11 +7,15 @@ struct ProfileHeader: View {
     let email: String?
     @State private var picked: PhotosPickerItem?
     @State private var editingName = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var name: String { model.profile?.displayName ?? "" }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
+        // At accessibility sizes the text needs the full width, so the photo sits above it.
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+                                                  : AnyLayout(HStackLayout(alignment: .center, spacing: 16))
+        layout {
             PhotosPicker(selection: $picked, matching: .images) {
                 AvatarCircle(name: name, url: model.profile?.avatarURL)
                     .overlay {
@@ -59,6 +63,7 @@ struct ProfileHeader: View {
             }
             Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(isPresented: $editingName) { EditNameSheet(model: model) }
     }
 

@@ -29,6 +29,7 @@ struct MeView: View {
             }
             .background(Theme.paper.ignoresSafeArea())
             .toolbarVisibility(.hidden, for: .navigationBar)
+            .onChange(of: store.profile, initial: true) { _, profile in model.sync(profile) }
         }
     }
 }
@@ -94,7 +95,7 @@ private struct AccountSection: View {
             }
             .buttonStyle(.plain)
             Link(destination: Self.pricingURL) {
-                MeRowLabel(title: "Plans & billing", detail: "\(tier.capitalized) plan", glyph: "↗")
+                MeRowLabel(title: "Plans & billing", detail: "\(tier.capitalized) plan", glyph: "↗\u{FE0E}")
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens in your browser")
