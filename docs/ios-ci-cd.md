@@ -26,7 +26,17 @@ App Store Connect rejects an upload without an app icon. The app ships a placeho
 
 ## Owner checklist
 
-These need your Apple Developer account (Gravitaz LLC; Apple may ask for the DUNS number 11-904-2051) and the GitHub repo settings. None of it can be done from code.
+These need your Apple Developer account (Gravitaz LLC; Apple may ask for the DUNS number 11-904-2051) and the GitHub repo settings.
+
+**Steps 1, 2 and 5 in one command.** In your own Terminal (it asks for your Apple ID password and a two-factor code, so it can't run unattended):
+
+```sh
+cd apps/ios
+bundle install
+bundle exec fastlane setup_apple                  # or add dry_run:true to see the plan first
+```
+
+It asks for your team ID (developer.apple.com > Membership) and Apple ID, or take them as `team_id:ABCDE12345 apple_id:you@example.com`. It creates only what's missing, so it's safe to re-run. If the App Store name "Spendoza" is taken, re-run with `app_name:"Spendoza Money"` (any free name; the bundle ID stays the same). If `bundle install` can't write to the system gem folder, run `bundle config set --local path vendor/bundle` first.
 
 1. In the Apple Developer portal, create the App Group `group.com.gravitaz.spendoza`.
 2. Create two App IDs, each with the App Groups capability enabled and set to `group.com.gravitaz.spendoza`:

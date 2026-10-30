@@ -3,3 +3,7 @@ build/
 .build/
 Configurations/Secrets.Dev.xcconfig
 Configurations/Secrets.Prod.xcconfig
+vendor/
+.bundle/
+fastlane/report.xml
+fastlane/README.md

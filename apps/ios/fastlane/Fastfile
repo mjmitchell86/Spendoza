@@ -7,6 +7,8 @@ default_platform(:ios)
 
 APP_ID = "com.gravitaz.spendoza"
 WIDGETS_ID = "com.gravitaz.spendoza.widgets"
+APP_GROUP_ID = "group.com.gravitaz.spendoza"
+APP_SKU = "spendoza-ios"
 PROJECT = "Spendoza.xcodeproj"
 SCHEME = "Spendoza"
 APP_TARGET = "Spendoza"
@@ -18,6 +20,84 @@ REQUIRED_ENV = %w[
 ].freeze
 
 platform :ios do
+  # One-time setup, run by the account owner in their own Terminal (it asks for the Apple ID
+  # password and a two-factor code). Creates only what's missing, so it's safe to re-run:
+  #   cd apps/ios && bundle install && bundle exec fastlane setup_apple
+  # Options: team_id:ABCDE12345 apple_id:you@example.com app_name:"Spendoza" dry_run:true
+  desc "Create the App Group, both App IDs and the App Store Connect app record"
+  lane :setup_apple do |options|
+    plan = [
+      "App Group #{APP_GROUP_ID}",
+      "App ID #{APP_ID} (App Groups on, linked to #{APP_GROUP_ID})",
+      "App ID #{WIDGETS_ID} (App Groups on, linked to #{APP_GROUP_ID})",
+      "App Store Connect app record for #{APP_ID} (SKU #{APP_SKU})"
+    ]
+    UI.header("This will create, if missing:")
+    plan.each { |line| UI.message("  - #{line}") }
+    next UI.success("Dry run: nothing was changed.") if options[:dry_run]
+
+    team_id = options[:team_id] || ENV["APPLE_TEAM_ID"] || UI.input("Apple Developer team ID (10 characters, shown under Membership):")
+    apple_id = options[:apple_id] || ENV["APPLE_ID"] || UI.input("Apple ID email:")
+    app_name = options[:app_name] || ENV["APP_NAME"] || "Spendoza"
+
+    require "spaceship"
+    # Asks for the Apple ID password and a two-factor code; the session is reused below.
+    Spaceship::ConnectAPI.login(apple_id, use_portal: true, use_tunes: true, portal_team_id: team_id)
+
+    # App IDs with the App Groups capability (Connect API, as produce does it).
+    [[APP_ID, "Spendoza"], [WIDGETS_ID, "Spendoza Widgets"]].each do |identifier, name|
+      bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier)
+      if bundle_id
+        UI.message("App ID #{identifier} already exists")
+      else
+        bundle_id = Spaceship::ConnectAPI::BundleId.create(
+          name: name, platform: Spaceship::ConnectAPI::BundleIdPlatform::IOS, identifier: identifier
+        )
+        UI.success("Created App ID #{identifier}")
+      end
+      bundle_id.update_capability(Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS, enabled: true)
+      UI.success("#{identifier}: App Groups on")
+    end
+
+    # App Groups have no Connect API, so the group and its links use the developer portal session.
+    Spaceship::Portal.login(apple_id)
+    Spaceship::Portal.select_team(team_id: team_id)
+    group = Spaceship::Portal.app_group.find(APP_GROUP_ID)
+    if group
+      UI.message("App Group #{APP_GROUP_ID} already exists")
+    else
+      group = Spaceship::Portal.app_group.create!(group_id: APP_GROUP_ID, name: "Spendoza")
+      UI.success("Created App Group #{APP_GROUP_ID}")
+    end
+    [APP_ID, WIDGETS_ID].each do |identifier|
+      Spaceship::Portal.app.find(identifier).associate_groups([group])
+      UI.success("#{identifier}: linked to #{APP_GROUP_ID}")
+    end
+
+    # App Store Connect record. produce skips it if the app already exists.
+    begin
+      produce(
+        username: apple_id,
+        team_id: team_id,
+        app_identifier: APP_ID,
+        app_name: app_name,
+        sku: APP_SKU,
+        language: "en-US",
+        platforms: ["ios"],
+        skip_devcenter: true
+      )
+    rescue => e
+      if e.message.to_s =~ /already (being )?used|not available/i
+        UI.user_error!("The App Store name \"#{app_name}\" is taken. Re-run with a different name, e.g. app_name:\"Spendoza Money\". The portal steps above are done and will be skipped.")
+      end
+      raise
+    end
+
+    UI.header("Done. Next:")
+    UI.message("1. App Store Connect > Users and Access > Integrations > App Store Connect API: create a key (App Manager), download the .p8, note the Key ID and Issuer ID.")
+    UI.message("2. Tell Claude where the .p8 is, plus the Key ID, Issuer ID and team ID #{team_id}. Claude creates the certificate, profiles, GitHub secrets and testers, then runs TestFlight.")
+  end
+
   desc "Build, sign with the stored distribution certificate, and upload to TestFlight"
   lane :beta do
     # Fail before touching keychains if a secret is missing. Print names only, never values.
