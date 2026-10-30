@@ -21,6 +21,7 @@ struct MeView: View {
                     ProfileHeader(model: model, email: store.email)
                     ReportsSection(model: model, api: store.api)
                     AccountSection(tier: model.profile?.subscriptionTier ?? "free", lock: lock, api: store.api)
+                    HelpSection()
                     Button("Sign out") { Task { await store.signOut() } }
                         .buttonStyle(SecondaryButtonStyle())
                 }
@@ -113,6 +114,25 @@ private struct AccountSection: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens in your browser")
+        }
+    }
+}
+
+private struct HelpSection: View {
+    var body: some View {
+        MeSection(title: "Help") {
+            NavigationLink {
+                LegalPageView(name: "support")
+            } label: {
+                MeRowLabel(title: "Support", glyph: "›")
+            }
+            .buttonStyle(.plain)
+            NavigationLink {
+                LegalPageView(name: "privacy")
+            } label: {
+                MeRowLabel(title: "Privacy", glyph: "›")
+            }
+            .buttonStyle(.plain)
         }
     }
 }
