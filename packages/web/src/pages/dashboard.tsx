@@ -18,6 +18,7 @@ import { IncomeVsExpensesChart } from "@/components/dashboard/income-vs-expenses
 import { SpendingByCategoryChart } from "@/components/dashboard/spending-by-category-chart";
 import { SavingsRateCard } from "@/components/dashboard/savings-rate-card";
 import { HealthScoreCard } from "@/components/dashboard/health-score-card";
+import { isEmptyReport } from "@/lib/health-score";
 import { AllocationBar } from "@/components/dashboard/allocation-bar";
 import { TopExpensesList } from "@/components/dashboard/top-expenses-list";
 import { UpcomingBillsList } from "@/components/dashboard/upcoming-bills-list";
@@ -288,7 +289,8 @@ export function DashboardPage() {
       </div>
 
       {/* Health Score */}
-      {data.financial_health_score && (
+      {data.financial_health_score &&
+        !isEmptyReport({ ...data.summary, by_category: data.by_category }) && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <HealthScoreCard
             score={data.financial_health_score.score}

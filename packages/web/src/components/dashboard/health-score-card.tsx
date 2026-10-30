@@ -1,6 +1,7 @@
 import { ArrowUpRight, ArrowDownRight, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { FACTOR_LABELS, scoreBand, scoreBandStyle } from "@/lib/health-score";
 
 interface HealthScoreCardProps {
   score: number;
@@ -12,18 +13,6 @@ interface HealthScoreCardProps {
     emergency_fund: { rating: string };
     debt_to_income: { rating: string };
   };
-}
-
-function getScoreColor(score: number): string {
-  if (score >= 80) return "text-emerald-500";
-  if (score >= 50) return "text-yellow-500";
-  return "text-rose-500";
-}
-
-function getScoreStroke(score: number): string {
-  if (score >= 80) return "#10b981";
-  if (score >= 50) return "#eab308";
-  return "#f43f5e";
 }
 
 function getRatingColor(rating: string): string {
@@ -56,14 +45,6 @@ function getRatingBarWidth(rating: string): string {
   }
 }
 
-const FACTOR_LABELS: Record<string, string> = {
-  savings_rate: "Savings Rate",
-  needs_ratio: "Needs Ratio",
-  wants_ratio: "Wants Ratio",
-  emergency_fund: "Emergency Fund",
-  debt_to_income: "Debt-to-Income",
-};
-
 function TrendArrow({ score, previousScore }: { score: number; previousScore: number | null }) {
   if (previousScore === null) return null;
 
@@ -92,7 +73,7 @@ function ScoreRing({ score }: { score: number }) {
   const radius = 40;
   const circumference = 2 * Math.PI * radius;
   const progress = (score / 100) * circumference;
-  const strokeColor = getScoreStroke(score);
+  const style = scoreBandStyle(score);
 
   return (
     <div className="relative inline-flex items-center justify-center">
@@ -110,7 +91,7 @@ function ScoreRing({ score }: { score: number }) {
           cy="50"
           r={radius}
           fill="none"
-          stroke={strokeColor}
+          stroke={style.stroke}
           strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -118,7 +99,7 @@ function ScoreRing({ score }: { score: number }) {
           className="transition-all duration-700"
         />
       </svg>
-      <span className={cn("absolute text-2xl font-bold", getScoreColor(score))}>
+      <span className={cn("absolute text-2xl font-bold", style.text)}>
         {score}
       </span>
     </div>
@@ -136,6 +117,9 @@ export function HealthScoreCard({ score, previousScore, factors }: HealthScoreCa
       <CardContent>
         <div className="flex items-center gap-3">
           <ScoreRing score={score} />
+          <span className={cn("text-sm font-semibold", scoreBandStyle(score).text)}>
+            {scoreBand(score)}
+          </span>
           <TrendArrow score={score} previousScore={previousScore} />
         </div>
 
