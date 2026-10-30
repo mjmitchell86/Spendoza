@@ -32,6 +32,10 @@ function parseMonth(monthParam?: string): string {
   return `${y}-${m}-01`;
 }
 
+// On-demand regenerations reuse AI insights younger than this, so editing
+// transactions and reloading can't run up model calls.
+const REUSE_INSIGHTS_MS = 60 * 60 * 1000;
+
 // ---------------------------------------------------------------------------
 // Helper: mid-month date for a YYYY-MM-01 string (null when malformed).
 // The 15th keeps report.service's startOfMonth in the right month in any timezone.
@@ -70,10 +74,12 @@ router.get("/personal", requireAuth, async (req: Request, res: Response) => {
       // The previous month first, so this report's month-over-month and previous score have a base.
       await generateUserReport(userId, midMonth(month, -1)!, false, authReq.supabase, {
         skipIfEmpty: true,
+        reuseInsightsFor: REUSE_INSIGHTS_MS,
       });
     }
     report = await generateUserReport(userId, monthDate, false, authReq.supabase, {
       skipIfEmpty: true,
+      reuseInsightsFor: REUSE_INSIGHTS_MS,
     });
   } catch (err) {
     console.error(`[reports] on-demand generation failed for ${month}:`, err);

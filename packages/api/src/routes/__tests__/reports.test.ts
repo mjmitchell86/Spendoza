@@ -417,7 +417,7 @@ describe("GET /api/reports/personal", () => {
     for (const call of mockGenerateUserReport.mock.calls as any[][]) {
       expect(call[0]).toBe(TEST_USER_ID);
       expect(call[2]).toBe(false);
-      expect(call[4]).toEqual({ skipIfEmpty: true });
+      expect(call[4]).toEqual({ skipIfEmpty: true, reuseInsightsFor: 60 * 60 * 1000 });
     }
   });
 
