@@ -6,6 +6,8 @@ struct MeView: View {
     let store: SessionStore
     let lock: AppLock
     @State private var model: MeModel
+    /// Set while the delete-account sheet is up.
+    @State private var deleting: DeleteAccountModel?
 
     init(store: SessionStore, lock: AppLock) {
         self.store = store
@@ -24,15 +26,26 @@ struct MeView: View {
                     HelpSection()
                     Button("Sign out") { Task { await store.signOut() } }
                         .buttonStyle(SecondaryButtonStyle())
+                    Button("Delete my account") { startDeleting() }
+                        .font(.sans(15, weight: .semibold, relativeTo: .callout))
+                        .foregroundStyle(Theme.oxblood)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Theme.paper.ignoresSafeArea())
+            .sheet(item: $deleting) { DeleteAccountSheet(model: $0) }
             .toolbarVisibility(.hidden, for: .navigationBar)
             .onChange(of: store.profile, initial: true) { _, profile in model.sync(profile) }
         }
+    }
+
+    /// Success returns the app to Sign in: the store drops the local session and clears the account's caches.
+    private func startDeleting() {
+        let store = store
+        deleting = DeleteAccountModel(api: store.api) { await store.accountDeleted() }
     }
 }
 

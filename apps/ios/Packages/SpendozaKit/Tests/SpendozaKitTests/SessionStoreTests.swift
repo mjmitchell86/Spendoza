@@ -114,10 +114,20 @@ private final class FailGate: @unchecked Sendable {
     func open() { lock.withLock { _open = true } }
 }
 
+/// Counts the calls a double receives.
+private final class CallCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value = 0
+    var value: Int { lock.withLock { _value } }
+    func bump() { lock.withLock { _value += 1 } }
+}
+
 private struct FailingAPI: SpendozaAPI {
     var gate: FailGate?
     let error: APIError
-    func profile() async throws -> Profile { await gate?.pass(); throw error }
+    var calls: CallCount?
+    func profile() async throws -> Profile { calls?.bump(); await gate?.pass(); throw error }
+    func deleteAccount() async throws { calls?.bump() }
     func completeOnboarding() async throws {}
     func updateProfile(_ change: ProfileChange) async throws -> Profile { throw error }
     func personalReport(_ month: Month) async throws -> Report? { nil }
@@ -257,5 +267,41 @@ struct SignOutListenerTests {
         // Let a second listener (if one was started) run too.
         for _ in 0..<20 { await Task.yield() }
         #expect(cleared == 1)
+    }
+}
+
+@MainActor
+struct AccountDeletedTests {
+    private let profile = Profile(id: "user-a", displayName: "A", onboardingCompleted: true, isAdmin: false,
+                                  emailReportsEnabled: true, householdID: nil)
+
+    /// The server already deleted the account: the store drops everything locally and never calls the server.
+    @Test func deletingTheAccountSignsOutLocallyWithoutCallingTheServer() async {
+        let calls = CallCount()
+        let scope = AccountScope(userID: "user-a")
+        let store = SessionStore(api: FailingAPI(error: .offline, calls: calls), userID: "user-a", accountScope: scope)
+        store.apply(profile)
+        var signedOut = 0
+        var ended = 0
+        store.onSignOut = { signedOut += 1 }
+        store.onSessionEnded = { ended += 1 }
+
+        await store.accountDeleted()
+
+        #expect(store.profile == nil)
+        #expect(store.phase == .signedOut)
+        #expect(store.loadError == nil)
+        #expect(signedOut == 1)
+        #expect(ended == 1)
+        #expect(scope.userID == nil)
+        #expect(calls.value == 0)
+    }
+
+    @Test func applyReplacesTheProfileAndTheEmailComesFromTheSession() {
+        let store = SessionStore(api: FailingAPI(error: .offline), userID: "user-a", email: "a@example.com")
+        #expect(store.email == "a@example.com")
+        #expect(store.profile == nil)
+        store.apply(profile)
+        #expect(store.profile == profile)
     }
 }
