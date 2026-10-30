@@ -34,3 +34,16 @@ extension AccountAPI {
     func personalReportPDF(_ period: ReportPeriod) async throws -> PDFFile { throw APIError.offline }
     func sendTestEmail() async throws {}
 }
+
+/// Likewise the admin calls: unused by doubles that only care about sign-in and reports.
+extension AdminAPI {
+    func adminStats() async throws -> AdminStats { throw APIError.offline }
+    func adminTrends(months: Int) async throws -> AdminTrends { throw APIError.offline }
+    func adminUsers(_ q: AdminUserQuery) async throws -> AdminUserPage { throw APIError.offline }
+    func adminUpdateUser(id: String, _ change: AdminUserChange) async throws {}
+    func adminDeleteUser(id: String) async throws {}
+    func adminRegenerateReport(userID: String) async throws {}
+    func adminDetectRecurring(userID: String) async throws {}
+    func adminSendQuarterlyReport(userID: String) async throws {}
+    func adminSendAnnualReport(userID: String) async throws {}
+}

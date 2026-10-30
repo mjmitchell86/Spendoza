@@ -204,6 +204,51 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         if let testEmailError { throw testEmailError }
     }
 
+    // MARK: AdminAPI
+
+    /// What the admin calls answer.
+    var adminStatsResult: Result<AdminStats, APIError> = .success(StubAPI.defaultAdminStats)
+    var adminTrendsResult: Result<AdminTrends, APIError> = .success(AdminTrends(userTrends: [], activityTrends: [], llmStats: []))
+    var adminUsersResult: Result<AdminUserPage, APIError> = .success(AdminUserPage(users: [], total: 0, page: 1, limit: 25))
+    /// Errors for the actions, by call name as recorded in `calls` without arguments, e.g. "adminDeleteUser".
+    /// An action not listed succeeds.
+    var adminActionErrors: [String: APIError] = [:]
+
+    private func adminAction(_ name: String, _ call: String) throws {
+        record(call)
+        if let error = lock.withLock({ adminActionErrors[name] }) { throw error }
+    }
+
+    func adminStats() async throws -> AdminStats {
+        record("adminStats")
+        return try adminStatsResult.get()
+    }
+
+    func adminTrends(months: Int) async throws -> AdminTrends {
+        record("adminTrends(\(months))")
+        return try adminTrendsResult.get()
+    }
+
+    func adminUsers(_ q: AdminUserQuery) async throws -> AdminUserPage {
+        record("adminUsers(page: \(q.page), search: \(q.search ?? "nil"), tier: \(q.tier ?? "nil"))")
+        return try adminUsersResult.get()
+    }
+
+    func adminUpdateUser(id: String, _ change: AdminUserChange) async throws {
+        let fields = [change.isAdmin.map { "admin=\($0)" }, change.tier.map { "tier=\($0)" }, change.disabled.map { "disabled=\($0)" }]
+        try adminAction("adminUpdateUser", "adminUpdateUser(\(id), \(fields.compactMap { $0 }.joined(separator: ", ")))")
+    }
+
+    func adminDeleteUser(id: String) async throws { try adminAction("adminDeleteUser", "adminDeleteUser(\(id))") }
+    func adminRegenerateReport(userID: String) async throws { try adminAction("adminRegenerateReport", "adminRegenerateReport(\(userID))") }
+    func adminDetectRecurring(userID: String) async throws { try adminAction("adminDetectRecurring", "adminDetectRecurring(\(userID))") }
+    func adminSendQuarterlyReport(userID: String) async throws { try adminAction("adminSendQuarterlyReport", "adminSendQuarterlyReport(\(userID))") }
+    func adminSendAnnualReport(userID: String) async throws { try adminAction("adminSendAnnualReport", "adminSendAnnualReport(\(userID))") }
+
+    static let defaultAdminStats = AdminStats(
+        users: .init(totalUsers: 12, freeUsers: 6, starterUsers: 3, proUsers: 3, adminUsers: 1),
+        activity: .init(totalTransactions: 1500, totalReports: 40, totalEmailsSent: 90, totalGoals: 12, totalHouseholds: 4))
+
     // MARK: Builders
 
     static func statement(id: String, status: StatementStatus, fileType: String = "pdf",

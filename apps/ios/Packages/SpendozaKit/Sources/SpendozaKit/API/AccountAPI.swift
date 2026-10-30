@@ -13,6 +13,3 @@ public protocol AccountAPI: Sendable {
     /// Test environment only: asks the server to email the signed-in user a report now.
     func sendTestEmail() async throws
 }
-
-/// The admin console's server calls (Task 2 fills this in).
-public protocol AdminAPI: Sendable {}

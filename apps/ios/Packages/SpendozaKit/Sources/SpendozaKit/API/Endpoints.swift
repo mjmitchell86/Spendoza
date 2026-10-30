@@ -1,6 +1,6 @@
 import Foundation
 
-enum HTTPMethod: String { case get = "GET", post = "POST", put = "PUT", delete = "DELETE" }
+enum HTTPMethod: String { case get = "GET", post = "POST", patch = "PATCH", put = "PUT", delete = "DELETE" }
 
 /// One API call: method, path, query and (optionally) a JSON body.
 struct Endpoint {
@@ -39,6 +39,25 @@ struct Endpoint {
     static let inviteCodes = Endpoint.get("/api/invite-codes")
     static let createInviteCode = Endpoint.json(.post, "/api/invite-codes", [String: String]())
     static let sendTestEmail = Endpoint(method: .post, path: "/api/emails/send-test")
+
+    static let adminStats = Endpoint.get("/api/admin/stats")
+
+    static func adminTrends(months: Int) -> Endpoint {
+        .get("/api/admin/stats/trends", query: [URLQueryItem(name: "months", value: String(months))])
+    }
+
+    static func adminUsers(_ query: AdminUserQuery) -> Endpoint { .get("/api/admin/users", query: query.queryItems) }
+
+    static func adminUpdateUser(id: String, _ change: AdminUserChange) -> Endpoint {
+        .json(.patch, "/api/admin/users/\(id)", change)
+    }
+
+    static func adminDeleteUser(id: String) -> Endpoint { Endpoint(method: .delete, path: "/api/admin/users/\(id)") }
+
+    /// `action` is the route's last segment, e.g. "generate-report". No body: the server picks the period.
+    static func adminAction(_ action: String, userID: String) -> Endpoint {
+        Endpoint(method: .post, path: "/api/admin/users/\(userID)/\(action)")
+    }
 
     static func transactions(from: String, to: String) -> Endpoint {
         .get("/api/transactions", query: [URLQueryItem(name: "from_date", value: from), URLQueryItem(name: "to_date", value: to)])

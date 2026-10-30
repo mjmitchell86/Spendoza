@@ -103,6 +103,36 @@ public final class APIClient: SpendozaAPI {
 
     public func sendTestEmail() async throws { try await sendIgnoringBody(.sendTestEmail) }
 
+    // MARK: AdminAPI
+
+    public func adminStats() async throws -> AdminStats { try await send(.adminStats) }
+
+    public func adminTrends(months: Int) async throws -> AdminTrends { try await send(.adminTrends(months: months)) }
+
+    public func adminUsers(_ q: AdminUserQuery) async throws -> AdminUserPage { try await send(.adminUsers(q)) }
+
+    public func adminUpdateUser(id: String, _ change: AdminUserChange) async throws {
+        try await sendIgnoringBody(.adminUpdateUser(id: id, change))
+    }
+
+    public func adminDeleteUser(id: String) async throws { try await sendIgnoringBody(.adminDeleteUser(id: id)) }
+
+    public func adminRegenerateReport(userID: String) async throws {
+        try await sendIgnoringBody(.adminAction("generate-report", userID: userID))
+    }
+
+    public func adminDetectRecurring(userID: String) async throws {
+        try await sendIgnoringBody(.adminAction("detect-recurring", userID: userID))
+    }
+
+    public func adminSendQuarterlyReport(userID: String) async throws {
+        try await sendIgnoringBody(.adminAction("send-quarterly-report", userID: userID))
+    }
+
+    public func adminSendAnnualReport(userID: String) async throws {
+        try await sendIgnoringBody(.adminAction("send-annual-report", userID: userID))
+    }
+
     public func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws {
         try await sendIgnoringBody(.signUp(email: email, password: password, displayName: displayName, inviteCode: inviteCode))
     }
