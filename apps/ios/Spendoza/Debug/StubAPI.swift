@@ -62,9 +62,9 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     func completeOnboarding() async throws { record("completeOnboarding") }
 
     func updateProfile(_ change: ProfileChange) async throws -> Profile {
-        record("updateProfile(email: \(change.emailReportsEnabled.map(String.init) ?? "nil"), tz: \(change.timezone ?? "nil"))")
+        record("updateProfile(email: \(change.emailReportsEnabled.map(String.init) ?? "nil"), tz: \(change.timezone ?? "nil")\(change.displayName.map { ", name: \($0)" } ?? ""))")
         if let updateProfileError { throw updateProfileError }
-        return Profile(id: "u", displayName: "T", onboardingCompleted: false, isAdmin: false,
+        return Profile(id: "u", displayName: change.displayName ?? "T", onboardingCompleted: false, isAdmin: false,
                        emailReportsEnabled: change.emailReportsEnabled ?? false, householdID: nil)
     }
 
