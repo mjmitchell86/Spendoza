@@ -29,6 +29,17 @@ struct Endpoint {
         .get("/api/reports/personal", query: [URLQueryItem(name: "month", value: month.apiString)])
     }
 
+    static func personalReportPDF(_ period: ReportPeriod) -> Endpoint {
+        .get("/api/reports/export/personal", query: period.query)
+    }
+
+    static let avatarPath = "/api/profile/avatar"
+    static let signOutOthers = Endpoint(method: .post, path: "/api/profile/sign-out-others")
+    static let deleteAccount = Endpoint.json(.delete, "/api/profile", ["confirm": "DELETE"])
+    static let inviteCodes = Endpoint.get("/api/invite-codes")
+    static let createInviteCode = Endpoint.json(.post, "/api/invite-codes", [String: String]())
+    static let sendTestEmail = Endpoint(method: .post, path: "/api/emails/send-test")
+
     static func transactions(from: String, to: String) -> Endpoint {
         .get("/api/transactions", query: [URLQueryItem(name: "from_date", value: from), URLQueryItem(name: "to_date", value: to)])
     }

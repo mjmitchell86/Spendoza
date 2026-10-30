@@ -23,3 +23,14 @@ enum Fixture {
         .init(id: "c5", name: "Gym", budgetClass: .want),
     ]
 }
+
+/// Test doubles that only care about sign-in and reports get these: every account call is unused.
+extension AccountAPI {
+    func uploadAvatar(jpegData: Data) async throws -> Profile { throw APIError.offline }
+    func signOutOtherSessions() async throws {}
+    func deleteAccount() async throws {}
+    func inviteCodes() async throws -> [InviteCode] { [] }
+    func createInviteCode() async throws -> InviteCode { throw APIError.offline }
+    func personalReportPDF(_ period: ReportPeriod) async throws -> PDFFile { throw APIError.offline }
+    func sendTestEmail() async throws {}
+}

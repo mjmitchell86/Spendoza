@@ -60,24 +60,9 @@ public final class APIClient: SpendozaAPI {
         if fileData.count > Self.maxStatementBytes { throw APIError.fileTooLarge(maxMB: Self.maxStatementMB) }
 
         let boundary = "spendoza-\(UUID().uuidString)"
-        var body = Data()
-        func add(_ text: String) { body.append(Data(text.utf8)) }
-        // A quote or a line break in the name would end the header early (or add one).
-        let filename = fileURL.lastPathComponent
-            .replacingOccurrences(of: "\"", with: "'")
-            .filter { $0 != "\r" && $0 != "\n" && $0 != "\r\n" }
-        add("--\(boundary)\r\n")
-        add("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
-        add("Content-Type: \(mimeType)\r\n\r\n")
-        body.append(fileData)
-        add("\r\n")
         let bank = (bankName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !bank.isEmpty {
-            add("--\(boundary)\r\n")
-            add("Content-Disposition: form-data; name=\"bank_name\"\r\n\r\n")
-            add("\(bank)\r\n")
-        }
-        add("--\(boundary)--\r\n")
+        let body = Multipart.body(boundary: boundary, fileField: "file", filename: fileURL.lastPathComponent,
+                                  mimeType: mimeType, data: fileData, fields: bank.isEmpty ? [] : [("bank_name", bank)])
 
         var endpoint = Endpoint(method: .post, path: Endpoint.uploadPath)
         endpoint.body = body
@@ -90,6 +75,33 @@ public final class APIClient: SpendozaAPI {
     public func reprocessStatement(id: String) async throws { try await sendIgnoringBody(.reprocess(id: id)) }
 
     public func removeStatement(id: String) async throws { try await sendIgnoringBody(.remove(id: id)) }
+
+    // MARK: AccountAPI
+
+    public func uploadAvatar(jpegData: Data) async throws -> Profile {
+        let boundary = "spendoza-\(UUID().uuidString)"
+        var endpoint = Endpoint(method: .post, path: Endpoint.avatarPath)
+        endpoint.body = Multipart.body(boundary: boundary, fileField: "file", filename: "avatar.jpg",
+                                       mimeType: "image/jpeg", data: jpegData)
+        let data = try await perform(endpoint, contentType: "multipart/form-data; boundary=\(boundary)")
+        return try decode(Profile.self, from: data)
+    }
+
+    public func signOutOtherSessions() async throws { try await sendIgnoringBody(.signOutOthers) }
+
+    public func deleteAccount() async throws { try await sendIgnoringBody(.deleteAccount) }
+
+    public func inviteCodes() async throws -> [InviteCode] { try await send(.inviteCodes) }
+
+    public func createInviteCode() async throws -> InviteCode { try await send(.createInviteCode) }
+
+    public func personalReportPDF(_ period: ReportPeriod) async throws -> PDFFile {
+        let (data, response) = try await performResponse(.personalReportPDF(period))
+        let header = response.value(forHTTPHeaderField: "Content-Disposition")
+        return PDFFile(data: data, filename: PDFFile.filename(fromContentDisposition: header))
+    }
+
+    public func sendTestEmail() async throws { try await sendIgnoringBody(.sendTestEmail) }
 
     public func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws {
         try await sendIgnoringBody(.signUp(email: email, password: password, displayName: displayName, inviteCode: inviteCode))
@@ -123,6 +135,21 @@ public final class APIClient: SpendozaAPI {
     }
 
     private func perform(_ endpoint: Endpoint, contentType: String? = nil, notFoundIsNil: Bool) async throws -> Data? {
+        try await performResponse(endpoint, contentType: contentType, notFoundIsNil: notFoundIsNil)?.0
+    }
+
+    /// The body with its response (for the headers).
+    private func performResponse(_ endpoint: Endpoint, contentType: String? = nil) async throws -> (Data, HTTPURLResponse) {
+        // With notFoundIsNil false this never returns nil.
+        guard let result = try await performResponse(endpoint, contentType: contentType, notFoundIsNil: false) else {
+            throw APIError.message("Something went wrong. Try again.")
+        }
+        return result
+    }
+
+    /// nil on a 404 when `notFoundIsNil`.
+    private func performResponse(_ endpoint: Endpoint, contentType: String? = nil,
+                                 notFoundIsNil: Bool) async throws -> (Data, HTTPURLResponse)? {
         var token: String?
         if endpoint.requiresAuth {
             do {
@@ -161,8 +188,9 @@ public final class APIClient: SpendozaAPI {
             }
         }
 
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if (200..<300).contains(status) { return data }
+        let http = response as? HTTPURLResponse
+        let status = http?.statusCode ?? 0
+        if (200..<300).contains(status), let http { return (data, http) }
         if status == 404, notFoundIsNil { return nil }
         throw Self.error(status: status, data: data)
     }

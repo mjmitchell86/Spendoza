@@ -148,6 +148,62 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws {}
     func joinWaitlist(name: String, email: String) async throws {}
 
+    // MARK: AccountAPI
+
+    /// What `uploadAvatar` answers.
+    var avatarResult: Result<Profile, APIError> = .success(
+        Profile(id: "u", displayName: "T", onboardingCompleted: true, isAdmin: false, emailReportsEnabled: true,
+                householdID: nil, avatarURL: URL(string: "https://example.test/avatar.jpg")))
+    var inviteCodeList: [InviteCode] = []
+    var inviteCodesError: APIError?
+    var createInviteCodeError: APIError?
+    var pdfResult: Result<PDFFile, APIError> = .success(PDFFile(data: Data("%PDF-1.4".utf8), filename: "spendoza-report.pdf"))
+    var deleteAccountError: APIError?
+    var signOutOthersError: APIError?
+    var testEmailError: APIError?
+
+    func uploadAvatar(jpegData: Data) async throws -> Profile {
+        record("uploadAvatar(\(jpegData.count))")
+        return try avatarResult.get()
+    }
+
+    func signOutOtherSessions() async throws {
+        record("signOutOtherSessions")
+        if let signOutOthersError { throw signOutOthersError }
+    }
+
+    func deleteAccount() async throws {
+        record("deleteAccount")
+        if let deleteAccountError { throw deleteAccountError }
+    }
+
+    func inviteCodes() async throws -> [InviteCode] {
+        record("inviteCodes")
+        if let inviteCodesError { throw inviteCodesError }
+        return lock.withLock { inviteCodeList }
+    }
+
+    func createInviteCode() async throws -> InviteCode {
+        record("createInviteCode")
+        if let createInviteCodeError { throw createInviteCodeError }
+        return lock.withLock {
+            let code = InviteCode(id: "i-\(inviteCodeList.count + 1)", code: "CODE\(inviteCodeList.count + 1)",
+                                  createdAt: Date(timeIntervalSince1970: 1_790_000_000))
+            inviteCodeList.insert(code, at: 0)
+            return code
+        }
+    }
+
+    func personalReportPDF(_ period: ReportPeriod) async throws -> PDFFile {
+        record("personalReportPDF(\(period))")
+        return try pdfResult.get()
+    }
+
+    func sendTestEmail() async throws {
+        record("sendTestEmail")
+        if let testEmailError { throw testEmailError }
+    }
+
     // MARK: Builders
 
     static func statement(id: String, status: StatementStatus, fileType: String = "pdf",

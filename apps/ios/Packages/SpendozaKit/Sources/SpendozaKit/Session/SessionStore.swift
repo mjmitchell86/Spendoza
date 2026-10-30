@@ -89,6 +89,7 @@ public final class SessionStore {
     @ObservationIgnored private let profileCache: ProfileCache?
     /// The signed-in user's id, if a session is stored on this device (readable offline).
     @ObservationIgnored private let sessionUserID: @MainActor () -> String?
+    @ObservationIgnored private let sessionEmail: @MainActor () -> String?
     @ObservationIgnored private let auth: AuthClient?
     /// Clears the store when supabase-swift signs the session out. One per store.
     @ObservationIgnored private(set) var signOutListener: Task<Void, Never>?
@@ -109,6 +110,7 @@ public final class SessionStore {
         self.accountScope = accountScope
         self.profileCache = profileCache
         self.sessionUserID = { auth?.currentSession?.user.id.uuidString }
+        self.sessionEmail = { auth?.currentSession?.user.email }
         self.isConfigured = auth != nil
         self.api = APIClient(baseURL: apiBaseURL, session: urlSession) {
             guard let auth else { return nil }
@@ -123,15 +125,19 @@ public final class SessionStore {
     }
 
     /// Test seam: a store around any API with no Supabase client.
-    public init(api: any SpendozaAPI, userID: String? = nil, accountScope: AccountScope = AccountScope(),
+    public init(api: any SpendozaAPI, userID: String? = nil, email: String? = nil, accountScope: AccountScope = AccountScope(),
                 profileCache: ProfileCache? = nil) {
         self.accountScope = accountScope
         self.profileCache = profileCache
         self.sessionUserID = { userID }
+        self.sessionEmail = { email }
         self.auth = nil
         self.isConfigured = false
         self.api = api
     }
+
+    /// The signed-in user's email, from the stored Supabase session (the profile doesn't carry it).
+    public var email: String? { sessionEmail() }
 
     public var accessToken: String? {
         get async {
@@ -207,6 +213,18 @@ public final class SessionStore {
 
     public func signOut() async {
         if let auth { try? await auth.signOut() }
+        clear()
+    }
+
+    /// Replaces the profile after an edit, caching it the way a profile load does.
+    public func apply(_ profile: Profile) {
+        profileCache?.store(profile, token: accountScope.token())
+        self.profile = profile
+    }
+
+    /// The server deleted this account: drop the local session without calling the server again.
+    public func accountDeleted() async {
+        if let auth { try? await auth.signOut(scope: .local) }
         clear()
     }
 
