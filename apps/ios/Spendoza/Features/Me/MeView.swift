@@ -20,7 +20,7 @@ struct MeView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     ProfileHeader(model: model, email: store.email)
                     ReportsSection(model: model, api: store.api)
-                    AccountSection(tier: model.profile?.subscriptionTier ?? "free", lock: lock)
+                    AccountSection(tier: model.profile?.subscriptionTier ?? "free", lock: lock, api: store.api)
                     Button("Sign out") { Task { await store.signOut() } }
                         .buttonStyle(SecondaryButtonStyle())
                 }
@@ -85,6 +85,7 @@ struct MeRowLabel: View {
 private struct AccountSection: View {
     let tier: String
     let lock: AppLock
+    let api: any SpendozaAPI
     static let pricingURL = URL(string: "https://www.spendoza.io/pricing")!
 
     var body: some View {
@@ -93,6 +94,12 @@ private struct AccountSection: View {
                 AppearanceFaceIDScreen(lock: lock)
             } label: {
                 MeRowLabel(title: "Appearance & Face ID", glyph: "›")
+            }
+            .buttonStyle(.plain)
+            NavigationLink {
+                InviteCodesView(api: api)
+            } label: {
+                MeRowLabel(title: "Invite codes", glyph: "›")
             }
             .buttonStyle(.plain)
             Link(destination: Self.pricingURL) {
