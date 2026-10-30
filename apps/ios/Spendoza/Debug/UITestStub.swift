@@ -50,8 +50,24 @@ enum UITestStub {
         // `-uiTestAdmin`: an admin account, with a year of platform trends for the dashboard.
         if CommandLine.arguments.contains("-uiTestAdmin") {
             api.adminTrendsResult = .success(adminTrends())
+            api.adminUsersResult = .success(adminUsers())
         }
         return api
+    }
+
+    /// A page of users: the signed-in admin, a disabled one, one with no email, and a long name.
+    private static func adminUsers() -> AdminUserPage {
+        func user(_ id: String, _ name: String, _ email: String?, tier: String, admin: Bool = false, disabled: Bool = false) -> AdminUser {
+            AdminUser(id: id, displayName: name, email: email, tier: tier, isAdmin: admin, disabled: disabled,
+                      createdAt: Date(timeIntervalSince1970: 1_780_000_000))
+        }
+        let users = [
+            user("ui-test-user", "Test", "test@example.com", tier: "pro", admin: true),
+            user("u2", "Ann Baker", "ann.baker@example.com", tier: "starter"),
+            user("u3", "Carlos Ibarra-Villanueva-Montgomery", "carlos.ibarra.villanueva@example.com", tier: "free", disabled: true),
+            user("u4", "Dee", nil, tier: "free"),
+        ]
+        return AdminUserPage(users: users, total: users.count, page: 1, limit: 25)
     }
 
     private static func adminTrends() -> AdminTrends {

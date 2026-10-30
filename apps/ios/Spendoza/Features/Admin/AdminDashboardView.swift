@@ -7,7 +7,13 @@ struct AdminDashboardView: View {
     @State private var model: AdminDashboardModel
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    init(api: any SpendozaAPI) {
+    let api: any SpendozaAPI
+    /// The signed-in admin's id, so the Users screens don't offer deleting yourself.
+    let selfID: String?
+
+    init(api: any SpendozaAPI, selfID: String?) {
+        self.api = api
+        self.selfID = selfID
         _model = State(initialValue: AdminDashboardModel(api: api))
     }
 
@@ -34,6 +40,13 @@ struct AdminDashboardView: View {
                         .foregroundStyle(Theme.soft)
                 }
                 if !model.tiles.isEmpty { tileGrid }
+                NavigationLink {
+                    AdminUsersView(api: api, selfID: selfID)
+                } label: {
+                    MeRowLabel(title: "Users", glyph: "›")
+                }
+                .buttonStyle(.plain)
+                .topRule()
                 if let trends = model.trends {
                     SignupsChart(points: model.signups)
                     ActivityChart(series: model.activitySeries)

@@ -211,6 +211,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     var adminStatsResult: Result<AdminStats, APIError> = .success(StubAPI.defaultAdminStats)
     var adminTrendsResult: Result<AdminTrends, APIError> = .success(AdminTrends(userTrends: [], activityTrends: [], llmStats: []))
     var adminUsersResult: Result<AdminUserPage, APIError> = .success(AdminUserPage(users: [], total: 0, page: 1, limit: 25))
+    /// Pages by number; a page listed here answers instead of `adminUsersResult`.
+    var adminUsersPages: [Int: AdminUserPage] = [:]
     /// Errors for the actions, by call name as recorded in `calls` without arguments, e.g. "adminDeleteUser".
     /// An action not listed succeeds.
     var adminActionErrors: [String: APIError] = [:]
@@ -232,6 +234,7 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     func adminUsers(_ q: AdminUserQuery) async throws -> AdminUserPage {
         record("adminUsers(page: \(q.page), search: \(q.search ?? "nil"), tier: \(q.tier ?? "nil"))")
+        if let page = adminUsersPages[q.page] { return page }
         return try adminUsersResult.get()
     }
 
