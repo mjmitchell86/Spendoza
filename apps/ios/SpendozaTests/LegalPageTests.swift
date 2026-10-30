@@ -21,7 +21,7 @@ struct LegalPageTests {
     }
 
     @Test func privacyHasItsEffectiveDate() throws {
-        #expect(try LegalPage.load("privacy").effective == "October 29, 2026")
+        #expect(try LegalPage.load("privacy").effective == "October 30, 2026")
     }
 
     @Test func mailtoLinkIsKept() {

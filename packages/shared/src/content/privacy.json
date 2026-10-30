@@ -1,15 +1,15 @@
 {
   "title": "Privacy Policy",
   "intro": [
-    "Spendoza is made by Gravitaz LLC. This page explains what it collects, what it does with it, and how to delete it."
+    "Spendoza is made by Gravitaz LLC. This page explains what it collects, what it does with it, and how to delete it. It covers the website at spendoza.io and the iPhone app."
   ],
-  "effective": "October 29, 2026",
+  "effective": "October 30, 2026",
   "sections": [
     {
       "heading": "The short version",
       "blocks": [
         {
-          "p": "You give Spendoza your bank statements so it can sort your spending. It keeps the transactions it finds and deletes the statement file once processing finishes. OpenAI reads your statements to do that sorting. Spendoza has no ads and doesn't sell your data, and you can delete your account and everything in it from your Profile at any time."
+          "p": "You give Spendoza your bank statements so it can sort your spending. It keeps the transactions it finds and deletes the statement file once processing finishes. OpenAI reads your statements to do that sorting. Spendoza has no ads and doesn't sell your data, and you can delete your account and everything in it at any time, from Profile on the website or Me in the iPhone app."
         }
       ]
     },
@@ -21,13 +21,13 @@
             "your email address",
             "your password, which our sign-in provider stores only as a hash",
             "your display name, and a profile photo if you add one",
-            "your time zone, read from your browser so emails arrive at the right hour",
+            "your time zone, read from your browser or phone so emails arrive at the right hour",
             "your email report settings and your plan",
             "invite codes you create, and who used them"
           ]
         },
         {
-          "p": "A profile photo is stored at a public address: anyone who has the link can see it."
+          "p": "A profile photo is stored at a public address: anyone who has the link can see it. In the iPhone app you pick a single photo; Spendoza doesn't get access to the rest of your photo library."
         },
         {
           "p": "If you join the waitlist instead, we store your name, email address, IP address and the approximate location (country, region and city) that IP address points to."
@@ -85,7 +85,7 @@
       "heading": "Report emails",
       "blocks": [
         {
-          "p": "Spendoza emails you a weekly report, plus quarterly and yearly ones, with a summary and a PDF of your report attached. They're on by default. Turn them off in Profile, or use the unsubscribe link in any report email."
+          "p": "Spendoza emails you a weekly report, plus quarterly and yearly ones, with a summary and a PDF of your report attached. They're on by default. Turn them off in Profile on the website or under Me in the iPhone app, or use the unsubscribe link in any report email."
         }
       ]
     },
@@ -101,7 +101,7 @@
       "heading": "Connecting an AI assistant",
       "blocks": [
         {
-          "p": "If you connect an AI assistant to Spendoza (such as Claude or ChatGPT, through Spendoza's MCP server), you sign in to Spendoza to allow it. The assistant can then read your Spendoza data and add, change or delete income, expenses, goals and debts, depending on your plan. Whatever it reads is sent to that assistant's provider and handled under their privacy policy. To disconnect, choose Disconnect AI assistants on the MCP page. That signs out every other session, including connected assistants: Spendoza stops accepting their sign-in right away, and the sign-in itself expires shortly after."
+          "p": "If you connect an AI assistant to Spendoza (such as Claude or ChatGPT, through Spendoza's MCP server), you sign in to Spendoza to allow it. The assistant can then read your Spendoza data and add, change or delete income, expenses, goals and debts, depending on your plan. Whatever it reads is sent to that assistant's provider and handled under their privacy policy. To disconnect, choose Disconnect AI assistants on the MCP page on the website, or under Me, AI assistants in the iPhone app. That signs out every other session, including connected assistants: Spendoza stops accepting their sign-in right away, and the sign-in itself expires shortly after."
         }
       ]
     },
@@ -123,6 +123,7 @@
             "OpenAI: the AI features above",
             "Stripe: payments",
             "Resend: sending report emails",
+            "Apple: distributing the iPhone app. If you test it through TestFlight, Apple also passes on crash reports and any feedback you choose to send",
             "ip-api.com: looking up the approximate location of waitlist sign-ups"
           ]
         },
@@ -132,10 +133,29 @@
       ]
     },
     {
+      "heading": "On your iPhone",
+      "blocks": [
+        {
+          "p": "The iPhone app keeps a few things on your phone so it opens quickly and works offline:"
+        },
+        {
+          "ul": [
+            "your sign-in, in the iPhone's Keychain",
+            "a copy of your profile and your recent monthly reports",
+            "for the home screen and lock screen widgets: your health score, its band (such as Fair), last month's score and the month. No amounts, categories or transactions",
+            "PDF reports you open, until you close them"
+          ]
+        },
+        {
+          "p": "Signing out or deleting your account removes all of these from the phone. Face ID is handled by iOS: Spendoza only learns whether unlocking worked and never sees your face data. The \"check-up is ready\" notification is created on your phone and contains no amounts; the app checks for a new report in the background to send it."
+        }
+      ]
+    },
+    {
       "heading": "Cookies and analytics",
       "blocks": [
         {
-          "p": "Spendoza sets no cookies. Your browser's local storage keeps you signed in and remembers your light or dark theme. Spendoza counts page views with Vercel Web Analytics, which doesn't use cookies, and loads its font from Google Fonts."
+          "p": "Spendoza sets no cookies. On the website, your browser's local storage keeps you signed in and remembers your light or dark theme. Spendoza counts page views with Vercel Web Analytics, which doesn't use cookies, and loads its font from Google Fonts. The iPhone app has no analytics, advertising or tracking code."
         }
       ]
     },
@@ -151,7 +171,7 @@
       "heading": "Deleting your data",
       "blocks": [
         {
-          "p": "To delete everything, go to Profile and choose Delete my account. It permanently deletes your account and your data: your profile and photo, statements and transactions, income, expenses, categories, goals, debts, reports, advisor history and email settings, and it cancels your subscription."
+          "p": "To delete everything, choose Delete my account in Profile on the website, or at the bottom of Me in the iPhone app. It permanently deletes your account and your data: your profile and photo, statements and transactions, income, expenses, categories, goals, debts, reports, advisor history and email settings, and it cancels your subscription."
         },
         {
           "p": "You can also delete individual income and expense entries, categories, goals, debts and failed statements. Transactions can be edited but not deleted one at a time."
