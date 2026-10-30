@@ -29,6 +29,9 @@ struct ReportsSection: View {
     var offersTestEmail = ReportSchedule.isTestAPI
     /// The last failure of a change made here (the header shows `model.error`, so it is moved out of there).
     @State private var failure: String?
+    /// The change being saved: the controls show it meanwhile, and clearing it (on success or failure) makes them
+    /// read the model's saved profile again, so a failed save snaps them back.
+    @State private var pending: ProfileChange?
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var profile: Profile? { model.profile }
@@ -38,7 +41,7 @@ struct ReportsSection: View {
             RuledRow {
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("Weekly email reports", isOn: Binding(
-                        get: { profile?.emailReportsEnabled ?? false },
+                        get: { pending?.emailReportsEnabled ?? profile?.emailReportsEnabled ?? false },
                         set: { on in save(ProfileChange(emailReportsEnabled: on)) }))
                         .font(.sans(16, relativeTo: .body))
                         .foregroundStyle(Theme.ink)
@@ -54,7 +57,7 @@ struct ReportsSection: View {
                         Text("Day").font(.sans(16, relativeTo: .body)).foregroundStyle(Theme.ink)
                         if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
                         Picker("Day", selection: Binding(
-                            get: { profile.emailReportDay },
+                            get: { pending?.emailReportDay ?? profile.emailReportDay },
                             set: { save(ProfileChange(emailReportDay: $0)) })) {
                             ForEach(Weekday.allCases, id: \.self) { Text($0.title).tag($0) }
                         }
@@ -67,7 +70,7 @@ struct ReportsSection: View {
                         Text("Time").font(.sans(16, relativeTo: .body)).foregroundStyle(Theme.ink)
                         if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
                         Picker("Time", selection: Binding(
-                            get: { profile.emailReportHour },
+                            get: { pending?.emailReportHour ?? profile.emailReportHour },
                             set: { save(ProfileChange(emailReportHour: $0)) })) {
                             ForEach(0..<24, id: \.self) { Text(ReportSchedule.hourLabel($0)).tag($0) }
                         }
@@ -134,8 +137,10 @@ struct ReportsSection: View {
 
     private func save(_ change: ProfileChange) {
         failure = nil
+        pending = change
         Task {
             _ = await model.update(change)
+            pending = nil
             moveError()
         }
     }

@@ -41,8 +41,12 @@ enum UITestStub {
         if CommandLine.arguments.contains("-uiTestBudgetNotOnPlan") {
             api.budgetError = .notOnPlan(requiredTier: "starter")
         }
+        // `-uiTestProfileUpdateOffline`: saving the profile fails as if offline.
+        // (The profile then starts with weekly reports on, so the failing change is turning them off.)
+        let updateOffline = CommandLine.arguments.contains("-uiTestProfileUpdateOffline")
+        if updateOffline { api.updateProfileError = .offline }
         api.profileResult = Profile(id: "ui-test-user", displayName: "Test", onboardingCompleted: true,
-                                    isAdmin: false, emailReportsEnabled: false, householdID: nil)
+                                    isAdmin: false, emailReportsEnabled: updateOffline, householdID: nil)
         return api
     }
 

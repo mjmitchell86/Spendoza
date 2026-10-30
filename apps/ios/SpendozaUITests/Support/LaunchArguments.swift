@@ -16,7 +16,7 @@ enum Launch {
     @MainActor
     static func stubbed(appearance: Appearance = .light, textSize: String? = nil,
                         hideTabBar: Bool = false, lock: Lock = .off, slowSelect: Bool = false,
-                        budgetNotOnPlan: Bool = false) -> XCUIApplication {
+                        budgetNotOnPlan: Bool = false, profileUpdateOffline: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         // The launch argument `-AppleInterfaceStyle` doesn't change an iOS app's scheme; the device setting does.
         XCUIDevice.shared.appearance = appearance == .dark ? .dark : .light
@@ -26,6 +26,7 @@ enum Launch {
         if hideTabBar { arguments.append("-uiTestHideTabBar") }
         if slowSelect { arguments.append("-uiTestSlowSelect") }
         if budgetNotOnPlan { arguments.append("-uiTestBudgetNotOnPlan") }
+        if profileUpdateOffline { arguments.append("-uiTestProfileUpdateOffline") }
         switch lock {
         case .off: break
         case .passing: arguments.append("-uiTestLockEnabled")
