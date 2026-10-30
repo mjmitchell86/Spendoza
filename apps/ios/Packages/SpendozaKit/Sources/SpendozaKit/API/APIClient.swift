@@ -6,6 +6,8 @@ public final class APIClient: SpendozaAPI {
     public static let maxStatementBytes = 4_480_000
     /// The limit in whole megabytes, rounded down. Uses MiB (the larger unit) so the figure never overstates the limit.
     public static let maxStatementMB = max(1, maxStatementBytes / 1_048_576)
+    /// The `code` of the API's 403 for a disabled account.
+    static let accountDisabledCode = "account_disabled"
 
     private let baseURL: URL
     private let session: URLSession
@@ -229,12 +231,15 @@ public final class APIClient: SpendozaAPI {
         struct Body: Decodable {
             let error: String?
             let requiredTier: String?
-            enum CodingKeys: String, CodingKey { case error, requiredTier = "required_tier" }
+            let code: String?
+            enum CodingKeys: String, CodingKey { case error, code, requiredTier = "required_tier" }
         }
         let body = try? JSONDecoder().decode(Body.self, from: data)
         switch status {
         case 401: return .unauthorized
-        case 403: if let tier = body?.requiredTier { return .notOnPlan(requiredTier: tier) }
+        case 403:
+            if body?.code == accountDisabledCode, let text = body?.error, !text.isEmpty { return .accountDisabled(text) }
+            if let tier = body?.requiredTier { return .notOnPlan(requiredTier: tier) }
         case 413: return .fileTooLarge(maxMB: maxStatementMB)
         default: break
         }

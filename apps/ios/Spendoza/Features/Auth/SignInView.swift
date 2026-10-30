@@ -19,6 +19,9 @@ struct SignInView: View {
                 if store.accountReadyEmail != nil {
                     OutlinedPanel { Text("Your account is ready. Sign in to continue.") }
                 }
+                if let notice = store.signedOutNotice {
+                    OutlinedPanel { Text(notice) }
+                }
                 AuthField(label: "Email", text: $email, contentType: .username, keyboard: .emailAddress)
                 AuthField(label: "Password", text: $password, secure: true, contentType: .password)
                 if let error { InlineError(message: error) }

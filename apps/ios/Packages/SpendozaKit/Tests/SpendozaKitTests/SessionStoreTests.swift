@@ -166,6 +166,29 @@ struct RefreshErrorRaceTests {
 }
 
 @MainActor
+struct AccountDisabledTests {
+    private let text = "This account has been disabled. Email hello@gravitaz.net if you think this is a mistake."
+
+    @Test func aDisabledAccountSignsOutAndLeavesANotice() async {
+        let store = SessionStore(api: FailingAPI(error: .accountDisabled(text)), userID: "user-a")
+        var signedOut = 0
+        store.onSignOut = { signedOut += 1 }
+        await store.refresh()
+        #expect(store.phase == .signedOut)
+        #expect(store.signedOutNotice == text)
+        #expect(store.loadError == nil)
+        #expect(signedOut == 1)
+    }
+
+    @Test func theNoticeSurvivesTheSignOutThatRaisedIt() async {
+        let store = SessionStore(api: FailingAPI(error: .accountDisabled(text)), userID: "user-a")
+        await store.refresh()
+        await store.signOut()
+        #expect(store.signedOutNotice == text)
+    }
+}
+
+@MainActor
 struct SessionEndedHookTests {
     /// 7.31: signing out from "Couldn't load your account" (phase already .signedOut) must still reach the lock.
     @Test func signingOutFromALoadFailureRaisesTheSessionEndedHook() async {

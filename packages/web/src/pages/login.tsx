@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ACCOUNT_DISABLED_CODE, ACCOUNT_DISABLED_MESSAGE } from "@spendoza/shared";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,11 @@ export function LoginPage() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="flex flex-col gap-4">
+            {searchParams.get("notice") === ACCOUNT_DISABLED_CODE && (
+              <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {ACCOUNT_DISABLED_MESSAGE}
+              </div>
+            )}
             {error && (
               <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}

@@ -60,6 +60,12 @@ struct APIClientTests {
         }
     }
 
+    @Test func status403AccountDisabledCarriesTheServerText() async {
+        let text = "This account has been disabled. Email hello@gravitaz.net if you think this is a mistake."
+        stub(status: 403, body: #"{"error":"\#(text)","code":"account_disabled"}"#)
+        await expectError(.accountDisabled(text)) { try await client().categories() }
+    }
+
     @Test func status403WithoutTierIsAMessage() async {
         stub(status: 403, body: #"{"error":"Forbidden"}"#)
         await expectError(.message("Forbidden")) { try await client().categories() }

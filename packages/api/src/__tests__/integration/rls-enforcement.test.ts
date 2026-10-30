@@ -384,7 +384,8 @@ describe("User data queries go through RLS client (not admin)", () => {
     const rlsProfileCalls = rlsCalls.filter((c) => c.table === "profiles");
     expect(rlsProfileCalls.length).toBeGreaterThan(0);
     const adminProfileCalls = adminCalls.filter((c) => c.table === "profiles");
-    expect(adminProfileCalls.length).toBe(0);
+    // The one admin read is requireAuth's disabled-account check; the route's own read is on the RLS client.
+    expect(adminProfileCalls.length).toBe(1);
   });
 
   it("GET /api/goals uses RLS client", async () => {

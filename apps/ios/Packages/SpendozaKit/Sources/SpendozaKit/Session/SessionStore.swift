@@ -81,6 +81,8 @@ public final class SessionStore {
     @ObservationIgnored public var onSessionEnded: (@MainActor () -> Void)?
     /// Set when sign-up created an account but the follow-up sign-in failed; Sign in prefills this email and says the account is ready.
     public private(set) var accountReadyEmail: String?
+    /// Why the person was signed out against their will (the account was disabled); Sign in shows it until the next successful sign-in.
+    public private(set) var signedOutNotice: String?
     /// The Spendoza API, authorized with this store's session.
     @ObservationIgnored public private(set) var api: any SpendozaAPI
 
@@ -242,11 +244,16 @@ public final class SessionStore {
             self.profile = profile
             loadError = nil
             accountReadyEmail = nil
+            signedOutNotice = nil
             phase = appPhase(session: true, profile: profile)
         } catch where !accountScope.isCurrent(token) {
             return
         } catch APIError.unauthorized {
             await signOut()
+        } catch APIError.accountDisabled(let text) {
+            if let auth { try? await auth.signOut(scope: .local) }
+            clear()
+            signedOutNotice = text
         } catch APIError.offline {
             // Offline launch: the last profile this user had decides the phase, so the cached check-up is reachable.
             if accountScope.isCurrent(token), let cached = profileCache?.load() {

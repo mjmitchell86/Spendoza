@@ -1,3 +1,4 @@
+import { ACCOUNT_DISABLED_CODE } from "@spendoza/shared";
 import { supabase } from "./supabase";
 import { ApiError } from "./api-error";
 
@@ -26,6 +27,14 @@ export async function apiClient(path: string, options?: RequestInit) {
     }
     const message =
       (body as { error?: string } | null)?.error || "API request failed";
+    if (
+      response.status === 403 &&
+      (body as { code?: string } | null)?.code === ACCOUNT_DISABLED_CODE
+    ) {
+      // The account was disabled while signed in: end the session and say why on Sign in.
+      await supabase.auth.signOut();
+      window.location.assign(`/login?notice=${ACCOUNT_DISABLED_CODE}`);
+    }
     throw new ApiError(message, response.status, body);
   }
   // 204 No Content (deletes, revokes) has no body to parse.
