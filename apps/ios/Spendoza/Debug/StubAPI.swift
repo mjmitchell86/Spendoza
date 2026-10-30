@@ -213,6 +213,10 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     var adminUsersResult: Result<AdminUserPage, APIError> = .success(AdminUserPage(users: [], total: 0, page: 1, limit: 25))
     /// Pages by number; a page listed here answers instead of `adminUsersResult`.
     var adminUsersPages: [Int: AdminUserPage] = [:]
+    /// Answers the user list itself (to hold or reorder responses in tests); takes precedence over the pages.
+    var adminUsersHook: (@Sendable (AdminUserQuery) async throws -> AdminUserPage)?
+    /// Runs after `adminActionErrors` for `adminUpdateUser` (to hold or fail a single change in tests).
+    var adminUpdateHook: (@Sendable (AdminUserChange) async throws -> Void)?
     /// Errors for the actions, by call name as recorded in `calls` without arguments, e.g. "adminDeleteUser".
     /// An action not listed succeeds.
     var adminActionErrors: [String: APIError] = [:]
@@ -234,6 +238,7 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     func adminUsers(_ q: AdminUserQuery) async throws -> AdminUserPage {
         record("adminUsers(page: \(q.page), search: \(q.search ?? "nil"), tier: \(q.tier ?? "nil"))")
+        if let adminUsersHook { return try await adminUsersHook(q) }
         if let page = adminUsersPages[q.page] { return page }
         return try adminUsersResult.get()
     }
@@ -241,6 +246,7 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     func adminUpdateUser(id: String, _ change: AdminUserChange) async throws {
         let fields = [change.isAdmin.map { "admin=\($0)" }, change.tier.map { "tier=\($0)" }, change.disabled.map { "disabled=\($0)" }]
         try adminAction("adminUpdateUser", "adminUpdateUser(\(id), \(fields.compactMap { $0 }.joined(separator: ", ")))")
+        try await adminUpdateHook?(change)
     }
 
     func adminDeleteUser(id: String) async throws { try adminAction("adminDeleteUser", "adminDeleteUser(\(id))") }

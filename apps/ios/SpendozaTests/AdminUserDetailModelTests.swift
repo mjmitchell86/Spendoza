@@ -106,4 +106,43 @@ struct AdminUserDetailModelTests {
         let m = model(StubAPI())
         #expect(m.confirmation == "This will permanently delete Ann (u1@example.com) and all their data. This cannot be undone.")
     }
+
+    @Test func aFailedChangeDoesNotUndoAnotherInFlight() async {
+        let api = StubAPI()
+        let gate = AdminUsersModelTests.Gate()
+        api.adminUpdateHook = { change in
+            if change.isAdmin != nil { await gate.wait(); throw APIError.message("No") }
+        }
+        let box = Box()
+        let m = model(api, box: box)
+        let admin = Task { await m.setAdmin(true) }
+        for _ in 0..<1000 where api.calls.isEmpty { await Task.yield() }
+        await m.setDisabled(true)
+        #expect(m.user.isAdmin && m.user.disabled)
+        await gate.open()
+        await admin.value
+        #expect(!m.user.isAdmin)
+        #expect(m.user.disabled)
+        #expect(m.error == "No")
+        #expect(box.changed.map(\.isAdmin) == [false])
+        #expect(box.changed.map(\.disabled) == [true])
+    }
+
+    @Test func theParentOnlyHearsConfirmedValues() async {
+        let api = StubAPI()
+        let gate = AdminUsersModelTests.Gate()
+        api.adminUpdateHook = { change in
+            if change.isAdmin != nil { await gate.wait() } else { throw APIError.message("No") }
+        }
+        let box = Box()
+        let m = model(api, box: box)
+        let admin = Task { await m.setAdmin(true) }
+        for _ in 0..<1000 where api.calls.isEmpty { await Task.yield() }
+        await m.setDisabled(true)           // fails while the admin change is still held
+        #expect(!m.user.disabled)
+        await gate.open()
+        await admin.value
+        #expect(box.changed.count == 1)
+        #expect(box.changed[0].isAdmin && !box.changed[0].disabled)
+    }
 }

@@ -26,6 +26,8 @@ final class AdminUserDetailModel {
     }
 
     private(set) var user: AdminUser
+    /// The user as the server last confirmed it; `user` runs ahead of it while changes are in flight.
+    @ObservationIgnored private var confirmed: AdminUser
     let isSelf: Bool
     private(set) var results: [AdminAction: Result] = [:]
     private(set) var running: AdminAction?
@@ -41,6 +43,7 @@ final class AdminUserDetailModel {
     init(user: AdminUser, api: any SpendozaAPI, isSelf: Bool,
          onChange: @escaping (AdminUser) -> Void, onDeleted: @escaping () -> Void) {
         self.user = user
+        self.confirmed = user
         self.api = api
         self.isSelf = isSelf
         self.onChange = onChange
@@ -57,28 +60,32 @@ final class AdminUserDetailModel {
 
     func setTier(_ tier: String) async {
         guard tier != user.tier else { return }
-        await change(AdminUserChange(tier: tier)) { $0.with(tier: tier) }
+        await change(AdminUserChange(tier: tier))
     }
 
     func setAdmin(_ value: Bool) async {
         guard value != user.isAdmin else { return }
-        await change(AdminUserChange(isAdmin: value)) { $0.with(isAdmin: value) }
+        await change(AdminUserChange(isAdmin: value))
     }
 
     func setDisabled(_ value: Bool) async {
         guard value != user.disabled else { return }
-        await change(AdminUserChange(disabled: value)) { $0.with(disabled: value) }
+        await change(AdminUserChange(disabled: value))
     }
 
-    private func change(_ change: AdminUserChange, _ apply: (AdminUser) -> AdminUser) async {
-        let before = user
+    /// Shows the change at once. Changes can overlap, so each one only touches its own fields: success folds them
+    /// into `confirmed` (what the parent hears about), failure puts just them back to their confirmed values.
+    private func change(_ change: AdminUserChange) async {
         error = nil
-        user = apply(before)
+        user = user.with(change)
         do {
-            try await api.adminUpdateUser(id: before.id, change)
-            onChange(user)
+            try await api.adminUpdateUser(id: user.id, change)
+            confirmed = confirmed.with(change)
+            onChange(confirmed)
         } catch {
-            user = before
+            user = user.with(AdminUserChange(isAdmin: change.isAdmin.map { _ in confirmed.isAdmin },
+                                             tier: change.tier.map { _ in confirmed.tier },
+                                             disabled: change.disabled.map { _ in confirmed.disabled }))
             self.error = Self.message(error, fallback: "Couldn't update this user. Try again.")
         }
     }
@@ -141,8 +148,8 @@ final class AdminUserDetailModel {
 }
 
 private extension AdminUser {
-    func with(isAdmin: Bool? = nil, tier: String? = nil, disabled: Bool? = nil) -> AdminUser {
-        AdminUser(id: id, displayName: displayName, email: email, tier: tier ?? self.tier,
-                  isAdmin: isAdmin ?? self.isAdmin, disabled: disabled ?? self.disabled, createdAt: createdAt)
+    func with(_ change: AdminUserChange) -> AdminUser {
+        AdminUser(id: id, displayName: displayName, email: email, tier: change.tier ?? tier,
+                  isAdmin: change.isAdmin ?? isAdmin, disabled: change.disabled ?? disabled, createdAt: createdAt)
     }
 }

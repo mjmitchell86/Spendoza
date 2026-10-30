@@ -55,11 +55,7 @@ struct AdminUsersView: View {
         .background(Theme.paper.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         // Typing waits 300 ms for the next key; the first load and a tier change go straight away.
-        .task(id: Filter(search: model.search, tier: model.tier)) {
-            if model.loaded { try? await Task.sleep(for: .milliseconds(300)) }
-            guard !Task.isCancelled else { return }
-            await model.reload()
-        }
+        .task(id: Filter(search: model.search, tier: model.tier)) { await model.filtersChanged() }
     }
 
     private func searchField(_ text: Binding<String>) -> some View {
@@ -101,7 +97,7 @@ struct AdminUsersView: View {
                 .font(.sans(14, relativeTo: .subheadline))
                 .foregroundStyle(Theme.soft)
         } else if !model.users.isEmpty {
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(model.users) { user in
                     NavigationLink {
                         AdminUserDetailView(user: user, api: api, isSelf: user.id == selfID,
