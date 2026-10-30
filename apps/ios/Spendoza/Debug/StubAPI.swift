@@ -62,10 +62,11 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     func completeOnboarding() async throws { record("completeOnboarding") }
 
     func updateProfile(_ change: ProfileChange) async throws -> Profile {
-        record("updateProfile(email: \(change.emailReportsEnabled.map(String.init) ?? "nil"), tz: \(change.timezone ?? "nil")\(change.displayName.map { ", name: \($0)" } ?? ""))")
+        record("updateProfile(email: \(change.emailReportsEnabled.map(String.init) ?? "nil"), tz: \(change.timezone ?? "nil")\(change.displayName.map { ", name: \($0)" } ?? "")\(change.emailReportDay.map { ", day: \($0.rawValue)" } ?? "")\(change.emailReportHour.map { ", hour: \($0)" } ?? ""))")
         if let updateProfileError { throw updateProfileError }
         return Profile(id: "u", displayName: change.displayName ?? "T", onboardingCompleted: false, isAdmin: false,
-                       emailReportsEnabled: change.emailReportsEnabled ?? false, householdID: nil)
+                       emailReportsEnabled: change.emailReportsEnabled ?? false, householdID: nil,
+                       emailReportDay: change.emailReportDay ?? .saturday, emailReportHour: change.emailReportHour ?? 9)
     }
 
     func personalReport(_ month: Month) async throws -> Report? {

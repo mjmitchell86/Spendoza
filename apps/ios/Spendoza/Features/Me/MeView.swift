@@ -19,6 +19,7 @@ struct MeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     ProfileHeader(model: model, email: store.email)
+                    ReportsSection(model: model, api: store.api)
                     AccountSection(tier: model.profile?.subscriptionTier ?? "free", lock: lock)
                     Button("Sign out") { Task { await store.signOut() } }
                         .buttonStyle(SecondaryButtonStyle())
@@ -35,7 +36,7 @@ struct MeView: View {
 }
 
 /// A titled group of ruled rows.
-private struct MeSection<Content: View>: View {
+struct MeSection<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
 
@@ -53,7 +54,7 @@ private struct MeSection<Content: View>: View {
 }
 
 /// A row that pushes or opens something: title, optional detail, and a trailing glyph.
-private struct MeRowLabel: View {
+struct MeRowLabel: View {
     let title: String
     var detail: String?
     let glyph: String

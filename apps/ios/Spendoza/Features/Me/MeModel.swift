@@ -12,6 +12,8 @@ final class MeModel {
     /// The last failure, in words for the screen; cleared when the next change starts.
     var error: String?
     private(set) var isUploading = false
+    private(set) var isSendingTestEmail = false
+    private(set) var testEmailSent = false
 
     @ObservationIgnored private let api: any SpendozaAPI
     @ObservationIgnored private let apply: @MainActor (Profile) -> Void
@@ -49,6 +51,20 @@ final class MeModel {
         } catch {
             self.error = Self.message(for: error)
             return false
+        }
+    }
+
+    /// Sends the signed-in person a report email now (test-API builds only); sets `testEmailSent` or `error`.
+    func sendTestEmail() async {
+        error = nil
+        testEmailSent = false
+        isSendingTestEmail = true
+        defer { isSendingTestEmail = false }
+        do {
+            try await api.sendTestEmail()
+            testEmailSent = true
+        } catch {
+            self.error = Self.message(for: error)
         }
     }
 
