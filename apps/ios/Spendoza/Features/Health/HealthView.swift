@@ -8,10 +8,12 @@ struct HealthView: View {
     @State private var addingStatement = false
 
     init(api: any SpendozaAPI, cache: ReportCache, snapshots: SnapshotStore, scope: AccountScope,
-         onSessionEnded: @escaping @MainActor () -> Void) {
+         onSessionEnded: @escaping @MainActor () -> Void,
+         onAccountDisabled: @escaping @MainActor (String) -> Void) {
         self.api = api
         let model = HealthModel(api: api, cache: cache, scope: scope, sync: WidgetSync(snapshots: snapshots))
         model.onSessionEnded = onSessionEnded
+        model.onAccountDisabled = onAccountDisabled
         _model = State(initialValue: model)
     }
 

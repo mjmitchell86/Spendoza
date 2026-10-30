@@ -15,8 +15,12 @@ import {
   MessageCircle,
   Cpu,
   Info,
+  LifeBuoy,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useProfile } from "@/hooks/use-profile";
 import {
   Sheet,
   SheetContent,
@@ -41,16 +45,22 @@ const moreItems = [
   { to: "/billing", label: "Billing", icon: CreditCard },
   { to: "/mcp", label: "MCP", icon: Cpu },
   { to: "/about", label: "About", icon: Info },
+  { to: "/support", label: "Support", icon: LifeBuoy },
+  { to: "/privacy", label: "Privacy", icon: ShieldCheck },
 ];
+
+const adminItem = { to: "/admin", label: "Admin", icon: ShieldAlert };
 
 export function BottomNav() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [moreOpen, setMoreOpen] = useState(false);
+  const { data: profile } = useProfile();
+  const items = profile?.is_admin ? [...moreItems, adminItem] : moreItems;
   const periodParam = searchParams.get("period");
   const search = periodParam ? `?period=${periodParam}` : "";
 
-  const isMoreActive = moreItems.some(
+  const isMoreActive = items.some(
     (item) => location.pathname === item.to
   );
 
@@ -98,7 +108,7 @@ export function BottomNav() {
             <SheetTitle>More</SheetTitle>
           </SheetHeader>
           <div className="grid grid-cols-3 gap-2 py-4">
-            {moreItems.map((item) => {
+            {items.map((item) => {
               const isActive = location.pathname === item.to;
               const Icon = item.icon;
               return (

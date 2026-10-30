@@ -81,6 +81,8 @@ public final class SessionStore {
     @ObservationIgnored public var onSessionEnded: (@MainActor () -> Void)?
     /// Set when sign-up created an account but the follow-up sign-in failed; Sign in prefills this email and says the account is ready.
     public private(set) var accountReadyEmail: String?
+    /// Why the person was signed out against their will (the account was disabled); Sign in shows it until the next successful sign-in.
+    public private(set) var signedOutNotice: String?
     /// The Spendoza API, authorized with this store's session.
     @ObservationIgnored public private(set) var api: any SpendozaAPI
 
@@ -89,6 +91,7 @@ public final class SessionStore {
     @ObservationIgnored private let profileCache: ProfileCache?
     /// The signed-in user's id, if a session is stored on this device (readable offline).
     @ObservationIgnored private let sessionUserID: @MainActor () -> String?
+    @ObservationIgnored private let sessionEmail: @MainActor () -> String?
     @ObservationIgnored private let auth: AuthClient?
     /// Clears the store when supabase-swift signs the session out. One per store.
     @ObservationIgnored private(set) var signOutListener: Task<Void, Never>?
@@ -109,6 +112,7 @@ public final class SessionStore {
         self.accountScope = accountScope
         self.profileCache = profileCache
         self.sessionUserID = { auth?.currentSession?.user.id.uuidString }
+        self.sessionEmail = { auth?.currentSession?.user.email }
         self.isConfigured = auth != nil
         self.api = APIClient(baseURL: apiBaseURL, session: urlSession) {
             guard let auth else { return nil }
@@ -123,15 +127,19 @@ public final class SessionStore {
     }
 
     /// Test seam: a store around any API with no Supabase client.
-    public init(api: any SpendozaAPI, userID: String? = nil, accountScope: AccountScope = AccountScope(),
+    public init(api: any SpendozaAPI, userID: String? = nil, email: String? = nil, accountScope: AccountScope = AccountScope(),
                 profileCache: ProfileCache? = nil) {
         self.accountScope = accountScope
         self.profileCache = profileCache
         self.sessionUserID = { userID }
+        self.sessionEmail = { email }
         self.auth = nil
         self.isConfigured = false
         self.api = api
     }
+
+    /// The signed-in user's email, from the stored Supabase session (the profile doesn't carry it).
+    public var email: String? { sessionEmail() }
 
     public var accessToken: String? {
         get async {
@@ -210,6 +218,28 @@ public final class SessionStore {
         clear()
     }
 
+    /// The server says this account was disabled: drop the local session and show `text` on Sign in.
+    public func accountDisabled(_ text: String) async {
+        if let auth { try? await auth.signOut(scope: .local) }
+        clear()
+        signedOutNotice = text
+    }
+
+    /// Replaces the profile after an edit, caching it the way a profile load does. A profile of anyone but the
+    /// current session's user is dropped: a late save landing after sign-out or another sign-in must not overwrite
+    /// the new user's profile or cache.
+    public func apply(_ profile: Profile) {
+        guard profile.id == sessionUserID() else { return }
+        profileCache?.store(profile, token: accountScope.token())
+        self.profile = profile
+    }
+
+    /// The server deleted this account: drop the local session without calling the server again.
+    public func accountDeleted() async {
+        if let auth { try? await auth.signOut(scope: .local) }
+        clear()
+    }
+
     /// Reloads the profile and recomputes the phase. Only an unauthorized answer signs out (the server's 401, or no
     /// usable session at all); being offline falls back to the cached profile, anything else shows a retry.
     public func refresh() async {
@@ -224,11 +254,14 @@ public final class SessionStore {
             self.profile = profile
             loadError = nil
             accountReadyEmail = nil
+            signedOutNotice = nil
             phase = appPhase(session: true, profile: profile)
         } catch where !accountScope.isCurrent(token) {
             return
         } catch APIError.unauthorized {
             await signOut()
+        } catch APIError.accountDisabled(let text) {
+            await accountDisabled(text)
         } catch APIError.offline {
             // Offline launch: the last profile this user had decides the phase, so the cached check-up is reachable.
             if accountScope.isCurrent(token), let cached = profileCache?.load() {

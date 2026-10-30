@@ -5,16 +5,28 @@ import SwiftUI
 struct MainTabs: View {
     let store: SessionStore
     let lock: AppLock
+    @State private var selection = Self.initialTab
+
+    /// `-uiTestStartOnMe` (Debug builds only, with the stub API) opens on Me: with the tab bar hidden for an audit
+    /// there is nothing to tap to get there.
+    private static var initialTab: String {
+        #if DEBUG
+        if UITestStub.isOn, CommandLine.arguments.contains("-uiTestStartOnMe") { return "Me" }
+        #endif
+        return "Health"
+    }
 
     var body: some View {
-        TabView {
-            Tab("Health", systemImage: "gauge.with.needle") {
+        TabView(selection: $selection) {
+            Tab("Health", systemImage: "gauge.with.needle", value: "Health") {
                 HealthView(api: store.api, cache: AppServices.reportCache, snapshots: AppServices.snapshots,
-                           scope: AppServices.accountScope, onSessionEnded: { Task { await store.signOut() } })
+                           scope: AppServices.accountScope, onSessionEnded: { Task { await store.signOut() } },
+                           onAccountDisabled: { text in Task { await store.accountDisabled(text) } })
                     .debugHidingTabBar()
             }
-            Tab("Me", systemImage: "person") {
+            Tab("Me", systemImage: "person", value: "Me") {
                 MeView(store: store, lock: lock)
+                    .debugHidingTabBar()
             }
         }
         .tint(Theme.note)

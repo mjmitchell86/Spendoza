@@ -17,3 +17,7 @@ export const SYSTEM_CATEGORIES = [
   "Subscriptions",
   "Other",
 ] as const;
+
+export const ACCOUNT_DISABLED_CODE = "account_disabled";
+export const ACCOUNT_DISABLED_MESSAGE =
+  "This account has been disabled. Email hello@gravitaz.net if you think this is a mistake.";

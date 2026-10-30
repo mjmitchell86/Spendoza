@@ -66,7 +66,25 @@ const memberProfile = {
 let fromCallCount = 0;
 let currentStep = "upload";
 
+// requireAuth's disabled-account lookup is the first profiles read of every request; it isn't one of the
+// numbered lookups below, so answer it without counting it.
+let authLookupDone = false;
+function resetCalls() {
+  fromCallCount = 0;
+  authLookupDone = false;
+}
+
 function buildFromChain(table: string) {
+  if (table === "profiles" && !authLookupDone) {
+    authLookupDone = true;
+    return {
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        }),
+      }),
+    };
+  }
   fromCallCount++;
 
   // ---- UPLOAD STEP ----
@@ -420,7 +438,7 @@ afterAll(() => {
 describe("Bank Statement Flow: Upload -> Process -> Review -> Attribute", () => {
   it("Step 1: Uploads a bank statement", async () => {
     currentStep = "upload";
-    fromCallCount = 0;
+    resetCalls();
 
     const res = await fetch(`${baseUrl}/api/bank-statements/upload`, {
       method: "POST",
@@ -446,7 +464,7 @@ describe("Bank Statement Flow: Upload -> Process -> Review -> Attribute", () => 
 
   it("Step 2: Lists bank statements to confirm upload", async () => {
     currentStep = "list";
-    fromCallCount = 0;
+    resetCalls();
 
     const res = await fetch(`${baseUrl}/api/bank-statements`, {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
@@ -461,7 +479,7 @@ describe("Bank Statement Flow: Upload -> Process -> Review -> Attribute", () => 
 
   it("Step 3: Gets statement detail with transactions (after processing)", async () => {
     currentStep = "detail";
-    fromCallCount = 0;
+    resetCalls();
 
     const res = await fetch(`${baseUrl}/api/bank-statements/stmt-int-1`, {
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
@@ -480,7 +498,7 @@ describe("Bank Statement Flow: Upload -> Process -> Review -> Attribute", () => 
 
   it("Step 4: Lists transactions separately", async () => {
     // Reset for transaction listing
-    fromCallCount = 0;
+    resetCalls();
     mockFrom.mockImplementation((table: string) => {
       if (table === "transactions") {
         return {
@@ -519,7 +537,7 @@ describe("Bank Statement Flow: Upload -> Process -> Review -> Attribute", () => 
 
   it("Step 5: Attributes a transaction to a household member (shared account)", async () => {
     currentStep = "attribute";
-    fromCallCount = 0;
+    resetCalls();
     mockFrom.mockImplementation((table: string) => buildFromChain(table));
 
     const res = await fetch(`${baseUrl}/api/transactions/txn-int-1/attribute`, {

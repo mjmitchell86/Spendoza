@@ -298,7 +298,7 @@ describe("POST /api/income", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("Validation failed");
-    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockFrom).toHaveBeenCalledTimes(1); // only requireAuth's disabled-account lookup
   });
 });
 

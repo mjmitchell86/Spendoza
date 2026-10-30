@@ -6,7 +6,8 @@ import { describe, it, expect, mock, beforeEach } from "bun:test";
 // ---------------------------------------------------------------------------
 const mockGetUser = mock();
 const mockSingle = mock();
-const mockEq = mock(() => ({ single: mockSingle }));
+const mockMaybeSingle = mock();
+const mockEq = mock(() => ({ single: mockSingle, maybeSingle: mockMaybeSingle }));
 const mockSelect = mock(() => ({ eq: mockEq }));
 const mockFrom = mock(() => ({ select: mockSelect }));
 
@@ -23,6 +24,28 @@ const { createSessionFromToken, getUserTier } = await import("../auth/session");
 describe("createSessionFromToken", () => {
   beforeEach(() => {
     mockGetUser.mockReset();
+    mockMaybeSingle.mockReset();
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+  });
+
+  it("returns null for a disabled account", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "user-123", email: "test@example.com" } },
+      error: null,
+    });
+    mockMaybeSingle.mockResolvedValue({ data: { disabled: true }, error: null });
+
+    expect(await createSessionFromToken("valid-token")).toBeNull();
+  });
+
+  it("returns a context when the profile is not disabled", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "user-123", email: "test@example.com" } },
+      error: null,
+    });
+    mockMaybeSingle.mockResolvedValue({ data: { disabled: false }, error: null });
+
+    expect(await createSessionFromToken("valid-token")).not.toBeNull();
   });
 
   it("returns a ServiceContext for a valid token", async () => {
@@ -66,7 +89,7 @@ describe("getUserTier", () => {
   beforeEach(() => {
     mockSingle.mockReset();
     mockEq.mockReset();
-    mockEq.mockReturnValue({ single: mockSingle });
+    mockEq.mockReturnValue({ single: mockSingle, maybeSingle: mockMaybeSingle });
   });
 
   it("returns the subscription tier from the profile", async () => {

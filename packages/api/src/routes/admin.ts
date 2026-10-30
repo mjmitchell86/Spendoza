@@ -165,7 +165,15 @@ router.get("/users", async (req, res: Response) => {
 // PATCH /api/admin/users/:id — update user (toggle admin, change tier, disable)
 router.patch("/users/:id", async (req, res: Response) => {
   const { id } = req.params;
+  const { user } = req as AuthenticatedRequest;
   const { is_admin, subscription_tier, disabled } = req.body;
+
+  // Prevent self-lockout
+  if (id === user.id && (disabled === true || is_admin === false)) {
+    return res
+      .status(400)
+      .json({ error: "You can't disable or remove admin from your own account" });
+  }
 
   const updates: Record<string, any> = {};
   if (is_admin !== undefined) updates.is_admin = is_admin;

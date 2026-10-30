@@ -329,6 +329,14 @@ describe("PUT /api/transactions/:id/attribute", () => {
     // 5. from("transactions").update({...}).eq("id", ...).select().single() -> updated transaction
     let fromCallCount = 0;
     mockFrom.mockImplementation((table: string) => {
+      // requireAuth's disabled-account lookup comes first; it isn't one of the numbered calls.
+      if (table === "profiles" && fromCallCount === 0) {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }),
+          }),
+        };
+      }
       fromCallCount++;
       if (fromCallCount === 1) {
         // Fetch the transaction
@@ -407,6 +415,14 @@ describe("PUT /api/transactions/:id/attribute", () => {
     // Mock: transaction found, statement is NOT shared
     let fromCallCount = 0;
     mockFrom.mockImplementation((table: string) => {
+      // requireAuth's disabled-account lookup comes first; it isn't one of the numbered calls.
+      if (table === "profiles" && fromCallCount === 0) {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }),
+          }),
+        };
+      }
       fromCallCount++;
       if (fromCallCount === 1) {
         // Fetch the transaction
@@ -467,6 +483,14 @@ describe("POST /api/transactions/bulk-attribute", () => {
     // 5. from("transactions") — update
     let fromCallCount = 0;
     mockFrom.mockImplementation((table: string) => {
+      // requireAuth's disabled-account lookup comes first; it isn't one of the numbered calls.
+      if (table === "profiles" && fromCallCount === 0) {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }),
+          }),
+        };
+      }
       fromCallCount++;
       // Repeating pattern for each attribution in the batch
       const phase = ((fromCallCount - 1) % 5) + 1;

@@ -27,6 +27,11 @@ targets:
       - path: Spendoza
         excludes:
           - Info.plist
+      # Support and Privacy text: one source of truth, shared with the web.
+      - path: ../../packages/shared/src/content/support.json
+        buildPhase: resources
+      - path: ../../packages/shared/src/content/privacy.json
+        buildPhase: resources
     dependencies:
       - package: SpendozaKit
       - target: SpendozaWidgets
