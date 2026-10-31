@@ -53,7 +53,7 @@ extension XCUIApplication {
 
     /// Swipes up until the page stops moving (its first text keeps the same position twice).
     @MainActor
-    func scrollToEnd(maxSwipes: Int = 20) {
+    func scrollToEnd(maxSwipes: Int = 40) {
         func top() -> CGFloat? {
             guard let root = try? snapshot() else { return nil }
             var y: CGFloat?
