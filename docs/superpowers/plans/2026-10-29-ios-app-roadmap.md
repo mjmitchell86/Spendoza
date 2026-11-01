@@ -8,7 +8,7 @@ The spec covers independent subsystems, so it is built as a sequence of plans. E
 |---|---|---|---|
 | 1 | [Backend for the app](2026-10-29-ios-backend.md) | Join a household by code (fixes the web too); monthly report job on the 1st | written |
 | 2 | [App foundation and Health](2026-10-29-ios-foundation-health.md) | Xcode project, theme, sign-in / sign-up / waitlist, Face ID lock, onboarding, Health tab with the full drill-down, widgets, check-up notification, minimal Me (Face ID, sign out), CI and TestFlight | written |
-| 3 | Money | Overview, Transactions, Bills (expenses and income), Categories, Statements (upload / retry / remove) and the share extension, PDF export, "so far" toggle | after Plan 2 |
+| 3 | [Money](2026-11-01-ios-money.md) | Overview, Transactions, Bills (expenses and income), Categories, Statements (upload / retry / remove), opening statements from the share sheet, PDF export, "so far" month; category rename/delete, shared-income edit and refresh-month API fixes | written; in progress |
 | 4 | Plan | Goals (all types, suggestions), Debts (payoff projections), Advisor (threads, follow-ups, history, daily limit); turns on "Ask the advisor" and the Debt part's actions on Health | after Plan 2 |
 | 5a | [Household management and invite codes](2026-10-29-household-management.md) | API + web now (rotate code, rename, delete, invitations that arrive, accept/decline, remove-member fix); app Home tab: create / join / invitations / members / sharing / code / ownership / leave | API + web: ready; app tasks after Plan 2 |
 | 5b | Home — household numbers | Household dial and drill-down to category totals, shared goals and debts, household PDF | after Plans 2 and 5a |
