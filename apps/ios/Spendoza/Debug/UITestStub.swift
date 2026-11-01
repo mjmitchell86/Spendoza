@@ -84,6 +84,19 @@ enum UITestStub {
             bill("e3", "Phone", 62.5, day: 15),
             bill("e4", "Car insurance", 148.2, day: 21, auto: true),
         ]
+        // October's other transactions: pay and groceries, a refund, and one nothing has categorized yet.
+        func tx(_ id: String, _ date: String, _ name: String, _ amount: Double, _ category: String?,
+                type: TransactionType = .debit) -> Transaction {
+            Transaction(id: id, date: date, description: name, amount: amount, type: type, category: category)
+        }
+        api.transactionList += [
+            tx("m1", "2026-10-31", "Acme Corp payroll", 2500, nil, type: .credit),
+            tx("m2", "2026-10-23", "Whole Foods", 142.88, "Groceries"),
+            tx("m3", "2026-10-18", "Landlord rent", 1800, "Housing"),
+            tx("m4", "2026-10-15", "Amazon refund", 34.99, "Personal", type: .credit),
+            tx("m5", "2026-10-09", "Venmo J. Alvarez", 45, nil),
+            tx("m6", "2026-10-01", "Netflix", 15.49, "Entertainment"),
+        ]
         let uploaded = Date(timeIntervalSince1970: 1_792_000_000)
         api.statementScript = [[
             Statement(id: "s1", status: .parsed, fileType: "pdf", bankName: "Chase", accountLabel: "Checking", createdAt: uploaded,

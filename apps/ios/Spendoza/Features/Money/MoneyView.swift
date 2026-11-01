@@ -14,6 +14,7 @@ struct MoneyView: View {
     let onAccountDisabled: @MainActor (String) -> Void
     @State private var model: MoneyModel
     @State private var overview: OverviewModel?
+    @State private var transactions: TransactionsModel?
     @State private var segment = Segment.overview
     @State private var preview: URL?
     @State private var exporting = false
@@ -32,7 +33,12 @@ struct MoneyView: View {
     var body: some View {
         NavigationStack {
             ScrollView { page }
-                .refreshable { await overview?.load() }
+                .refreshable {
+                    switch segment {
+                    case .transactions: await transactions?.load()
+                    default: await overview?.load()
+                    }
+                }
                 .background(Theme.paper.ignoresSafeArea())
                 .navigationTitle("Money")
                 .toolbar(.hidden, for: .navigationBar)
@@ -67,7 +73,9 @@ struct MoneyView: View {
                 switch segment {
                 case .overview:
                     if let overview { OverviewView(model: overview) }
-                case .transactions, .bills:
+                case .transactions:
+                    if let transactions { TransactionsView(model: transactions) }
+                case .bills:
                     EmptyView()
                 }
             }
@@ -81,15 +89,23 @@ struct MoneyView: View {
     /// Builds the Overview for the selected month (a month already shown is only reloaded) and loads it.
     private func showSelectedMonth() async {
         guard let month = model.selected else { return }
-        if let current = overview, current.month == month {
-            await current.load()
+        if let current = overview, current.month == month, let list = transactions {
+            async let overviewLoaded: Void = current.load()
+            async let listLoaded: Void = list.load()
+            _ = await (overviewLoaded, listLoaded)
             return
         }
         let next = OverviewModel(api: api, month: month)
         next.onSessionEnded = onSessionEnded
         next.onAccountDisabled = onAccountDisabled
         overview = next
-        await next.load()
+        let list = TransactionsModel(api: api, month: month)
+        list.onSessionEnded = onSessionEnded
+        list.onAccountDisabled = onAccountDisabled
+        transactions = list
+        async let overviewLoaded: Void = next.load()
+        async let listLoaded: Void = list.load()
+        _ = await (overviewLoaded, listLoaded)
     }
 
     private func export() async {
