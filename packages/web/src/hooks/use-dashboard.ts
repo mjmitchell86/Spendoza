@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { generateReportRequest } from "@/lib/category-report-copy";
 
 export interface DashboardSummary {
   total_income: number;
@@ -116,10 +117,7 @@ export function useGenerateReport() {
   return useMutation({
     // A single-month dashboard refreshes that month; any other period sends no body
     mutationFn: (month?: string) =>
-      apiClient("/reports/generate", {
-        method: "POST",
-        ...(month ? { body: JSON.stringify({ month }) } : {}),
-      }),
+      apiClient("/reports/generate", generateReportRequest(month)),
     onSuccess: () => {
       toast.success("Report generated");
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });

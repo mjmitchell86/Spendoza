@@ -231,6 +231,40 @@ describe("updateCategory", () => {
     expect(mockTxnUpdateEq2).toHaveBeenCalledWith("ai_category", "Groceries");
   });
 
+  it("does not rename when the carry-over fails, and a retry completes both", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
+    mockTxnUpdateEq2.mockImplementationOnce(() => Promise.resolve({ error: { message: "boom" } }));
+
+    const first = await updateCategory(ctx, "cat-1", { name: "Food" });
+
+    expect(first.error).toBeDefined();
+    expect(mockUpdate).not.toHaveBeenCalled();
+
+    const retry = await updateCategory(ctx, "cat-1", { name: "Food" });
+
+    expect(retry.error).toBeNull();
+    expect(mockTxnUpdateEq2).toHaveBeenCalledTimes(2);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("a retry after a failed rename still renames the category", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
+    mockUpdateSingle.mockImplementationOnce(() =>
+      Promise.resolve({ data: null, error: { message: "boom" } })
+    );
+
+    const first = await updateCategory(ctx, "cat-1", { name: "Food" });
+    expect(first.error).toBeDefined();
+
+    const retry = await updateCategory(ctx, "cat-1", { name: "Food" });
+    expect(retry.error).toBeNull();
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
+  });
+
   it("leaves transactions alone when the name is unchanged or not sent", async () => {
     await updateCategory(ctx, "cat-1", { icon: "x" });
     mockSelectSingle.mockImplementation(() =>
@@ -334,5 +368,22 @@ describe("deleteCategory", () => {
     const { error } = await deleteCategory(ctx, "cat-1");
 
     expect(error).toBeDefined();
+  });
+
+  it("returns the error when the final delete fails after the moves, and a retry deletes", async () => {
+    mockDeleteResult.mockImplementationOnce(() =>
+      Promise.resolve({ data: null, error: { message: "DB error" } })
+    );
+
+    const first = await deleteCategory(ctx, "cat-1");
+
+    expect((first.error as any).message).toBe("DB error");
+    // Bills already sit in Other, so nothing is left without a category
+    expect(mockExpUpdate).toHaveBeenCalledWith({ category_id: "cat-other" });
+
+    const retry = await deleteCategory(ctx, "cat-1");
+
+    expect(retry.error).toBeNull();
+    expect(mockDelete).toHaveBeenCalledTimes(2);
   });
 });

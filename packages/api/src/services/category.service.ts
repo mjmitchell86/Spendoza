@@ -52,6 +52,18 @@ export async function updateCategory(
     oldName = current?.name ?? null;
   }
 
+  // Transactions match categories by name (free text). Carry them over first: if this
+  // fails nothing changed, and if the rename below fails a retry still renames the
+  // category (the carry-over then finds nothing left to move).
+  if (oldName !== null && input.name !== undefined && input.name !== oldName) {
+    const { error: carryError } = await supabase
+      .from("transactions")
+      .update({ ai_category: input.name })
+      .eq("user_id", userId)
+      .eq("ai_category", oldName);
+    if (carryError) return { data: null, error: carryError };
+  }
+
   const { data, error } = await supabase
     .from("categories")
     .update(input)
@@ -59,16 +71,6 @@ export async function updateCategory(
     .eq("user_id", userId)
     .select()
     .single();
-
-  // Transactions match categories by name (free text), so a rename carries them along
-  if (data && oldName !== null && input.name !== undefined && input.name !== oldName) {
-    const { error: renameError } = await supabase
-      .from("transactions")
-      .update({ ai_category: input.name })
-      .eq("user_id", userId)
-      .eq("ai_category", oldName);
-    if (renameError) return { data: null, error: renameError };
-  }
 
   return { data: data ?? null, error: error ?? null };
 }
