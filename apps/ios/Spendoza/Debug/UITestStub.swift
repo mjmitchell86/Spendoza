@@ -50,6 +50,7 @@ enum UITestStub {
                                     isAdmin: CommandLine.arguments.contains("-uiTestAdmin"), emailReportsEnabled: updateOffline, householdID: nil,
                                     avatarURL: URL(string: "http://127.0.0.1:9/avatar.jpg"), subscriptionTier: "pro",
                                     createdAt: Date(timeIntervalSince1970: 1_780_000_000))
+        configureMoney(api)
         if let mode = householdMode { configureHousehold(api, mode) }
         // Two of the three invite codes: one available, one used.
         api.inviteCodeList = [
@@ -64,6 +65,31 @@ enum UITestStub {
             api.adminUsersPages = Dictionary(uniqueKeysWithValues: pages.map { ($0.page, $0) })
         }
         return api
+    }
+
+    /// What the Money tab's Overview shows: bills due around the stub's "today" (one already past, which it leaves
+    /// out) and October's two statements.
+    private static func configureMoney(_ api: StubAPI) {
+        func due(_ day: Int) -> Date {
+            Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: day))!
+        }
+        func bill(_ id: String, _ name: String, _ amount: Double, day: Int, auto: Bool = false) -> Expense {
+            Expense(id: id, categoryID: "c4", description: name, amount: amount, frequency: .recurring, interval: .monthly,
+                    nextDueDate: due(day), autoDetected: auto)
+        }
+        api.expenseList = [
+            bill("e0", "Gym", 29, day: 3),
+            bill("e1", "Netflix", 15.49, day: 6, auto: true),
+            bill("e2", "Rent", 1800, day: 8),
+            bill("e3", "Phone", 62.5, day: 15),
+            bill("e4", "Car insurance", 148.2, day: 21, auto: true),
+        ]
+        let uploaded = Date(timeIntervalSince1970: 1_792_000_000)
+        api.statementScript = [[
+            Statement(id: "s1", status: .parsed, fileType: "pdf", bankName: "Chase", accountLabel: "Checking", createdAt: uploaded,
+                      statementMonth: DrillFixture.oct),
+            Statement(id: "s2", status: .parsed, fileType: "csv", bankName: "Amex", createdAt: uploaded, statementMonth: DrillFixture.oct),
+        ]]
     }
 
     /// `-uiTestHousehold head|member|none|invited`: the signed-in user heads a household of three (with an

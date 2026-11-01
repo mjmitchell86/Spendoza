@@ -1,17 +1,18 @@
 import SpendozaKit
 import SwiftUI
 
-/// The signed-in app. Only tabs that exist: Health, Home and Me. Uses the system tab bar (the iOS 26 floating glass capsule).
+/// The signed-in app. Only tabs that exist: Health, Money, Home and Me. Uses the system tab bar (the iOS 26 floating glass capsule).
 struct MainTabs: View {
     let store: SessionStore
     let lock: AppLock
     @State private var selection = Self.initialTab
 
-    /// `-uiTestStartOnMe` (Debug builds only, with the stub API) opens on Me (and `-uiTestHousehold` on Home): with the tab bar hidden for an audit
+    /// `-uiTestStartOnMe` (Debug builds only, with the stub API) opens on Me (`-uiTestStartOnMoney` on Money, and `-uiTestHousehold` on Home): with the tab bar hidden for an audit
     /// there is nothing to tap to get there.
     private static var initialTab: String {
         #if DEBUG
         if UITestStub.isOn, CommandLine.arguments.contains("-uiTestStartOnMe") { return "Me" }
+        if UITestStub.isOn, CommandLine.arguments.contains("-uiTestStartOnMoney") { return "Money" }
         if UITestStub.householdMode != nil { return "Home" }
         #endif
         return "Health"
@@ -23,6 +24,12 @@ struct MainTabs: View {
                 HealthView(api: store.api, cache: AppServices.reportCache, snapshots: AppServices.snapshots,
                            scope: AppServices.accountScope, onSessionEnded: { Task { await store.signOut() } },
                            onAccountDisabled: { text in Task { await store.accountDisabled(text) } })
+                    .debugHidingTabBar()
+            }
+            Tab("Money", systemImage: "banknote", value: "Money") {
+                MoneyView(api: store.api,
+                          onSessionEnded: { Task { await store.signOut() } },
+                          onAccountDisabled: { text in Task { await store.accountDisabled(text) } })
                     .debugHidingTabBar()
             }
             Tab("Home", systemImage: "house", value: "Home") {
