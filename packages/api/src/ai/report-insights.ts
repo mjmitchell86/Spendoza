@@ -46,6 +46,8 @@ export interface FinancialHealthScore {
 export interface ReportData {
   total_income: number;
   total_expenses: number;
+  /** Money moved to savings-class categories (saved, not spent). Absent on reports made before it existed. */
+  total_saved?: number;
   savings_rate: number;
   expense_to_income_ratio: number;
   by_category: Array<{ category: string; amount: number; percentage: number }>;

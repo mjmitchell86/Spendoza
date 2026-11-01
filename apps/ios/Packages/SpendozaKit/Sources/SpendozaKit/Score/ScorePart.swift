@@ -31,6 +31,8 @@ public enum ScorePart: String, CaseIterable, Sendable, Hashable {
     /// `value` is as the API sends it: a percentage, months (emergency fund), or a 0-1 ratio (debt vs. income).
     public func rule(value: Double) -> String {
         switch self {
+        case .savingsRate where value < 0:
+            "Full points when you save at least 20% of your income. This month you spent \(Self.percent(-value)) more than you earned."
         case .savingsRate:
             "Full points when you save at least 20% of your income. This month came in at \(Self.percent(value))."
         case .needs:

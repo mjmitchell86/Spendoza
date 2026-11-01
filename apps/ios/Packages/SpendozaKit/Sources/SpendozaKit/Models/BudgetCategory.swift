@@ -1,7 +1,14 @@
 import Foundation
 
 public enum BudgetClass: String, Decodable, Sendable {
-    case need, want, savings, other
+    /// `transfer`: money moving between the person's own accounts, neither income nor spending.
+    case need, want, savings, transfer, other
+
+    /// A class this version doesn't know yet reads as `other`, so a new server value never breaks the category list.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = BudgetClass(rawValue: raw) ?? .other
+    }
 }
 
 /// A row of `GET /api/categories`.

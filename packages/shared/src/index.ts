@@ -4,3 +4,4 @@ export * from "./schemas/index";
 export * from "./constants";
 export * from "./household-code";
 export * from "./legal";
+export * from "./allocation-scale";

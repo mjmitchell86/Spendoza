@@ -6,6 +6,7 @@ import {
 } from "../services/report.service";
 import { buildReportPdf } from "../services/pdf-report.service";
 import type { ReportData } from "../ai/report-insights";
+import { allocationFor, loadClassOf, summarizeFlows } from "../lib/money-flows";
 import {
   generateQuarterlyInsights,
   generateAnnualInsights,
@@ -443,21 +444,23 @@ export async function generateHouseholdPdfForHousehold(
     .toISOString()
     .slice(0, 10);
 
+  const memberClassOf = await loadClassOf(
+    await headFirst(householdId, (members ?? []).map((m) => m.id)),
+    supabaseAdmin
+  );
   const memberContributions = await Promise.all(
     (members ?? []).map(async (member) => {
       const { data: txns } = await db
         .from("transactions")
-        .select("type, amount")
+        .select("type, amount, ai_category")
         .eq("user_id", member.id)
         .gte("date", monthStart)
         .lte("date", monthEnd);
 
-      let income = 0;
-      let expenses = 0;
-      for (const t of txns ?? []) {
-        if (t.type === "credit") income += Number(t.amount);
-        else if (t.type === "debit") expenses += Number(t.amount);
-      }
+      // Same rules as the household totals: savings is saved, transfers count as neither
+      const flows = summarizeFlows(txns ?? [], memberClassOf);
+      const income = flows.income;
+      const expenses = flows.spending;
 
       return {
         display_name: member.display_name ?? "Unknown",
@@ -511,6 +514,20 @@ function formatRangeLabel(fromDate: string, toDate: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: member ids with the household head first (whose categories win on a shared name)
+// ---------------------------------------------------------------------------
+async function headFirst(householdId: string, memberIds: string[]): Promise<string[]> {
+  const { data: household } = await supabaseAdmin
+    .from("households")
+    .select("head_of_household_id")
+    .eq("id", householdId)
+    .single();
+  const headId = household?.head_of_household_id as string | undefined;
+  if (!headId || !memberIds.includes(headId)) return memberIds;
+  return [headId, ...memberIds.filter((id) => id !== headId)];
+}
+
+// ---------------------------------------------------------------------------
 // Helper: aggregate transactions into ReportData shape for a date range
 // ---------------------------------------------------------------------------
 async function aggregateTransactionsForRange(
@@ -529,36 +546,19 @@ async function aggregateTransactionsForRange(
   if (txnError) {
     throw new Error(`Transaction query failed: ${txnError.message}`);
   }
-  let totalIncome = 0;
-  let totalExpenses = 0;
-  const categoryMap = new Map<string, number>();
-
-  for (const t of transactions ?? []) {
-    const amount = Number(t.amount);
-    if (t.type === "credit") {
-      totalIncome += amount;
-    } else if (t.type === "debit") {
-      totalExpenses += amount;
-      const catName = (t as any).ai_category ?? "Uncategorized";
-      categoryMap.set(catName, (categoryMap.get(catName) ?? 0) + amount);
-    }
-  }
-
-  const byCategory = Array.from(categoryMap.entries())
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
-
-  const savingsRate =
-    totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
+  // Savings-class categories are saved (not spent); transfer-class ones are neither income nor spending.
+  // Service role: a household's members can't see each other's categories under RLS.
+  const classOf = await loadClassOf(userIds, supabaseAdmin);
+  const flows = summarizeFlows(transactions ?? [], classOf);
+  const totalIncome = flows.income;
+  const totalExpenses = flows.spending;
+  const byCategory = flows.byCategory;
 
   return {
     total_income: totalIncome,
     total_expenses: totalExpenses,
-    savings_rate: Math.round(savingsRate * 10) / 10,
+    total_saved: flows.saved,
+    savings_rate: Math.round(flows.savingsRate * 10) / 10,
     expense_to_income_ratio:
       totalIncome > 0
         ? Math.round((totalExpenses / totalIncome) * 1000) / 10
@@ -566,6 +566,7 @@ async function aggregateTransactionsForRange(
     by_category: byCategory,
     top_categories: byCategory.slice(0, 5).map((c) => c.category),
     month_over_month: null,
+    allocation: allocationFor(byCategory, classOf, totalIncome),
   };
 }
 
@@ -726,7 +727,8 @@ export async function generateHouseholdPdfForRange(
     .select("id, display_name")
     .eq("household_id", householdId);
 
-  const memberIds = (members ?? []).map((m) => m.id);
+  // The head's categories win when members share a category name, like the household report
+  const memberIds = await headFirst(householdId, (members ?? []).map((m) => m.id));
 
   if (memberIds.length === 0) return null;
 
@@ -828,21 +830,20 @@ export async function generateHouseholdPdfForRange(
   );
 
   // Compute member contributions for the date range
+  const memberClassOf = await loadClassOf(memberIds, supabaseAdmin);
   const memberContributions = await Promise.all(
     (members ?? []).map(async (member) => {
       const { data: txns } = await db
         .from("transactions")
-        .select("type, amount")
+        .select("type, amount, ai_category")
         .eq("user_id", member.id)
         .gte("date", fromDate)
         .lte("date", toDate);
 
-      let income = 0;
-      let expenses = 0;
-      for (const t of txns ?? []) {
-        if (t.type === "credit") income += Number(t.amount);
-        else if (t.type === "debit") expenses += Number(t.amount);
-      }
+      // Same rules as the household totals: savings is saved, transfers count as neither
+      const flows = summarizeFlows(txns ?? [], memberClassOf);
+      const income = flows.income;
+      const expenses = flows.spending;
 
       return {
         display_name: member.display_name ?? "Unknown",

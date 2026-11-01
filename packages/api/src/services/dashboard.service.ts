@@ -1,4 +1,5 @@
 import type { ServiceContext } from "./context";
+import { loadClassOf, summarizeFlows, type ClassOf } from "../lib/money-flows";
 
 // ---------------------------------------------------------------------------
 // Helper: derive date range for a month string (YYYY-MM-01)
@@ -25,43 +26,21 @@ export function currentMonthStr(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: aggregate transaction arrays into dashboard shape
+// Helper: aggregate transaction arrays into dashboard shape. `classOf` says how each category counts:
+// savings-class categories are saved (not spent), transfer-class ones are neither income nor spending.
 // ---------------------------------------------------------------------------
-export function aggregateTransactions(txns: any[]) {
-  const totalCredits = txns
-    .filter((t: any) => t.type === "credit")
-    .reduce((sum: number, t: any) => sum + (t.amount ?? 0), 0);
-
-  const totalDebits = txns
-    .filter((t: any) => t.type === "debit")
-    .reduce((sum: number, t: any) => sum + (t.amount ?? 0), 0);
-
-  // Group debits by category
-  const categoryMap = new Map<string, number>();
-  for (const t of txns.filter((t: any) => t.type === "debit")) {
-    const cat = t.ai_category ?? "Uncategorized";
-    categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
-  }
-
-  const byCategory = Array.from(categoryMap.entries())
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: totalDebits > 0 ? (amount / totalDebits) * 100 : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
+export function aggregateTransactions(txns: any[], classOf: ClassOf = () => undefined) {
+  const flows = summarizeFlows(txns, classOf);
 
   return {
     summary: {
-      total_income: totalCredits,
-      total_expenses: totalDebits,
-      savings_rate:
-        totalCredits > 0
-          ? ((totalCredits - totalDebits) / totalCredits) * 100
-          : 0,
-      net: totalCredits - totalDebits,
+      total_income: flows.income,
+      total_expenses: flows.spending,
+      total_saved: flows.saved,
+      savings_rate: flows.savingsRate,
+      net: flows.income - flows.spending,
     },
-    by_category: byCategory,
+    by_category: flows.byCategory,
     trends: { income_change: 0, expense_change: 0 },
     insights: null,
   };
@@ -98,6 +77,7 @@ export function toDashboardResponse(report: any) {
     summary: {
       total_income: rd.total_income,
       total_expenses: rd.total_expenses,
+      total_saved: rd.total_saved ?? 0,
       savings_rate: rd.savings_rate,
       net: rd.total_income - rd.total_expenses,
     },
@@ -169,7 +149,7 @@ async function computeFromTransactions(
     .gte("date", startDate)
     .lt("date", nextMonth);
 
-  return aggregateTransactions(transactions ?? []);
+  return aggregateTransactions(transactions ?? [], await loadClassOf([userId], db));
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +173,23 @@ async function computeFromTransactionsRange(
     ascending: false,
   });
 
-  return aggregateTransactions(transactions ?? []);
+  return aggregateTransactions(transactions ?? [], await loadClassOf([userId], db));
+}
+
+// ---------------------------------------------------------------------------
+// Helper: how a household's categories count — the head's categories first, like the household report
+// ---------------------------------------------------------------------------
+async function householdClassOf(ctx: ServiceContext, householdId: string, memberIds: string[]) {
+  const { data: household } = await ctx.supabaseAdmin
+    .from("households")
+    .select("head_of_household_id")
+    .eq("id", householdId)
+    .single();
+  const headId = household?.head_of_household_id as string | undefined;
+  return loadClassOf(
+    [...(headId ? [headId] : []), ...memberIds.filter((id) => id !== headId)],
+    ctx.supabaseAdmin
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,9 +207,8 @@ async function computeHouseholdFromTransactions(
     .select("id, display_name, income_sharing_mode, expense_sharing_mode")
     .eq("household_id", householdId);
 
-  let totalIncome = 0;
-  let totalExpenses = 0;
-  const categoryMap = new Map<string, number>();
+  const classOf = await householdClassOf(ctx, householdId, (members ?? []).map((m: any) => m.id));
+  const shared: any[] = [];
   const memberContributions: Array<{
     user_id: string;
     display_name: string;
@@ -233,49 +228,30 @@ async function computeHouseholdFromTransactions(
       .gte("date", startDate)
       .lt("date", nextMonth);
 
-    let memberIncome = 0;
-    let memberExpenses = 0;
-
-    for (const t of transactions ?? []) {
-      if (t.type === "credit" && includeIncome) {
-        memberIncome += t.amount ?? 0;
-      }
-      if (t.type === "debit" && includeExpenses) {
-        memberExpenses += t.amount ?? 0;
-        const cat = t.ai_category ?? "Uncategorized";
-        categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
-      }
-    }
-
-    totalIncome += memberIncome;
-    totalExpenses += memberExpenses;
+    const memberShared = (transactions ?? []).filter(
+      (t: any) => (t.type === "credit" && includeIncome) || (t.type === "debit" && includeExpenses)
+    );
+    const memberFlows = summarizeFlows(memberShared, classOf);
+    shared.push(...memberShared);
     memberContributions.push({
       user_id: member.id,
       display_name: member.display_name ?? "Member",
-      income: memberIncome,
-      expenses: memberExpenses,
+      income: memberFlows.income,
+      expenses: memberFlows.spending,
     });
   }
 
-  const byCategory = Array.from(categoryMap.entries())
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
+  const flows = summarizeFlows(shared, classOf);
 
   return {
     summary: {
-      total_income: totalIncome,
-      total_expenses: totalExpenses,
-      savings_rate:
-        totalIncome > 0
-          ? ((totalIncome - totalExpenses) / totalIncome) * 100
-          : 0,
-      net: totalIncome - totalExpenses,
+      total_income: flows.income,
+      total_expenses: flows.spending,
+      total_saved: flows.saved,
+      savings_rate: flows.savingsRate,
+      net: flows.income - flows.spending,
     },
-    by_category: byCategory,
+    by_category: flows.byCategory,
     trends: { income_change: 0, expense_change: 0 },
     insights: null as string | null,
     member_contributions: memberContributions,
@@ -296,9 +272,8 @@ async function computeHouseholdFromTransactionsRange(
     .select("id, display_name, income_sharing_mode, expense_sharing_mode")
     .eq("household_id", householdId);
 
-  let totalIncome = 0;
-  let totalExpenses = 0;
-  const categoryMap = new Map<string, number>();
+  const classOf = await householdClassOf(ctx, householdId, (members ?? []).map((m: any) => m.id));
+  const shared: any[] = [];
   const memberContributions: Array<{
     user_id: string;
     display_name: string;
@@ -321,49 +296,30 @@ async function computeHouseholdFromTransactionsRange(
 
     const { data: transactions } = await query;
 
-    let memberIncome = 0;
-    let memberExpenses = 0;
-
-    for (const t of transactions ?? []) {
-      if (t.type === "credit" && includeIncome) {
-        memberIncome += t.amount ?? 0;
-      }
-      if (t.type === "debit" && includeExpenses) {
-        memberExpenses += t.amount ?? 0;
-        const cat = t.ai_category ?? "Uncategorized";
-        categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
-      }
-    }
-
-    totalIncome += memberIncome;
-    totalExpenses += memberExpenses;
+    const memberShared = (transactions ?? []).filter(
+      (t: any) => (t.type === "credit" && includeIncome) || (t.type === "debit" && includeExpenses)
+    );
+    const memberFlows = summarizeFlows(memberShared, classOf);
+    shared.push(...memberShared);
     memberContributions.push({
       user_id: member.id,
       display_name: member.display_name ?? "Member",
-      income: memberIncome,
-      expenses: memberExpenses,
+      income: memberFlows.income,
+      expenses: memberFlows.spending,
     });
   }
 
-  const byCategory = Array.from(categoryMap.entries())
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
+  const flows = summarizeFlows(shared, classOf);
 
   return {
     summary: {
-      total_income: totalIncome,
-      total_expenses: totalExpenses,
-      savings_rate:
-        totalIncome > 0
-          ? ((totalIncome - totalExpenses) / totalIncome) * 100
-          : 0,
-      net: totalIncome - totalExpenses,
+      total_income: flows.income,
+      total_expenses: flows.spending,
+      total_saved: flows.saved,
+      savings_rate: flows.savingsRate,
+      net: flows.income - flows.spending,
     },
-    by_category: byCategory,
+    by_category: flows.byCategory,
     trends: { income_change: 0, expense_change: 0 },
     insights: null as string | null,
     member_contributions: memberContributions,
@@ -407,8 +363,9 @@ export async function getPersonalDashboardForMonth(
     .eq("report_month", month)
     .maybeSingle();
 
-  // Use report if it has meaningful data
-  if (report) {
+  // Use the report if it has meaningful data and is up to date (an out-of-date one is rebuilt when the
+  // report itself is opened; until then the live numbers are the right ones)
+  if (report && !report.has_new_data) {
     const rd = report.report_data as any;
     if (rd.total_income > 0 || rd.total_expenses > 0) {
       return {
@@ -550,8 +507,9 @@ export async function getHouseholdDashboardForMonth(
     .eq("report_month", month)
     .maybeSingle();
 
-  // Use report if it has meaningful data
-  if (report) {
+  // Use the report if it has meaningful data and is up to date (an out-of-date one is rebuilt when the
+  // report itself is opened; until then the live numbers are the right ones)
+  if (report && !report.has_new_data) {
     const rd = report.report_data as any;
     if (rd.total_income > 0 || rd.total_expenses > 0) {
       return {

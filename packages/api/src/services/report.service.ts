@@ -1,9 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "../lib/supabase";
 import { generateInsights, type ReportData } from "../ai/report-insights";
-import type { AllocationBreakdown, DebtSummary } from "../ai/report-insights";
+import type { DebtSummary } from "../ai/report-insights";
 import { calculateHealthScore } from "./health-score.service";
 import type { ServiceContext } from "./context";
+import { allocationFor, loadClassOf, summarizeFlows } from "../lib/money-flows";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -19,51 +20,10 @@ function toDateStr(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** Compute percentage, safe against division by zero. */
-function pct(part: number, whole: number): number {
-  if (whole === 0) return 0;
-  return Math.round((part / whole) * 10000) / 100; // 2-decimal places
-}
 
 // ---------------------------------------------------------------------------
 // Allocation, Debt & Health-Score helpers
 // ---------------------------------------------------------------------------
-
-async function computeAllocation(
-  byCategory: Array<{ category: string; amount: number; percentage: number }>,
-  userId: string,
-  db: SupabaseClient = supabaseAdmin
-): Promise<AllocationBreakdown> {
-  const { data: categories } = await db
-    .from("categories")
-    .select("name, budget_class")
-    .eq("user_id", userId);
-
-  const classMap = new Map<string, string>();
-  for (const cat of categories ?? []) {
-    classMap.set(cat.name.toLowerCase(), cat.budget_class);
-  }
-
-  const totals = { need: 0, want: 0, savings: 0, other: 0 };
-  let totalAmount = 0;
-
-  for (const cat of byCategory) {
-    const budgetClass = classMap.get(cat.category.toLowerCase()) ?? "other";
-    totals[budgetClass as keyof typeof totals] += cat.amount;
-    totalAmount += cat.amount;
-  }
-
-  const pctAlloc = (amt: number) =>
-    totalAmount > 0 ? Math.round((amt / totalAmount) * 1000) / 10 : 0;
-
-  return {
-    needs: { amount: totals.need, percentage: pctAlloc(totals.need) },
-    wants: { amount: totals.want, percentage: pctAlloc(totals.want) },
-    savings: { amount: totals.savings, percentage: pctAlloc(totals.savings) },
-    unclassified: { amount: totals.other, percentage: pctAlloc(totals.other) },
-    benchmark: { needs: 50, wants: 30, savings: 20 },
-  };
-}
 
 async function computeDebtSummary(
   entityType: "user" | "household",
@@ -189,36 +149,18 @@ export async function generateUserReport(
     return null;
   }
 
-  let totalIncome: number;
-  let totalExpenses: number;
-  let byCategory: Array<{ category: string; amount: number; percentage: number }>;
-
-  // Use bank transactions only — same data source the dashboard displays
-  totalIncome = txns
-    .filter((t) => t.type === "credit")
-    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
-  totalExpenses = txns
-    .filter((t) => t.type === "debit")
-    .reduce((sum, t) => sum + (t.amount ?? 0), 0);
-
-  const categoryMap = new Map<string, number>();
-  for (const t of txns.filter((t) => t.type === "debit")) {
-    const cat = t.ai_category ?? "Uncategorized";
-    categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
-  }
-
-  byCategory = Array.from(categoryMap.entries())
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: pct(amount, totalExpenses),
-    }))
-    .sort((a, b) => b.amount - a.amount);
+  // Bank transactions only — the same data source the dashboard displays. Money moved to savings counts
+  // as saved, transfers between the person's own accounts count as neither income nor spending.
+  const classOf = await loadClassOf([userId], db);
+  const flows = summarizeFlows(txns, classOf);
+  const totalIncome = flows.income;
+  const totalExpenses = flows.spending;
+  const byCategory = flows.byCategory;
 
   const topCategories = byCategory.slice(0, 5).map((c) => c.category);
 
   // 5. Compute savings rate and expense-to-income ratio
-  const savingsRate = totalIncome > 0 ? pct(totalIncome - totalExpenses, totalIncome) : 0;
+  const savingsRate = flows.savingsRate;
   const expenseToIncomeRatio =
     totalIncome > 0
       ? Math.round((totalExpenses / totalIncome) * 100) / 100
@@ -267,10 +209,11 @@ export async function generateUserReport(
     by_category: byCategory,
     top_categories: topCategories,
     month_over_month: monthOverMonth,
+    total_saved: flows.saved,
   };
 
-  // Compute allocation breakdown
-  const allocation = await computeAllocation(reportData.by_category, userId, db);
+  // Needs, wants and savings as a share of income
+  const allocation = allocationFor(reportData.by_category, classOf, totalIncome);
   reportData.allocation = allocation;
 
   // Compute debt summary
@@ -395,10 +338,8 @@ export async function generateHouseholdReport(
     Date.UTC(monthStart.getFullYear(), monthStart.getMonth() + 1, 1)
   );
 
-  let totalIncome = 0;
-  let totalExpenses = 0;
-  let sharedTransactionCount = 0;
-  const categoryMap = new Map<string, number>();
+  // What each member shares: their income, their spending, or both
+  const shared: Array<{ type: string; amount: number | null; ai_category: string | null }> = [];
   for (const member of members ?? []) {
     const includeIncome = member.income_sharing_mode === "all";
     const includeExpenses = member.expense_sharing_mode === "all";
@@ -411,39 +352,39 @@ export async function generateHouseholdReport(
       .gte("date", toDateStr(monthStart))
       .lt("date", toDateStr(nextMonthDate));
 
-    const txns = transactions ?? [];
-    for (const t of txns) {
-      if (t.type === "credit" && includeIncome) {
-        totalIncome += t.amount ?? 0;
-        sharedTransactionCount++;
-      }
-      if (t.type === "debit" && includeExpenses) {
-        totalExpenses += t.amount ?? 0;
-        const cat = t.ai_category ?? "Uncategorized";
-        categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + (t.amount ?? 0));
-        sharedTransactionCount++;
-      }
+    for (const t of transactions ?? []) {
+      if ((t.type === "credit" && includeIncome) || (t.type === "debit" && includeExpenses)) shared.push(t);
     }
   }
 
-  if (options.skipIfEmpty && !existingReport && sharedTransactionCount === 0) {
+  if (options.skipIfEmpty && !existingReport && shared.length === 0) {
     return null;
   }
 
-  // 4. Build category breakdown
-  const byCategory = Array.from(categoryMap.entries())
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: pct(amount, totalExpenses),
-    }))
-    .sort((a, b) => b.amount - a.amount);
+  // Categories are classified by the head's categories first, then other members' (same names: head wins)
+  const { data: household } = await db
+    .from("households")
+    .select("head_of_household_id")
+    .eq("id", householdId)
+    .single();
+  const headId = household?.head_of_household_id as string | undefined;
+  // Service role: members' categories aren't visible to each other under RLS, and the totals must not
+  // depend on who opened the report.
+  const classOf = await loadClassOf(
+    [...(headId ? [headId] : []), ...memberIds.filter((id: string) => id !== headId)],
+    supabaseAdmin
+  );
+
+  // 4. Build totals and the category breakdown
+  const flows = summarizeFlows(shared, classOf);
+  const totalIncome = flows.income;
+  const totalExpenses = flows.spending;
+  const byCategory = flows.byCategory;
 
   const topCategories = byCategory.slice(0, 5).map((c) => c.category);
 
   // 5. Compute ratios
-  const savingsRate =
-    totalIncome > 0 ? pct(totalIncome - totalExpenses, totalIncome) : 0;
+  const savingsRate = flows.savingsRate;
   const expenseToIncomeRatio =
     totalIncome > 0
       ? Math.round((totalExpenses / totalIncome) * 100) / 100
@@ -494,18 +435,8 @@ export async function generateHouseholdReport(
     month_over_month: monthOverMonth,
   };
 
-  // Use head of household's categories for allocation classification
-  const { data: household } = await db
-    .from("households")
-    .select("head_of_household_id")
-    .eq("id", householdId)
-    .single();
-
-  const allocation = await computeAllocation(
-    reportData.by_category,
-    household!.head_of_household_id,
-    db
-  );
+  reportData.total_saved = flows.saved;
+  const allocation = allocationFor(reportData.by_category, classOf, totalIncome);
   reportData.allocation = allocation;
 
   const debtSummary = await computeDebtSummary("household", householdId, reportData.total_income, db);

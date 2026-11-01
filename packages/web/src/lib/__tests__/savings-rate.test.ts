@@ -3,6 +3,7 @@ import {
   formatSavingsRate,
   getSavingsRateTier,
   savingsRateArcFraction,
+  overspendNote,
 } from "../savings-rate";
 
 // The API returns summary.savings_rate as a percentage (0-100): stored
@@ -53,5 +54,17 @@ describe("savingsRateArcFraction", () => {
   it("clamps out-of-range values", () => {
     expect(savingsRateArcFraction(-30)).toBe(0);
     expect(savingsRateArcFraction(150)).toBe(1);
+  });
+});
+
+describe("overspendNote", () => {
+  it("says how much more was spent than earned when the rate is negative", () => {
+    expect(overspendNote(-12)).toBe("You spent 12% more than you earned");
+    expect(overspendNote(-12.46)).toBe("You spent 12.5% more than you earned");
+  });
+
+  it("is null when nothing was overspent", () => {
+    expect(overspendNote(0)).toBeNull();
+    expect(overspendNote(8.2)).toBeNull();
   });
 });
