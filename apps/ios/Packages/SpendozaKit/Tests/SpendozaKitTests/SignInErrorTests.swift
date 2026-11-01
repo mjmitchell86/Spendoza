@@ -31,7 +31,7 @@ import Testing
 
     @Test func accountCreatedButSignInFailsReportsAccountReady() async {
         do {
-            try await completeSignUp(email: "a@b.co", createAccount: {}, signIn: { throw Boom() })
+            _ = try await completeSignUp(email: "a@b.co", createAccount: {}, signIn: { throw Boom() })
             Issue.record("expected an error")
         } catch let error as AccountReadyError {
             #expect(error.email == "a@b.co")
@@ -41,10 +41,15 @@ import Testing
         }
     }
 
+    @Test func successReturnsWhatTheAccountCreationReported() async throws {
+        let result = try await completeSignUp(email: "a@b.co", createAccount: { SignUpResult(joinedHousehold: true) }, signIn: {})
+        #expect(result == SignUpResult(joinedHousehold: true))
+    }
+
     @Test func createFailureIsPassedThroughAndSkipsSignIn() async {
         let signedIn = Flag()
         do {
-            try await completeSignUp(email: "a@b.co", createAccount: { throw APIError.message("Invalid invite code") },
+            _ = try await completeSignUp(email: "a@b.co", createAccount: { throw APIError.message("Invalid invite code") },
                                      signIn: { signedIn.set() })
             Issue.record("expected an error")
         } catch {

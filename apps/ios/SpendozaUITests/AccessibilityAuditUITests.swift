@@ -25,6 +25,69 @@ final class AccessibilityAuditUITests: XCTestCase {
     @MainActor func testAdminUserLight() throws { try audit(.adminUser, .light) }
     @MainActor func testAdminUserDark() throws { try audit(.adminUser, .dark) }
 
+    @MainActor func testHouseholdHeadLight() throws { try auditHousehold("head", .light) }
+    @MainActor func testHouseholdHeadDark() throws { try auditHousehold("head", .dark) }
+    @MainActor func testHouseholdMemberLight() throws { try auditHousehold("member", .light) }
+    @MainActor func testHouseholdMemberDark() throws { try auditHousehold("member", .dark) }
+    @MainActor func testNoHouseholdWithInvitationLight() throws { try auditNoHousehold(.light) }
+    @MainActor func testNoHouseholdWithInvitationDark() throws { try auditNoHousehold(.dark) }
+
+    /// Home without a household, with one invitation (Accept and Decline disabled until a code is typed): audited
+    /// from its top at the largest text size, then walked to its end for screenshots.
+    @MainActor
+    private func auditNoHousehold(_ appearance: Launch.Appearance) throws {
+        let app = Launch.stubbed(appearance: appearance, textSize: Launch.largestText, hideTabBar: true, household: "invited")
+        XCTAssertTrue(app.staticTexts["My invitations"].waitForExistence(timeout: 15), "Invitations didn't load")
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        let brightness = app.backgroundBrightness()
+        switch appearance {
+        case .light: XCTAssertGreaterThan(brightness, 0.8, "Expected light paper")
+        case .dark: XCTAssertLessThan(brightness, 0.3, "Expected dark paper")
+        }
+        let join = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Join a household")).firstMatch
+        XCTAssertTrue(join.exists, "Join isn't in the hierarchy")
+        try app.performAccessibilityAudit()
+        var pages = 0
+        attach(app, "final-nohousehold-\(appearance.rawValue)-p\(pages)")
+        while pages < 8 {
+            let before = app.firstTextTop()
+            app.swipeUp(velocity: .slow)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+            if app.firstTextTop() == before { break }
+            pages += 1
+            attach(app, "final-nohousehold-\(appearance.rawValue)-p\(pages)")
+        }
+    }
+
+    /// The household screen, as the head or as a member: audited from its top at the largest text size (tab bar
+    /// hidden), then walked page by page to its end for screenshots.
+    @MainActor
+    private func auditHousehold(_ mode: String, _ appearance: Launch.Appearance) throws {
+        let app = Launch.stubbed(appearance: appearance, textSize: Launch.largestText, hideTabBar: true, household: mode)
+        XCTAssertTrue(app.staticTexts["Members"].waitForExistence(timeout: 15), "Household didn't load")
+        // Sharing preferences load after the household: wait for the last control above Leave.
+        XCTAssertTrue(app.buttons["Save preferences"].waitForExistence(timeout: 10), "Sharing preferences didn't load")
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        let brightness = app.backgroundBrightness()
+        switch appearance {
+        case .light: XCTAssertGreaterThan(brightness, 0.8, "Expected light paper")
+        case .dark: XCTAssertLessThan(brightness, 0.3, "Expected dark paper")
+        }
+        let leave = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Leave household")).firstMatch
+        XCTAssertTrue(leave.exists, "Leave isn't in the hierarchy")
+        try app.performAccessibilityAudit()
+        var pages = 0
+        attach(app, "task13-household-\(mode)-\(appearance.rawValue)-p\(pages)")
+        while pages < 14 {
+            let before = app.firstTextTop()
+            app.swipeUp(velocity: .slow)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+            if app.firstTextTop() == before { break }
+            pages += 1
+            attach(app, "task13-household-\(mode)-\(appearance.rawValue)-p\(pages)")
+        }
+    }
+
     /// A Me screen, audited from its top at the largest text size (the tab bar hidden, as for Health), then walked
     /// to its end for screenshots.
     @MainActor

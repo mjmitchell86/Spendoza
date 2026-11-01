@@ -60,7 +60,7 @@ struct DeleteAccountSheet: View {
 }
 
 /// Filled oxblood button for the one irreversible action.
-private struct DestructiveButtonStyle: ButtonStyle {
+struct DestructiveButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {

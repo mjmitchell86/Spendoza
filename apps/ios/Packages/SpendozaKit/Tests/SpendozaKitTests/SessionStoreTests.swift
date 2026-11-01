@@ -140,7 +140,7 @@ private struct FailingAPI: SpendozaAPI {
     func statements() async throws -> [Statement] { [] }
     func reprocessStatement(id: String) async throws {}
     func removeStatement(id: String) async throws {}
-    func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws {}
+    func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws -> SignUpResult { SignUpResult() }
     func joinWaitlist(name: String, email: String) async throws {}
 }
 

@@ -47,3 +47,24 @@ extension AdminAPI {
     func adminSendQuarterlyReport(userID: String) async throws {}
     func adminSendAnnualReport(userID: String) async throws {}
 }
+
+/// Likewise the household calls.
+extension HouseholdAPI {
+    func household() async throws -> Household? { nil }
+    func createHousehold(name: String) async throws -> String? { nil }
+    func joinHousehold(code: String) async throws {}
+    func rotateInviteCode() async throws -> String { throw APIError.offline }
+    func renameHousehold(_ name: String) async throws {}
+    func deleteHousehold(confirmName: String) async throws {}
+    func invite(email: String) async throws {}
+    func pendingInvitations() async throws -> [PendingInvitation] { [] }
+    func revokeInvitation(id: String) async throws {}
+    func myInvitations() async throws -> [MyInvitation] { [] }
+    func acceptInvitation(id: String, code: String) async throws {}
+    func declineInvitation(id: String, code: String) async throws {}
+    func removeMember(id: String) async throws {}
+    func makeHead(id: String) async throws {}
+    func updateSharing(_ change: SharingChange) async throws {}
+    func setCategoryShared(id: String, shared: Bool) async throws {}
+    func leaveHousehold() async throws {}
+}

@@ -50,6 +50,7 @@ enum UITestStub {
                                     isAdmin: CommandLine.arguments.contains("-uiTestAdmin"), emailReportsEnabled: updateOffline, householdID: nil,
                                     avatarURL: URL(string: "http://127.0.0.1:9/avatar.jpg"), subscriptionTier: "pro",
                                     createdAt: Date(timeIntervalSince1970: 1_780_000_000))
+        if let mode = householdMode { configureHousehold(api, mode) }
         // Two of the three invite codes: one available, one used.
         api.inviteCodeList = [
             InviteCode(id: "i1", code: "SPEND-7K2Q", createdAt: Date(timeIntervalSince1970: 1_790_000_000)),
@@ -63,6 +64,60 @@ enum UITestStub {
             api.adminUsersPages = Dictionary(uniqueKeysWithValues: pages.map { ($0.page, $0) })
         }
         return api
+    }
+
+    /// `-uiTestHousehold head|member|none|invited`: the signed-in user heads a household of three (with an
+    /// invitation waiting), is a member of one, is in none, or is in none with an invitation of their own. The household actions change what the stub answers next.
+    static var householdMode: String? {
+        let arguments = CommandLine.arguments
+        guard isOn, let index = arguments.firstIndex(of: "-uiTestHousehold"), arguments.indices.contains(index + 1) else { return nil }
+        return arguments[index + 1]
+    }
+
+    private static func configureHousehold(_ api: StubAPI, _ mode: String) {
+        api.simulatesHousehold = true
+        let me = "ui-test-user"
+        let sent = Date(timeIntervalSince1970: 1_793_000_000)
+        switch mode {
+        case "head":
+            api.householdResult = .success(Household(id: "h1", name: "The Smiths", headID: me, inviteCode: "abcdefghjk", members: [
+                Member(id: me, displayName: "Test", incomeSharing: .partial, expenseSharing: .category),
+                Member(id: "u-ann", displayName: "Ann Smith"),
+                Member(id: "u-bob", displayName: "Bob Smith", incomeSharing: .none, expenseSharing: .none),
+            ]))
+            api.pendingInvitationsResult = .success([
+                PendingInvitation(id: "p1", email: "cara@example.com", createdAt: sent, expiresAt: sent.addingTimeInterval(7 * 86_400)),
+                PendingInvitation(id: "p2", email: "dan@example.com", createdAt: sent, expiresAt: sent.addingTimeInterval(7 * 86_400)),
+            ])
+            api.categoryList = [
+                BudgetCategory(id: "c1", name: "Housing", budgetClass: .need, isSharedWithHousehold: true),
+                BudgetCategory(id: "c2", name: "Groceries", budgetClass: .need, isSharedWithHousehold: true),
+                BudgetCategory(id: "c3", name: "Dining out", budgetClass: .want),
+                BudgetCategory(id: "c4", name: "Streaming", budgetClass: .want),
+            ]
+        case "member":
+            api.householdResult = .success(Household(id: "h1", name: "The Smiths", headID: "u-ann", members: [
+                Member(id: me, displayName: "Test"),
+                Member(id: "u-ann", displayName: "Ann Smith", incomeSharing: .partial, expenseSharing: .category),
+            ]))
+        case "invited":
+            api.householdResult = .success(nil)
+            api.myInvitationsResult = .success([
+                MyInvitation(id: "inv1", householdName: "The Smiths", inviterName: "Ann Smith",
+                             expiresAt: sent.addingTimeInterval(7 * 86_400)),
+            ])
+        default:
+            api.householdResult = .success(nil)
+        }
+        let sharesByCategory = mode == "head"
+        let current = api.profileResult
+        api.profileResult = current.map {
+            Profile(id: $0.id, displayName: $0.displayName, onboardingCompleted: true, isAdmin: $0.isAdmin,
+                    emailReportsEnabled: $0.emailReportsEnabled, householdID: mode == "none" || mode == "invited" ? nil : "h1", avatarURL: $0.avatarURL,
+                    subscriptionTier: $0.subscriptionTier, createdAt: $0.createdAt,
+                    incomeSharing: sharesByCategory ? .partial : .all, expenseSharing: sharesByCategory ? .category : .all,
+                    sharedIncomeAmount: sharesByCategory ? 500 : nil)
+        }
     }
 
     /// Two pages of users (30 in all): the signed-in admin, a disabled one, one with no email and a long name,
