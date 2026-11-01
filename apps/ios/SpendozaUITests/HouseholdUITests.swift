@@ -80,10 +80,11 @@ final class HouseholdUITests: XCTestCase {
         field.tap()
         field.typeText("The Joneses")
         app.buttons["Create household"].tap()
-        XCTAssertTrue(app.staticTexts["Members"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["Create household"].exists, "The sheet is still open")
-        XCTAssertTrue(app.staticTexts["The Joneses"].exists)
-        XCTAssertTrue(app.staticTexts["householdInviteCode"].exists)
+        // Slow CI simulators can still be animating the sheet away: wait rather than check at once.
+        XCTAssertTrue(app.staticTexts["Members"].waitForExistence(timeout: 20), "The household screen never showed")
+        waitForDisappearance(app.buttons["Create household"], timeout: 10, "The sheet is still open")
+        XCTAssertTrue(app.staticTexts["The Joneses"].waitForExistence(timeout: 10), "The household name never showed")
+        XCTAssertTrue(app.staticTexts["householdInviteCode"].waitForExistence(timeout: 10), "The invite code never showed")
         XCTAssertEqual(app.staticTexts["householdInviteCode"].label, "ABCDE-FGHJK")
     }
 
@@ -98,10 +99,10 @@ final class HouseholdUITests: XCTestCase {
         field.tap()
         field.typeText("ABCDE-FGHJK")
         app.buttons["Join household"].tap()
-        XCTAssertTrue(app.staticTexts["Members"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["Join household"].exists, "The sheet is still open")
-        XCTAssertTrue(app.staticTexts["The Smiths"].exists)
-        XCTAssertTrue(app.staticTexts["Ann Smith (Head)"].exists)
+        XCTAssertTrue(app.staticTexts["Members"].waitForExistence(timeout: 20), "The household screen never showed")
+        waitForDisappearance(app.buttons["Join household"], timeout: 10, "The sheet is still open")
+        XCTAssertTrue(app.staticTexts["The Smiths"].waitForExistence(timeout: 10), "The household name never showed")
+        XCTAssertTrue(app.staticTexts["Ann Smith (Head)"].waitForExistence(timeout: 10), "The head never showed")
         XCTAssertFalse(app.buttons["Get a new code"].exists)
     }
 
