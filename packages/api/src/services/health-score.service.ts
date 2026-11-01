@@ -18,7 +18,8 @@ function rating(
 
 function scoreSavingsRate(savingsRate: number): HealthScoreFactor {
   const max = 25;
-  const points = savingsRate >= 20 ? max : Math.round((savingsRate / 20) * max);
+  // A negative rate (spending beat income) scores 0, never less: one part must not eat the others' points.
+  const points = savingsRate >= 20 ? max : Math.max(0, Math.round((savingsRate / 20) * max));
   return {
     value: savingsRate,
     points: Math.min(points, max),

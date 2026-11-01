@@ -138,11 +138,14 @@ export function CategoryForm({
                 <SelectItem value="need">Need (50%)</SelectItem>
                 <SelectItem value="want">Want (30%)</SelectItem>
                 <SelectItem value="savings">Savings (20%)</SelectItem>
+                <SelectItem value="transfer">Transfer (not income or spending)</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Used for 50/30/20 budget allocation tracking
+              Used for 50/30/20 budget allocation tracking. Savings counts as saved, not spent;
+              transfers between your own accounts and credit card payments count as neither
+              income nor spending.
             </p>
           </div>
 

@@ -6,6 +6,7 @@ import {
 } from "../services/report.service";
 import { buildReportPdf } from "../services/pdf-report.service";
 import type { ReportData } from "../ai/report-insights";
+import { allocationFor, loadClassOf, summarizeFlows } from "../lib/money-flows";
 import {
   generateQuarterlyInsights,
   generateAnnualInsights,
@@ -529,36 +530,18 @@ async function aggregateTransactionsForRange(
   if (txnError) {
     throw new Error(`Transaction query failed: ${txnError.message}`);
   }
-  let totalIncome = 0;
-  let totalExpenses = 0;
-  const categoryMap = new Map<string, number>();
-
-  for (const t of transactions ?? []) {
-    const amount = Number(t.amount);
-    if (t.type === "credit") {
-      totalIncome += amount;
-    } else if (t.type === "debit") {
-      totalExpenses += amount;
-      const catName = (t as any).ai_category ?? "Uncategorized";
-      categoryMap.set(catName, (categoryMap.get(catName) ?? 0) + amount);
-    }
-  }
-
-  const byCategory = Array.from(categoryMap.entries())
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
-
-  const savingsRate =
-    totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
+  // Savings-class categories are saved (not spent); transfer-class ones are neither income nor spending.
+  const classOf = await loadClassOf(userIds, db);
+  const flows = summarizeFlows(transactions ?? [], classOf);
+  const totalIncome = flows.income;
+  const totalExpenses = flows.spending;
+  const byCategory = flows.byCategory;
 
   return {
     total_income: totalIncome,
     total_expenses: totalExpenses,
-    savings_rate: Math.round(savingsRate * 10) / 10,
+    total_saved: flows.saved,
+    savings_rate: Math.round(flows.savingsRate * 10) / 10,
     expense_to_income_ratio:
       totalIncome > 0
         ? Math.round((totalExpenses / totalIncome) * 1000) / 10
@@ -566,6 +549,7 @@ async function aggregateTransactionsForRange(
     by_category: byCategory,
     top_categories: byCategory.slice(0, 5).map((c) => c.category),
     month_over_month: null,
+    allocation: allocationFor(byCategory, classOf, totalIncome),
   };
 }
 

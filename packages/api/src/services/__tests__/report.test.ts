@@ -120,6 +120,7 @@ function buildAdminChain(table: string) {
 
   const makeEqChain = (depth = 0): any => ({
     eq: (...args: any[]) => makeEqChain(depth + 1),
+    in: (...args: any[]) => makeEqChain(depth + 1),
     gte: (...args: any[]) => makeEqChain(depth + 1),
     gt: (...args: any[]) => makeEqChain(depth + 1),
     lte: (...args: any[]) => makeEqChain(depth + 1),
@@ -501,6 +502,62 @@ describe("generateUserReport", () => {
 // ===========================================================================
 // generateHouseholdReport
 // ===========================================================================
+describe("money moved to savings and transfers", () => {
+  const flowCategories = {
+    selectList: {
+      data: [
+        { name: "Housing", budget_class: "need" },
+        { name: "Dining Out", budget_class: "want" },
+        { name: "Savings", budget_class: "savings" },
+        { name: "Transfers", budget_class: "transfer" },
+      ],
+      error: null,
+    },
+  };
+  const flowTransactions = [
+    { amount: 5000, type: "credit", ai_category: "Other", date: "2026-01-01" },
+    { amount: 700, type: "credit", ai_category: "Transfers", date: "2026-01-02" },
+    { amount: 2500, type: "debit", ai_category: "Housing", date: "2026-01-03" },
+    { amount: 1000, type: "debit", ai_category: "Dining Out", date: "2026-01-04" },
+    { amount: 1000, type: "debit", ai_category: "Savings", date: "2026-01-05" },
+    { amount: 900, type: "debit", ai_category: "Transfers", date: "2026-01-06" },
+  ];
+
+  it("counts savings as saved, leaves transfers out, and measures needs/wants against income", async () => {
+    adminResults.categories = flowCategories;
+    adminResults.transactions.selectList = { data: flowTransactions, error: null };
+
+    const result = await generateUserReport(TEST_USER_ID, REPORT_MONTH);
+    const rd = result.report_data;
+
+    expect(rd.total_income).toBe(5000);
+    expect(rd.total_expenses).toBe(3500);
+    expect(rd.total_saved).toBe(1000);
+    expect(rd.savings_rate).toBe(30);
+    expect(rd.by_category.map((c: any) => c.category)).toEqual(["Housing", "Dining Out", "Savings"]);
+    expect(rd.allocation.needs.percentage).toBe(50);
+    expect(rd.allocation.wants.percentage).toBe(20);
+    expect(rd.allocation.savings.percentage).toBe(20);
+  });
+
+  it("does the same for a household", async () => {
+    adminResults.categories = flowCategories;
+    adminResults.transactions.selectList = { data: flowTransactions, error: null };
+    adminResults.profiles.selectList = {
+      data: [{ id: TEST_USER_ID, income_sharing_mode: "all", expense_sharing_mode: "all" }],
+      error: null,
+    };
+
+    const result = await generateHouseholdReport(TEST_HOUSEHOLD_ID, REPORT_MONTH);
+    const rd = result.report_data;
+
+    expect(rd.total_income).toBe(5000);
+    expect(rd.total_expenses).toBe(3500);
+    expect(rd.savings_rate).toBe(30);
+    expect(rd.allocation.needs.percentage).toBe(50);
+  });
+});
+
 describe("generateHouseholdReport", () => {
   it("generates a report for the household", async () => {
     // Profiles in the household

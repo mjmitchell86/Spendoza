@@ -3,7 +3,7 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 // Budget class enum
 // ---------------------------------------------------------------------------
-export const budgetClassSchema = z.enum(["need", "want", "savings", "other"]);
+export const budgetClassSchema = z.enum(["need", "want", "savings", "transfer", "other"]);
 export type BudgetClass = z.infer<typeof budgetClassSchema>;
 
 // ---------------------------------------------------------------------------

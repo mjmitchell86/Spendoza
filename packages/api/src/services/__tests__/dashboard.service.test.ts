@@ -62,6 +62,10 @@ const mockLatestTxn = mock(() =>
 );
 
 const mockUserFrom = mock((table: string) => {
+  if (table === "categories") {
+    return { select: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) };
+  }
+
   if (table === "transactions") {
     return {
       select: (cols: string, opts?: any) => {
@@ -184,6 +188,10 @@ const mockHouseholdLatestInsightsMaybeSingle = mock(() =>
 );
 
 const mockAdminFrom = mock((table: string) => {
+  if (table === "categories") {
+    return { select: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) };
+  }
+
   if (table === "profiles") {
     return {
       select: (cols: string) => {
@@ -403,6 +411,27 @@ describe("aggregateTransactions", () => {
 
     // (4539 - 3583) / 4539 = 21.06%
     expect(result.summary.savings_rate).toBeCloseTo(21.06, 2);
+  });
+
+  it("counts savings as saved and leaves transfers out, given the categories' classes", () => {
+    const classes: Record<string, string> = { savings: "savings", transfers: "transfer", housing: "need" };
+    const result = aggregateTransactions(
+      [
+        { amount: 5000, type: "credit", ai_category: "Other" },
+        { amount: 600, type: "credit", ai_category: "Transfers" },
+        { amount: 3000, type: "debit", ai_category: "Housing" },
+        { amount: 1000, type: "debit", ai_category: "Savings" },
+        { amount: 800, type: "debit", ai_category: "Transfers" },
+      ] as any,
+      (name) => classes[name.toLowerCase()] as any
+    );
+
+    expect(result.summary.total_income).toBe(5000);
+    expect(result.summary.total_expenses).toBe(3000);
+    expect(result.summary.total_saved).toBe(1000);
+    expect(result.summary.savings_rate).toBe(40);
+    expect(result.summary.net).toBe(2000);
+    expect(result.by_category.map((c: any) => c.category)).toEqual(["Housing", "Savings"]);
   });
 
   it("handles empty transaction array", () => {

@@ -16,6 +16,13 @@ export function getSavingsRateTier(ratePercent: number): SavingsRateTier {
   return "poor";
 }
 
+/** A negative rate in words ("You spent 12% more than you earned"); null when nothing was overspent. */
+export function overspendNote(ratePercent: number): string | null {
+  if (ratePercent >= 0) return null;
+  const rounded = Math.round(-ratePercent * 10) / 10;
+  return `You spent ${rounded}% more than you earned`;
+}
+
 /** Fill fraction (0-1) for the savings-rate arc. */
 export function savingsRateArcFraction(ratePercent: number): number {
   return Math.max(0, Math.min(1, ratePercent / 100));

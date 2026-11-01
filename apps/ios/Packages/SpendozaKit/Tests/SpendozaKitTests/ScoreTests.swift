@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import SpendozaKit
 
@@ -65,6 +66,22 @@ import Testing
             == "Full points when your savings cover 6 months of spending. This month came in at 1.5 months.")
         #expect(ScorePart.debtToIncome.rule(value: 0.45)
             == "Full points while debt payments stay at or under 10% of your income. This month came in at 45%.")
+    }
+
+    @Test func negativeSavingsRateIsSaidInWords() {
+        #expect(ScorePart.savingsRate.rule(value: -12)
+            == "Full points when you save at least 20% of your income. This month you spent 12% more than you earned.")
+        #expect(ScorePart.savingsRate.rule(value: -12.46)
+            == "Full points when you save at least 20% of your income. This month you spent 12.5% more than you earned.")
+    }
+
+    @Test func budgetClassDecodesTransferAndToleratesUnknownValues() throws {
+        let json = Data("""
+        [{"id":"a","name":"Transfers","budget_class":"transfer"},
+         {"id":"b","name":"Mystery","budget_class":"something_new"}]
+        """.utf8)
+        let categories = try JSONDecoder().decode([BudgetCategory].self, from: json)
+        #expect(categories.map(\.budgetClass) == [.transfer, .other])
     }
 
     @Test func titlesAndClasses() {
