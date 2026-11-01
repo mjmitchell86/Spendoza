@@ -1,3 +1,4 @@
+import { oversizeFileError } from "@/lib/transaction-requests";
 import { useState, useRef, useMemo, type FormEvent, type DragEvent } from "react";
 import { Upload, FileText, X, CheckCircle2, AlertCircle, Loader2, ShieldCheck } from "lucide-react";
 import { MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
@@ -38,7 +39,6 @@ interface QueuedFile {
   bankName: string;
 }
 
-const MAX_SIZE = MAX_BANK_STATEMENT_SIZE_MB * 1024 * 1024;
 
 export function UploadForm({ open, onOpenChange }: UploadFormProps) {
   const upload = useUploadBankStatement();
@@ -85,8 +85,9 @@ export function UploadForm({ open, onOpenChange }: UploadFormProps) {
         errors.push(`${f.name}: not a PDF or CSV`);
         continue;
       }
-      if (f.size > MAX_SIZE) {
-        errors.push(`${f.name}: exceeds ${MAX_BANK_STATEMENT_SIZE_MB}MB`);
+      const sizeError = oversizeFileError(f);
+      if (sizeError) {
+        errors.push(sizeError);
         continue;
       }
       if (existingNames.has(f.name)) {
