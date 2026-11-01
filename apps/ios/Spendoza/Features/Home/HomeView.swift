@@ -8,7 +8,7 @@ struct HomeView: View {
 
     init(store: SessionStore) {
         self.store = store
-        _model = State(initialValue: HomeModel(api: store.api, selfID: store.profile?.id))
+        _model = State(initialValue: HomeModel(api: store.api, selfID: { [store] in store.profile?.id }))
     }
 
     var body: some View {
@@ -40,20 +40,7 @@ struct HomeView: View {
         case .none(let invitations):
             NoHouseholdView(model: model, invitations: invitations)
         case .member(let household, _):
-            // Stands in until the full household screen (members, invite code, sharing) replaces it.
-            Text(household.name)
-                .font(.serif(22, relativeTo: .title2))
-                .foregroundStyle(Theme.ink)
-            MeSection(title: "Members") {
-                ForEach(household.members.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }) { member in
-                    RuledRow {
-                        Text(member.displayName)
-                            .font(.sans(16, relativeTo: .body))
-                            .foregroundStyle(Theme.ink)
-                            .frame(minHeight: 34, alignment: .leading)
-                    }
-                }
-            }
+            HouseholdView(store: store, home: model, household: household)
         case .notOnPlan:
             PlanNotAvailableView()
         case .failed(let message):

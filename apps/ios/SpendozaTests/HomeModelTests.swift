@@ -13,7 +13,7 @@ struct HomeModelTests {
     @Test func noHouseholdWithAnInvitationShowsIt() async {
         let api = StubAPI()
         api.myInvitationsResult = .success([invitation])
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await m.load()
         #expect(m.state == .none(invitations: [invitation]))
     }
@@ -21,19 +21,32 @@ struct HomeModelTests {
     @Test func aHouseholdIsAMemberStateWithHeadFlag() async {
         let api = StubAPI()
         api.householdResult = .success(household)
-        let member = HomeModel(api: api, selfID: "me")
+        let member = HomeModel(api: api, selfID: { "me" })
         await member.load()
         #expect(member.state == .member(household, isHead: false))
-        let head = HomeModel(api: api, selfID: "u1")
+        let head = HomeModel(api: api, selfID: { "u1" })
         await head.load()
         #expect(head.state == .member(household, isHead: true))
         #expect(!api.calls.contains("myInvitations"))
     }
 
+    @Test func isHeadFollowsTheCurrentSessionAtEachLoad() async {
+        final class Box { var id = "me" }
+        let box = Box()
+        let api = StubAPI()
+        api.householdResult = .success(household)
+        let m = HomeModel(api: api, selfID: { box.id })
+        await m.load()
+        #expect(m.state == .member(household, isHead: false))
+        box.id = "u1"
+        await m.load()
+        #expect(m.state == .member(household, isHead: true))
+    }
+
     @Test func acceptingSendsTheNormalizedCodeAndReloadsIntoTheHousehold() async {
         let api = StubAPI()
         api.myInvitationsResult = .success([invitation])
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await m.load()
         api.householdResult = .success(household)
         await m.accept(invitation, code: " ABCDE-FGHJK ")
@@ -44,7 +57,7 @@ struct HomeModelTests {
     @Test func decliningReloadsWithoutIt() async {
         let api = StubAPI()
         api.myInvitationsResult = .success([invitation])
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await m.load()
         api.myInvitationsResult = .success([])
         await m.decline(invitation, code: "abcdefghjk")
@@ -56,7 +69,7 @@ struct HomeModelTests {
         let api = StubAPI()
         api.myInvitationsResult = .success([invitation])
         api.householdActionErrors["acceptInvitation"] = .message("Invitation not found")
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await m.load()
         await m.accept(invitation, code: "wrong")
         #expect(m.invitationErrors["inv1"] == "Invitation not found")
@@ -67,7 +80,7 @@ struct HomeModelTests {
     @Test func aPlanRefusalOnLoadIsNotOnPlan() async {
         let api = StubAPI()
         api.householdResult = .failure(.notOnPlan(requiredTier: "pro"))
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await m.load()
         #expect(m.state == .notOnPlan)
     }
@@ -75,14 +88,14 @@ struct HomeModelTests {
     @Test func aLoadFailureShowsTheMessage() async {
         let api = StubAPI()
         api.householdResult = .failure(.message("Boom"))
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await m.load()
         #expect(m.state == .failed("Boom"))
     }
 
     @Test func joinSendsTheNormalizedCodeThenReloads() async throws {
         let api = StubAPI()
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await m.load()
         api.householdResult = .success(household)
         try await m.join(code: " abcde-FGHJK ")
@@ -93,13 +106,13 @@ struct HomeModelTests {
     @Test func joinErrorTextIsTheServersVerbatim() async {
         let api = StubAPI()
         api.householdActionErrors["joinHousehold"] = .message("Invalid invite code")
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await #expect(throws: APIError.message("Invalid invite code")) { try await m.join(code: "nope") }
     }
 
     @Test func createTrimsTheNameThenReloads() async throws {
         let api = StubAPI()
-        let m = HomeModel(api: api, selfID: "u1")
+        let m = HomeModel(api: api, selfID: { "u1" })
         api.householdResult = .success(household)
         try await m.create(name: "  The Smiths ")
         #expect(api.calls.contains("createHousehold(The Smiths)"))
@@ -109,7 +122,7 @@ struct HomeModelTests {
     @Test func createPlanRefusalThrows() async {
         let api = StubAPI()
         api.householdActionErrors["createHousehold"] = .notOnPlan(requiredTier: "pro")
-        let m = HomeModel(api: api, selfID: "me")
+        let m = HomeModel(api: api, selfID: { "me" })
         await #expect(throws: APIError.notOnPlan(requiredTier: "pro")) { try await m.create(name: "x") }
     }
 

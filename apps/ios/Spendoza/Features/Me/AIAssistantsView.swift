@@ -248,7 +248,7 @@ struct AIAssistantsView: View {
 }
 
 /// An oxblood-outlined button for a destructive action that isn't final.
-private struct OutlinedDestructiveButtonStyle: ButtonStyle {
+struct OutlinedDestructiveButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.sans(15, weight: .semibold, relativeTo: .callout))

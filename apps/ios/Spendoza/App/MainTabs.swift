@@ -7,11 +7,12 @@ struct MainTabs: View {
     let lock: AppLock
     @State private var selection = Self.initialTab
 
-    /// `-uiTestStartOnMe` (Debug builds only, with the stub API) opens on Me: with the tab bar hidden for an audit
+    /// `-uiTestStartOnMe` (Debug builds only, with the stub API) opens on Me (and `-uiTestHousehold` on Home): with the tab bar hidden for an audit
     /// there is nothing to tap to get there.
     private static var initialTab: String {
         #if DEBUG
         if UITestStub.isOn, CommandLine.arguments.contains("-uiTestStartOnMe") { return "Me" }
+        if UITestStub.householdMode != nil { return "Home" }
         #endif
         return "Health"
     }

@@ -217,10 +217,25 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     /// Errors for the household actions, by call name as recorded in `calls` without arguments, e.g. "invite".
     /// An action not listed succeeds.
     var householdActionErrors: [String: APIError] = [:]
+    /// When true the household actions change `householdResult` and `pendingInvitationsResult` the way the server
+    /// would (rotate, remove, revoke, create, ...), so a UI test sees the screen update. Off for unit tests,
+    /// which script each answer.
+    var simulatesHousehold = false
+    /// The code removing a member rotates to, when `simulatesHousehold`.
+    var codeAfterRemoval = "kmnpqrstuv"
+    /// The signed-in user, when `simulatesHousehold`: who creates a household and who leaves it.
+    var simulatedUserID = "ui-test-user"
 
     private func householdAction(_ name: String, _ call: String) throws {
         record(call)
         if let error = lock.withLock({ householdActionErrors[name] }) { throw error }
+    }
+
+    private func simulate(_ change: (Household) -> Household?) {
+        guard simulatesHousehold else { return }
+        lock.withLock {
+            if case .success(let current?) = householdResult { householdResult = .success(change(current)) }
+        }
     }
 
     func household() async throws -> Household? {
@@ -230,6 +245,12 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     func createHousehold(name: String) async throws -> String? {
         try householdAction("createHousehold", "createHousehold(\(name))")
+        if simulatesHousehold {
+            lock.withLock {
+                householdResult = .success(Household(id: "h-new", name: name, headID: simulatedUserID, inviteCode: createdInviteCode,
+                                                     members: [Member(id: simulatedUserID, displayName: "Test")]))
+            }
+        }
         return createdInviteCode
     }
 
@@ -237,23 +258,40 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     func rotateInviteCode() async throws -> String {
         try householdAction("rotateInviteCode", "rotateInviteCode")
+        simulate { Household(id: $0.id, name: $0.name, headID: $0.headID, inviteCode: rotatedInviteCode, members: $0.members) }
         return rotatedInviteCode
     }
 
-    func renameHousehold(_ name: String) async throws { try householdAction("renameHousehold", "renameHousehold(\(name))") }
+    func renameHousehold(_ name: String) async throws {
+        try householdAction("renameHousehold", "renameHousehold(\(name))")
+        simulate { Household(id: $0.id, name: name, headID: $0.headID, inviteCode: $0.inviteCode, members: $0.members) }
+    }
 
     func deleteHousehold(confirmName: String) async throws {
         try householdAction("deleteHousehold", "deleteHousehold(\(confirmName))")
+        simulate { _ in nil }
     }
 
-    func invite(email: String) async throws { try householdAction("invite", "invite(\(email))") }
+    func invite(email: String) async throws {
+        try householdAction("invite", "invite(\(email))")
+        if simulatesHousehold, case .success(let list) = pendingInvitationsResult {
+            let now = Date(timeIntervalSince1970: 1_794_000_000)
+            pendingInvitationsResult = .success(list + [PendingInvitation(id: "p-\(list.count + 1)", email: email, createdAt: now,
+                                                                          expiresAt: now.addingTimeInterval(7 * 86_400))])
+        }
+    }
 
     func pendingInvitations() async throws -> [PendingInvitation] {
         record("pendingInvitations")
         return try pendingInvitationsResult.get()
     }
 
-    func revokeInvitation(id: String) async throws { try householdAction("revokeInvitation", "revokeInvitation(\(id))") }
+    func revokeInvitation(id: String) async throws {
+        try householdAction("revokeInvitation", "revokeInvitation(\(id))")
+        if simulatesHousehold, case .success(let list) = pendingInvitationsResult {
+            pendingInvitationsResult = .success(list.filter { $0.id != id })
+        }
+    }
 
     func myInvitations() async throws -> [MyInvitation] {
         record("myInvitations")
@@ -268,8 +306,16 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         try householdAction("declineInvitation", "declineInvitation(\(id), \(code))")
     }
 
-    func removeMember(id: String) async throws { try householdAction("removeMember", "removeMember(\(id))") }
-    func makeHead(id: String) async throws { try householdAction("makeHead", "makeHead(\(id))") }
+    func removeMember(id: String) async throws {
+        try householdAction("removeMember", "removeMember(\(id))")
+        simulate { Household(id: $0.id, name: $0.name, headID: $0.headID, inviteCode: codeAfterRemoval,
+                             members: $0.members.filter { $0.id != id }) }
+    }
+
+    func makeHead(id: String) async throws {
+        try householdAction("makeHead", "makeHead(\(id))")
+        simulate { Household(id: $0.id, name: $0.name, headID: id, inviteCode: $0.inviteCode, members: $0.members) }
+    }
 
     func updateSharing(_ change: SharingChange) async throws {
         let amount = change.sharedIncomeAmount.map { "\($0)" } ?? "nil"
@@ -280,7 +326,10 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         try householdAction("setCategoryShared", "setCategoryShared(\(id), \(shared))")
     }
 
-    func leaveHousehold() async throws { try householdAction("leaveHousehold", "leaveHousehold") }
+    func leaveHousehold() async throws {
+        try householdAction("leaveHousehold", "leaveHousehold")
+        simulate { _ in nil }
+    }
 
     // MARK: AdminAPI
 

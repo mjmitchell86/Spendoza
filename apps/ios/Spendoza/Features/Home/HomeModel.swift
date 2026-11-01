@@ -21,9 +21,10 @@ final class HomeModel {
     private(set) var invitationErrors: [String: String] = [:]
 
     @ObservationIgnored private let api: any SpendozaAPI
-    @ObservationIgnored private let selfID: String?
+    /// Read at each load: the signed-in profile can change after this model was made.
+    @ObservationIgnored private let selfID: @MainActor () -> String?
 
-    init(api: any SpendozaAPI, selfID: String?) {
+    init(api: any SpendozaAPI, selfID: @escaping @MainActor () -> String?) {
         self.api = api
         self.selfID = selfID
     }
@@ -31,7 +32,7 @@ final class HomeModel {
     func load() async {
         do {
             if let household = try await api.household() {
-                state = .member(household, isHead: household.headID == selfID)
+                state = .member(household, isHead: household.headID == selfID())
             } else {
                 // The list is a convenience: if it can't load, Create and Join still work.
                 let invitations = (try? await api.myInvitations()) ?? []
