@@ -59,6 +59,17 @@ struct Endpoint {
         Endpoint(method: .post, path: "/api/admin/users/\(userID)/\(action)")
     }
 
+    // Household: the caller-resolved routes.
+    static let household = Endpoint.get("/api/household")
+    static func household(_ method: HTTPMethod, _ suffix: String, _ body: some Encodable) -> Endpoint {
+        .json(method, "/api/household" + suffix, body)
+    }
+    static func household(_ method: HTTPMethod, _ suffix: String) -> Endpoint {
+        Endpoint(method: method, path: "/api/household" + suffix)
+    }
+    static let pendingInvitations = Endpoint.get("/api/household/invitations")
+    static let myInvitations = Endpoint.get("/api/household/invitations/mine")
+
     static func transactions(from: String, to: String) -> Endpoint {
         .get("/api/transactions", query: [URLQueryItem(name: "from_date", value: from), URLQueryItem(name: "to_date", value: to)])
     }

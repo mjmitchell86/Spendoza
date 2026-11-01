@@ -146,7 +146,7 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     }
 
     func removeStatement(id: String) async throws { record("remove(\(id))") }
-    func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws {}
+    func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws -> SignUpResult { SignUpResult() }
     func joinWaitlist(name: String, email: String) async throws {}
 
     // MARK: AccountAPI
@@ -204,6 +204,83 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         record("sendTestEmail")
         if let testEmailError { throw testEmailError }
     }
+
+    // MARK: HouseholdAPI
+
+    /// What `household()` answers (nil = in no household).
+    var householdResult: Result<Household?, APIError> = .success(nil)
+    var pendingInvitationsResult: Result<[PendingInvitation], APIError> = .success([])
+    var myInvitationsResult: Result<[MyInvitation], APIError> = .success([])
+    /// What `createHousehold` and `rotateInviteCode` answer.
+    var createdInviteCode: String? = "abcdefghjk"
+    var rotatedInviteCode = "zyxwvutsrq"
+    /// Errors for the household actions, by call name as recorded in `calls` without arguments, e.g. "invite".
+    /// An action not listed succeeds.
+    var householdActionErrors: [String: APIError] = [:]
+
+    private func householdAction(_ name: String, _ call: String) throws {
+        record(call)
+        if let error = lock.withLock({ householdActionErrors[name] }) { throw error }
+    }
+
+    func household() async throws -> Household? {
+        record("household")
+        return try householdResult.get()
+    }
+
+    func createHousehold(name: String) async throws -> String? {
+        try householdAction("createHousehold", "createHousehold(\(name))")
+        return createdInviteCode
+    }
+
+    func joinHousehold(code: String) async throws { try householdAction("joinHousehold", "joinHousehold(\(code))") }
+
+    func rotateInviteCode() async throws -> String {
+        try householdAction("rotateInviteCode", "rotateInviteCode")
+        return rotatedInviteCode
+    }
+
+    func renameHousehold(_ name: String) async throws { try householdAction("renameHousehold", "renameHousehold(\(name))") }
+
+    func deleteHousehold(confirmName: String) async throws {
+        try householdAction("deleteHousehold", "deleteHousehold(\(confirmName))")
+    }
+
+    func invite(email: String) async throws { try householdAction("invite", "invite(\(email))") }
+
+    func pendingInvitations() async throws -> [PendingInvitation] {
+        record("pendingInvitations")
+        return try pendingInvitationsResult.get()
+    }
+
+    func revokeInvitation(id: String) async throws { try householdAction("revokeInvitation", "revokeInvitation(\(id))") }
+
+    func myInvitations() async throws -> [MyInvitation] {
+        record("myInvitations")
+        return try myInvitationsResult.get()
+    }
+
+    func acceptInvitation(id: String, code: String) async throws {
+        try householdAction("acceptInvitation", "acceptInvitation(\(id), \(code))")
+    }
+
+    func declineInvitation(id: String, code: String) async throws {
+        try householdAction("declineInvitation", "declineInvitation(\(id), \(code))")
+    }
+
+    func removeMember(id: String) async throws { try householdAction("removeMember", "removeMember(\(id))") }
+    func makeHead(id: String) async throws { try householdAction("makeHead", "makeHead(\(id))") }
+
+    func updateSharing(_ change: SharingChange) async throws {
+        let amount = change.sharedIncomeAmount.map { "\($0)" } ?? "nil"
+        try householdAction("updateSharing", "updateSharing(income: \(change.income.rawValue), amount: \(amount), expense: \(change.expense.rawValue))")
+    }
+
+    func setCategoryShared(id: String, shared: Bool) async throws {
+        try householdAction("setCategoryShared", "setCategoryShared(\(id), \(shared))")
+    }
+
+    func leaveHousehold() async throws { try householdAction("leaveHousehold", "leaveHousehold") }
 
     // MARK: AdminAPI
 

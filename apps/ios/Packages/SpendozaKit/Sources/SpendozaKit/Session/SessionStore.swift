@@ -52,11 +52,12 @@ public struct AccountReadyError: Error, Equatable, Sendable {
 }
 
 /// Creates the account, then signs in. A sign-in failure after a created account becomes `AccountReadyError`.
-public func completeSignUp(email: String, createAccount: () async throws -> Void,
-                           signIn: () async throws -> Void,
-                           isolation: isolated (any Actor)? = #isolation) async throws {
-    try await createAccount()
+public func completeSignUp<Created>(email: String, createAccount: () async throws -> Created,
+                                    signIn: () async throws -> Void,
+                                    isolation: isolated (any Actor)? = #isolation) async throws -> Created {
+    let created = try await createAccount()
     do { try await signIn() } catch { throw AccountReadyError(email: email) }
+    return created
 }
 
 /// Holds the Supabase session and the profile, and says which phase of the app to show.
@@ -196,11 +197,12 @@ public final class SessionStore {
         await refresh()
     }
 
-    /// Creates the account with an invite code, then signs in.
-    public func signUp(displayName: String, email: String, password: String, inviteCode: String) async throws {
+    /// Creates the account with an invite code, then signs in. The result says whether a household was joined.
+    @discardableResult
+    public func signUp(displayName: String, email: String, password: String, inviteCode: String) async throws -> SignUpResult {
         guard isConfigured else { throw APIError.message(Self.notConfiguredMessage) }
         do {
-            try await completeSignUp(
+            return try await completeSignUp(
                 email: email,
                 createAccount: { [api] in
                     try await api.signUp(email: email, password: password, displayName: displayName, inviteCode: inviteCode)

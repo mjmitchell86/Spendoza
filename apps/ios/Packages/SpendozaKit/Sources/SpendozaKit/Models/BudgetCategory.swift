@@ -16,15 +16,27 @@ public struct BudgetCategory: Decodable, Sendable, Equatable {
     public let id: String
     public let name: String
     public let budgetClass: BudgetClass
+    /// Whether household members can see this category's spending (category sharing mode).
+    public let isSharedWithHousehold: Bool
 
-    public init(id: String, name: String, budgetClass: BudgetClass) {
+    public init(id: String, name: String, budgetClass: BudgetClass, isSharedWithHousehold: Bool = false) {
         self.id = id
         self.name = name
         self.budgetClass = budgetClass
+        self.isSharedWithHousehold = isSharedWithHousehold
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        budgetClass = try c.decode(BudgetClass.self, forKey: .budgetClass)
+        isSharedWithHousehold = try c.decodeIfPresent(Bool.self, forKey: .isSharedWithHousehold) ?? false
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name
         case budgetClass = "budget_class"
+        case isSharedWithHousehold = "is_shared_with_household"
     }
 }
