@@ -1,7 +1,7 @@
 import SpendozaKit
 import SwiftUI
 
-/// The signed-in app. Only tabs that exist: Health and Me. Uses the system tab bar (the iOS 26 floating glass capsule).
+/// The signed-in app. Only tabs that exist: Health, Home and Me. Uses the system tab bar (the iOS 26 floating glass capsule).
 struct MainTabs: View {
     let store: SessionStore
     let lock: AppLock
@@ -24,12 +24,20 @@ struct MainTabs: View {
                            onAccountDisabled: { text in Task { await store.accountDisabled(text) } })
                     .debugHidingTabBar()
             }
+            Tab("Home", systemImage: "house", value: "Home") {
+                HomeView(store: store)
+                    .debugHidingTabBar()
+            }
             Tab("Me", systemImage: "person", value: "Me") {
                 MeView(store: store, lock: lock)
                     .debugHidingTabBar()
             }
         }
         .tint(Theme.note)
+        // After sign-up with a household code, open on Home where the result is told.
+        .onChange(of: store.signUpNotice != nil, initial: true) { _, hasNotice in
+            if hasNotice { selection = "Home" }
+        }
     }
 }
 

@@ -32,7 +32,8 @@ struct SignUpView: View {
                     .foregroundStyle(Theme.soft)
             }
             // Codes are matched exactly by the server, so never capitalize or autocorrect them.
-            AuthField(label: "Invite code", text: $inviteCode, capitalization: .never)
+            AuthField(label: "Invite code or invitation code", text: $inviteCode, capitalization: .never,
+                      placeholder: "Enter your invite or invitation code")
             if let error { InlineError(message: error) }
             BusyButton(title: "Create account", busy: busy, action: submit)
                 .disabled(!canSubmit || !store.isConfigured)
