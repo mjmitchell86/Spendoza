@@ -3,10 +3,11 @@ import Foundation
 public enum IncomeSharing: String, Codable, Sendable, CaseIterable {
     case all, none, partial
 
-    /// A mode this version doesn't know yet reads as `all`, the server's default.
+    /// A mode this version does not know yet reads as `none`, the most private: a blind save must never widen sharing.
+    /// (An absent key is the server default, `all`; callers handle that.)
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
-        self = IncomeSharing(rawValue: raw) ?? .all
+        self = IncomeSharing(rawValue: raw) ?? .none
     }
 }
 
@@ -15,7 +16,7 @@ public enum ExpenseSharing: String, Codable, Sendable, CaseIterable {
 
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
-        self = ExpenseSharing(rawValue: raw) ?? .all
+        self = ExpenseSharing(rawValue: raw) ?? .none
     }
 }
 

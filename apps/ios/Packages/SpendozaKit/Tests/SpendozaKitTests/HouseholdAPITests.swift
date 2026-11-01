@@ -186,6 +186,25 @@ extension APIClientTests {
         #expect(defaults.sharedIncomeAmount == nil)
     }
 
+    @Test func unknownSharingModesReadAsTheMostPrivate() throws {
+        let member = #"{"id":"u2","display_name":"Bo","income_sharing_mode":"weekly","expense_sharing_mode":"tags"}"#
+        let decoded = try APICoding.makeDecoder().decode(Member.self, from: Data(member.utf8))
+        #expect(decoded.incomeSharing == IncomeSharing.none)
+        #expect(decoded.expenseSharing == ExpenseSharing.none)
+
+        let profile = #"{"id":"p1","display_name":"Sam","onboarding_completed":true,"is_admin":false,"email_reports_enabled":true,"household_id":"h1","income_sharing_mode":"weekly","expense_sharing_mode":"tags"}"#
+        let p = try APICoding.makeDecoder().decode(Profile.self, from: Data(profile.utf8))
+        #expect(p.incomeSharing == IncomeSharing.none)
+        #expect(p.expenseSharing == ExpenseSharing.none)
+    }
+
+    @Test func absentSharingModesStillMeanAll() throws {
+        let member = #"{"id":"u2","display_name":"Bo"}"#
+        let decoded = try APICoding.makeDecoder().decode(Member.self, from: Data(member.utf8))
+        #expect(decoded.incomeSharing == .all)
+        #expect(decoded.expenseSharing == .all)
+    }
+
     // MARK: errors
 
     @Test func inviteEmailFailureShowsTheServerText() async {
