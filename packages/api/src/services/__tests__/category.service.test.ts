@@ -78,12 +78,21 @@ const mockExpUpdate = mock((_v: any) => ({
   eq: (..._a: any[]) => ({ eq: mockExpUpdateEq2 }),
 }));
 
+// Duplicate-name lookup: .select("id, name").eq(user_id).ilike(name, ...).neq(id, ...).limit(1)
+const mockDupResult = mock(() => Promise.resolve({ data: [] as any[], error: null }));
+const mockDupIlike = mock((_col: string, _pattern: string) => ({
+  neq: (..._a: any[]) => ({ limit: mockDupResult }),
+  limit: mockDupResult,
+}));
+
 const mockFrom = mock((table: string) => {
   if (table === "transactions") return { update: mockTxnUpdate };
   if (table === "expenses") return { update: mockExpUpdate };
   return {
     select: (cols: string) =>
-      cols === "id"
+      cols === "id, name"
+        ? { eq: () => ({ ilike: mockDupIlike }) }
+        : cols === "id"
         ? { eq: () => ({ eq: () => ({ eq: () => ({ maybeSingle: mockOtherMaybeSingle }) }) }) }
         : mockSelect(),
     insert: mockInsert,
@@ -117,6 +126,9 @@ beforeEach(() => {
   mockSelect.mockClear();
   mockFrom.mockClear();
   mockOtherMaybeSingle.mockClear();
+  mockDupResult.mockClear();
+  mockDupIlike.mockClear();
+  mockDupResult.mockImplementation(() => Promise.resolve({ data: [], error: null }));
   mockTxnUpdate.mockClear();
   mockTxnUpdateEq2.mockClear();
   mockExpUpdate.mockClear();
@@ -186,6 +198,25 @@ describe("createCategory", () => {
     expect(mockInsert).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects a name the user already has (any case) with 409 before writing", async () => {
+    mockDupResult.mockImplementation(() =>
+      Promise.resolve({ data: [{ id: "cat-9", name: "groceries" }], error: null })
+    );
+
+    const { data, error } = await createCategory(ctx, validInput);
+
+    expect(data).toBeNull();
+    expect((error as any).status).toBe(409);
+    expect((error as any).message).toBe("You already have a category with that name");
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("matches names literally (escapes LIKE wildcards)", async () => {
+    await createCategory(ctx, { ...validInput, name: "50%_off" });
+
+    expect(mockDupIlike).toHaveBeenCalledWith("name", "50\\%\\_off");
+  });
+
   it("returns error on database failure", async () => {
     mockInsertSingle.mockImplementation(() =>
       Promise.resolve({ data: null, error: { message: "DB error" } })
@@ -229,6 +260,35 @@ describe("updateCategory", () => {
     expect(error).toBeNull();
     expect(mockTxnUpdate).toHaveBeenCalledWith({ ai_category: "Food" });
     expect(mockTxnUpdateEq2).toHaveBeenCalledWith("ai_category", "Groceries");
+  });
+
+  it("rejects renaming to an existing name (different case) with 409 and writes nothing", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
+    mockDupResult.mockImplementation(() =>
+      Promise.resolve({ data: [{ id: "cat-9", name: "FOOD" }], error: null })
+    );
+
+    const { data, error } = await updateCategory(ctx, "cat-1", { name: "food" });
+
+    expect(data).toBeNull();
+    expect((error as any).status).toBe(409);
+    expect((error as any).message).toBe("You already have a category with that name");
+    expect(mockTxnUpdate).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("allows a case-only rename of the category itself", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
+
+    const { error } = await updateCategory(ctx, "cat-1", { name: "groceries" });
+
+    // The lookup excludes the category's own id, so it finds nothing
+    expect(error).toBeNull();
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("does not rename when the carry-over fails, and a retry completes both", async () => {

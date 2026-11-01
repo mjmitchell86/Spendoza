@@ -93,13 +93,22 @@ const mockOtherMaybeSingle = mock(() =>
   Promise.resolve({ data: { id: "cat-other" }, error: null })
 );
 
+// Duplicate-name lookup: .select("id, name").eq(...).ilike(...)[.neq(...)].limit(1)
+const mockDupResult = mock(() => Promise.resolve({ data: [] as any[], error: null }));
+const mockDupIlike = mock((_c: string, _p: string) => ({
+  neq: () => ({ limit: mockDupResult }),
+  limit: mockDupResult,
+}));
+
 const mockFrom = mock((table: string) => {
   if (table === "transactions" || table === "expenses") {
     return { update: mockSideEffectUpdate };
   }
   return {
     select: (cols?: string) =>
-      cols === "id"
+      cols === "id, name"
+        ? { eq: () => ({ ilike: mockDupIlike }) }
+        : cols === "id"
         ? { eq: () => ({ eq: () => ({ eq: () => ({ maybeSingle: mockOtherMaybeSingle }) }) }) }
         : mockSelect(),
     insert: mockInsert,
@@ -174,6 +183,7 @@ afterAll(() => {
 
 beforeEach(() => {
   // Clear all mocks
+  mockDupResult.mockImplementation(() => Promise.resolve({ data: [], error: null }));
   mockOrder.mockClear();
   mockInsertSingle.mockClear();
   mockInsert.mockClear();
@@ -282,6 +292,26 @@ describe("POST /api/categories", () => {
     expect(mockInsert).toHaveBeenCalledTimes(1);
   });
 
+  it("returns 409 when the user already has that name", async () => {
+    mockDupResult.mockImplementation(() =>
+      Promise.resolve({ data: [{ id: "cat-9", name: "groceries" }], error: null })
+    );
+    mockInsert.mockClear();
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "Groceries" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "You already have a category with that name" });
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
   it("returns 400 with invalid data (missing name)", async () => {
     const res = await fetch(url(), {
       method: "POST",
@@ -332,6 +362,29 @@ describe("PUT /api/categories/:id", () => {
     expect(mockFrom).toHaveBeenCalledWith("categories");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockFrom).toHaveBeenCalledWith("transactions");
+  });
+
+  it("returns 409 when renaming to a name the user already has", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
+    mockDupResult.mockImplementation(() =>
+      Promise.resolve({ data: [{ id: "cat-9", name: "Food" }], error: null })
+    );
+    mockUpdate.mockClear();
+
+    const res = await fetch(url("cat-1"), {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "food" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "You already have a category with that name" });
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it("returns 404 for non-existent category", async () => {

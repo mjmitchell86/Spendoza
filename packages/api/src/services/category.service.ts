@@ -16,11 +16,35 @@ export async function listCategories(ctx: ServiceContext) {
   return { data: data ?? null, error: error ?? null };
 }
 
+const DUPLICATE_NAME_ERROR = {
+  message: "You already have a category with that name",
+  status: 409,
+};
+
+// True when the user has another category (not `exceptId`) whose name matches
+// case-insensitively. Transactions match categories by name, so two would be ambiguous.
+async function nameTaken(ctx: ServiceContext, name: string, exceptId?: string) {
+  const { supabase, userId } = ctx;
+  const literal = name.replace(/[\\%_]/g, "\\$&");
+  let query = supabase
+    .from("categories")
+    .select("id, name")
+    .eq("user_id", userId)
+    .ilike("name", literal);
+  if (exceptId) query = query.neq("id", exceptId);
+  const { data } = await query.limit(1);
+  return (data?.length ?? 0) > 0;
+}
+
 // ---------------------------------------------------------------------------
 // createCategory — inserts a new custom category for the user
 // ---------------------------------------------------------------------------
 export async function createCategory(ctx: ServiceContext, input: CreateCategoryInput) {
   const { supabase, userId } = ctx;
+
+  if (await nameTaken(ctx, input.name)) {
+    return { data: null, error: DUPLICATE_NAME_ERROR };
+  }
 
   const { data, error } = await supabase
     .from("categories")
@@ -50,6 +74,12 @@ export async function updateCategory(
       .eq("user_id", userId)
       .single();
     oldName = current?.name ?? null;
+  }
+
+  if (oldName !== null && input.name !== undefined && input.name !== oldName) {
+    if (await nameTaken(ctx, input.name, id)) {
+      return { data: null, error: DUPLICATE_NAME_ERROR };
+    }
   }
 
   // Transactions match categories by name (free text). Carry them over first: if this
