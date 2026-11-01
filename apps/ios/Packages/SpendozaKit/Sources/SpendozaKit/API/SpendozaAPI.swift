@@ -1,7 +1,7 @@
 import Foundation
 
 /// Everything the app asks of the Spendoza server. App models depend on this protocol so tests can stub it.
-public protocol SpendozaAPI: AccountAPI, AdminAPI {
+public protocol SpendozaAPI: AccountAPI, AdminAPI, HouseholdAPI {
     func profile() async throws -> Profile
     func completeOnboarding() async throws
     func updateProfile(_ change: ProfileChange) async throws -> Profile
@@ -18,6 +18,8 @@ public protocol SpendozaAPI: AccountAPI, AdminAPI {
     func statements() async throws -> [Statement]
     func reprocessStatement(id: String) async throws
     func removeStatement(id: String) async throws
-    func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws
+    /// Creates the account; the result says whether the invite or invitation code joined a household.
+    @discardableResult
+    func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws -> SignUpResult
     func joinWaitlist(name: String, email: String) async throws
 }

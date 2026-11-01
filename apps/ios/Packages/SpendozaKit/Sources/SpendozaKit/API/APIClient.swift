@@ -135,13 +135,89 @@ public final class APIClient: SpendozaAPI {
         try await sendIgnoringBody(.adminAction("send-annual-report", userID: userID))
     }
 
-    public func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws {
-        try await sendIgnoringBody(.signUp(email: email, password: password, displayName: displayName, inviteCode: inviteCode))
+    @discardableResult
+    public func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws -> SignUpResult {
+        try await send(.signUp(email: email, password: password, displayName: displayName, inviteCode: inviteCode))
     }
 
     public func joinWaitlist(name: String, email: String) async throws {
         try await sendIgnoringBody(.waitlist(name: name, email: email))
     }
+
+    // MARK: HouseholdAPI
+
+    public func household() async throws -> Household? {
+        guard let data = try await perform(.household, notFoundIsNil: true) else { return nil }
+        return try decode(Household.self, from: data)
+    }
+
+    public func createHousehold(name: String) async throws -> String? {
+        struct Created: Decodable {
+            let inviteCode: String?
+            enum CodingKeys: String, CodingKey { case inviteCode = "invite_code" }
+        }
+        let created: Created = try await send(.household(.post, "", ["name": name]))
+        return created.inviteCode
+    }
+
+    public func joinHousehold(code: String) async throws {
+        try await sendIgnoringBody(.household(.post, "/join", ["invite_code": code.trimmingCharacters(in: .whitespacesAndNewlines)]))
+    }
+
+    public func rotateInviteCode() async throws -> String {
+        struct Rotated: Decodable {
+            let inviteCode: String
+            enum CodingKeys: String, CodingKey { case inviteCode = "invite_code" }
+        }
+        let rotated: Rotated = try await send(.household(.post, "/invite-code"))
+        return rotated.inviteCode
+    }
+
+    public func renameHousehold(_ name: String) async throws {
+        try await sendIgnoringBody(.household(.patch, "", ["name": name]))
+    }
+
+    public func deleteHousehold(confirmName: String) async throws {
+        try await sendIgnoringBody(.household(.delete, "", ["confirm_name": confirmName]))
+    }
+
+    public func invite(email: String) async throws {
+        try await sendIgnoringBody(.household(.post, "/invite", ["email": email]))
+    }
+
+    public func pendingInvitations() async throws -> [PendingInvitation] { try await send(.pendingInvitations) }
+
+    public func revokeInvitation(id: String) async throws {
+        try await sendIgnoringBody(.household(.delete, "/invitations/\(id)"))
+    }
+
+    public func myInvitations() async throws -> [MyInvitation] { try await send(.myInvitations) }
+
+    public func acceptInvitation(id: String, code: String) async throws {
+        try await sendIgnoringBody(.household(.post, "/invitations/\(id)/accept", ["code": code]))
+    }
+
+    public func declineInvitation(id: String, code: String) async throws {
+        try await sendIgnoringBody(.household(.post, "/invitations/\(id)/decline", ["code": code]))
+    }
+
+    public func removeMember(id: String) async throws {
+        try await sendIgnoringBody(.household(.delete, "/members/\(id)"))
+    }
+
+    public func makeHead(id: String) async throws {
+        try await sendIgnoringBody(.household(.post, "/transfer", ["new_head_id": id]))
+    }
+
+    public func updateSharing(_ change: SharingChange) async throws {
+        try await sendIgnoringBody(.household(.put, "/sharing", change))
+    }
+
+    public func setCategoryShared(id: String, shared: Bool) async throws {
+        try await sendIgnoringBody(.json(.put, "/api/categories/\(id)", ["is_shared_with_household": shared]))
+    }
+
+    public func leaveHousehold() async throws { try await sendIgnoringBody(.household(.post, "/leave")) }
 
     // MARK: Transport
 

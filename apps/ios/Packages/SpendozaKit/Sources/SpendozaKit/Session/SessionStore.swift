@@ -52,11 +52,12 @@ public struct AccountReadyError: Error, Equatable, Sendable {
 }
 
 /// Creates the account, then signs in. A sign-in failure after a created account becomes `AccountReadyError`.
-public func completeSignUp(email: String, createAccount: () async throws -> Void,
-                           signIn: () async throws -> Void,
-                           isolation: isolated (any Actor)? = #isolation) async throws {
-    try await createAccount()
+public func completeSignUp<Created>(email: String, createAccount: () async throws -> Created,
+                                    signIn: () async throws -> Void,
+                                    isolation: isolated (any Actor)? = #isolation) async throws -> Created {
+    let created = try await createAccount()
     do { try await signIn() } catch { throw AccountReadyError(email: email) }
+    return created
 }
 
 /// Holds the Supabase session and the profile, and says which phase of the app to show.
@@ -81,6 +82,9 @@ public final class SessionStore {
     @ObservationIgnored public var onSessionEnded: (@MainActor () -> Void)?
     /// Set when sign-up created an account but the follow-up sign-in failed; Sign in prefills this email and says the account is ready.
     public private(set) var accountReadyEmail: String?
+    /// What sign-up said about the invite or invitation code, until the Home tab shows it and it is dismissed.
+    /// Only set when there is something to say (a household was joined, was full, or isn't on the plan).
+    public private(set) var signUpNotice: SignUpResult?
     /// Why the person was signed out against their will (the account was disabled); Sign in shows it until the next successful sign-in.
     public private(set) var signedOutNotice: String?
     /// The Spendoza API, authorized with this store's session.
@@ -196,22 +200,33 @@ public final class SessionStore {
         await refresh()
     }
 
-    /// Creates the account with an invite code, then signs in.
-    public func signUp(displayName: String, email: String, password: String, inviteCode: String) async throws {
+    /// Creates the account with an invite code, then signs in. The result says whether a household was joined.
+    @discardableResult
+    public func signUp(displayName: String, email: String, password: String, inviteCode: String) async throws -> SignUpResult {
         guard isConfigured else { throw APIError.message(Self.notConfiguredMessage) }
+        var result = SignUpResult()
         do {
-            try await completeSignUp(
+            return try await completeSignUp(
                 email: email,
                 createAccount: { [api] in
-                    try await api.signUp(email: email, password: password, displayName: displayName, inviteCode: inviteCode)
+                    result = try await api.signUp(email: email, password: password, displayName: displayName,
+                                                  inviteCode: inviteCode)
+                    return result
                 },
-                signIn: { try await self.signIn(email: email, password: password) }
+                signIn: {
+                    // Before signing in, so the app opens on Home with the notice already there.
+                    if result.joinedHousehold || result.householdFull || result.householdNotOnPlan { self.signUpNotice = result }
+                    try await self.signIn(email: email, password: password)
+                }
             )
         } catch let ready as AccountReadyError {
+            signUpNotice = nil
             accountReadyEmail = ready.email
             throw ready
         }
     }
+
+    public func dismissSignUpNotice() { signUpNotice = nil }
 
     public func signOut() async {
         if let auth { try? await auth.signOut() }
@@ -280,6 +295,7 @@ public final class SessionStore {
 
     private func clear() {
         accountReadyEmail = nil
+        signUpNotice = nil
         profile = nil
         loadError = nil
         phase = .signedOut

@@ -14,11 +14,17 @@ public struct Profile: Codable, Sendable, Equatable {
     public let emailReportHour: Int
     public let subscriptionTier: String
     public let createdAt: Date?
+    public let incomeSharing: IncomeSharing
+    public let expenseSharing: ExpenseSharing
+    /// What a partial income share contributes; nil unless income sharing is partial.
+    public let sharedIncomeAmount: Double?
 
     public init(id: String, displayName: String, onboardingCompleted: Bool, isAdmin: Bool,
                 emailReportsEnabled: Bool, householdID: String?, timezone: String? = nil,
                 avatarURL: URL? = nil, emailReportDay: Weekday = .saturday, emailReportHour: Int = 9,
-                subscriptionTier: String = "free", createdAt: Date? = nil) {
+                subscriptionTier: String = "free", createdAt: Date? = nil,
+                incomeSharing: IncomeSharing = .all, expenseSharing: ExpenseSharing = .all,
+                sharedIncomeAmount: Double? = nil) {
         self.id = id
         self.displayName = displayName
         self.onboardingCompleted = onboardingCompleted
@@ -31,6 +37,9 @@ public struct Profile: Codable, Sendable, Equatable {
         self.emailReportHour = emailReportHour
         self.subscriptionTier = subscriptionTier
         self.createdAt = createdAt
+        self.incomeSharing = incomeSharing
+        self.expenseSharing = expenseSharing
+        self.sharedIncomeAmount = sharedIncomeAmount
     }
 
     /// A response that leaves out the report schedule or tier gets the server's defaults.
@@ -48,6 +57,10 @@ public struct Profile: Codable, Sendable, Equatable {
         emailReportHour = try c.decodeIfPresent(Int.self, forKey: .emailReportHour) ?? 9
         subscriptionTier = try c.decodeIfPresent(String.self, forKey: .subscriptionTier) ?? "free"
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+        // Absent means the database default, 'none'.
+        incomeSharing = try c.decodeIfPresent(IncomeSharing.self, forKey: .incomeSharing) ?? .none
+        expenseSharing = try c.decodeIfPresent(ExpenseSharing.self, forKey: .expenseSharing) ?? .none
+        sharedIncomeAmount = try c.decodeIfPresent(FlexibleNumber.self, forKey: .sharedIncomeAmount)?.double
     }
 
     enum CodingKeys: String, CodingKey {
@@ -63,6 +76,9 @@ public struct Profile: Codable, Sendable, Equatable {
         case emailReportHour = "email_report_hour"
         case subscriptionTier = "subscription_tier"
         case createdAt = "created_at"
+        case incomeSharing = "income_sharing_mode"
+        case expenseSharing = "expense_sharing_mode"
+        case sharedIncomeAmount = "shared_income_amount"
     }
 }
 

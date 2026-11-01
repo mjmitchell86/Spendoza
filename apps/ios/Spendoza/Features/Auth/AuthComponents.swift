@@ -41,6 +41,7 @@ struct AuthField: View {
     var contentType: UITextContentType?
     var keyboard: UIKeyboardType = .default
     var capitalization: TextInputAutocapitalization = .never
+    var placeholder = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -51,7 +52,7 @@ struct AuthField: View {
                 if secure {
                     SecureField("", text: $text)
                 } else {
-                    TextField("", text: $text)
+                    TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Theme.soft))
                         .keyboardType(keyboard)
                         .textInputAutocapitalization(capitalization)
                         .autocorrectionDisabled()

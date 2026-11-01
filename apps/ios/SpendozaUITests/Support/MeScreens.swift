@@ -51,6 +51,19 @@ extension XCUIApplication {
         }
     }
 
+    /// The top edge of the first labelled text in the accessibility tree (changes as the page scrolls).
+    @MainActor
+    func firstTextTop() -> CGFloat? {
+        guard let root = try? snapshot() else { return nil }
+        var y: CGFloat?
+        func walk(_ node: XCUIElementSnapshot) {
+            if y == nil, node.elementType == .staticText, !node.label.isEmpty { y = node.frame.minY }
+            node.children.forEach(walk)
+        }
+        walk(root)
+        return y
+    }
+
     /// Swipes up until the page stops moving (its first text keeps the same position twice).
     @MainActor
     func scrollToEnd(maxSwipes: Int = 40) {
