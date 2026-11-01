@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { allocationScale } from "@spendoza/shared";
 import type { ReportData } from "../ai/report-insights";
 
 // ---------------------------------------------------------------------------
@@ -847,7 +848,7 @@ function drawAllocationBar(
   ensureSpace(doc, 80);
 
   // Section title
-  drawSectionTitle(doc, "Spending Allocation", pageWidth);
+  drawSectionTitle(doc, "Share of income", pageWidth);
 
   const barHeight = 14;
   const barY = doc.y;
@@ -868,6 +869,9 @@ function drawAllocationBar(
     });
   }
 
+  // Shares of income can add up past 100% when spending beat income; the bar then shrinks to fit.
+  const scale = allocationScale(segments.map((seg) => seg.pct));
+
   // Background bar with rounded ends
   roundedRect(doc, left, barY, pageWidth, barHeight, barRadius, C.divider);
 
@@ -875,7 +879,7 @@ function drawAllocationBar(
   let x = left;
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
-    const segWidth = (seg.pct / 100) * pageWidth;
+    const segWidth = (scale.widths[i] / 100) * pageWidth;
     if (segWidth < 1) continue;
 
     // For first and last segments, use rounded rect; middle segments use plain rect
@@ -915,7 +919,7 @@ function drawAllocationBar(
   doc
     .fontSize(8)
     .fillColor(C.muted)
-    .text("50/30/20 Guideline", left, doc.y, {
+    .text(scale.overIncome ? "More went out than came in, so the bar is shrunk to fit. 50/30/20 Guideline" : "50/30/20 Guideline", left, doc.y, {
       width: pageWidth,
       align: "center",
     });

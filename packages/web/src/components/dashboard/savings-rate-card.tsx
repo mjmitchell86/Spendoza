@@ -4,6 +4,7 @@ import type { DashboardSummary } from "@/hooks/use-dashboard";
 import {
   formatSavingsRate,
   getSavingsRateTier,
+  overspendNote,
   savingsRateArcFraction,
   type SavingsRateTier,
 } from "@/lib/savings-rate";
@@ -80,6 +81,9 @@ export function SavingsRateCard({ summary }: SavingsRateCardProps) {
             >
               {formatSavingsRate(rate)}
             </p>
+            {overspendNote(rate) && (
+              <p className="text-sm font-medium text-foreground">{overspendNote(rate)}</p>
+            )}
             <p className="text-sm text-muted-foreground">
               Net: {formatCurrency(summary.net)}
             </p>

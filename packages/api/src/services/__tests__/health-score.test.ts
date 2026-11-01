@@ -55,6 +55,15 @@ describe("calculateHealthScore", () => {
     expect(result.factors.debt_to_income.rating).toBe("critical");
   });
 
+  it("never gives the savings part negative points when spending beats income", () => {
+    const result = calculateHealthScore(-40, goodAllocation, noDebt, 6, null);
+    expect(result.factors.savings_rate.points).toBe(0);
+    expect(result.factors.savings_rate.value).toBe(-40);
+    expect(result.factors.savings_rate.rating).toBe("critical");
+    // The other four parts keep their full 75 points
+    expect(result.score).toBe(75);
+  });
+
   it("includes previous_score when provided", () => {
     const result = calculateHealthScore(20, goodAllocation, noDebt, 6, 85);
     expect(result.previous_score).toBe(85);

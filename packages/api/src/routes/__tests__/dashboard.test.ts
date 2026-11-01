@@ -93,6 +93,10 @@ const mockLatestTxn = mock(() =>
 
 // Build a flexible per-user client mock
 const mockUserFrom = mock((table: string) => {
+  if (table === "categories") {
+    return { select: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) };
+  }
+
   lastTable = table;
 
   if (table === "transactions") {
@@ -243,6 +247,10 @@ const mockGetUser = mock(() =>
 
 // supabaseAdmin.from() dispatcher
 const mockAdminFrom = mock((table: string) => {
+  if (table === "categories") {
+    return { select: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) };
+  }
+
   if (table === "profiles") {
     return {
       select: (cols: string) => {
