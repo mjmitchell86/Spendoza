@@ -551,6 +551,17 @@ describe("getPersonalDashboardForMonth", () => {
     expect(result.month).toBe("2026-03-01");
   });
 
+  it("computes from transactions when the stored report is out of date", async () => {
+    mockReportMaybeSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...sampleReport, has_new_data: true }, error: null })
+    );
+
+    const result = await getPersonalDashboardForMonth(ctx, "2026-03-01");
+
+    // The live numbers (1500 + 500 + 300), not the stored report's 4000
+    expect(result.summary.total_expenses).toBe(2300);
+  });
+
   it("computes from transactions when report has zero data", async () => {
     mockReportMaybeSingle.mockImplementation(() =>
       Promise.resolve({

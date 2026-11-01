@@ -77,6 +77,7 @@ export function toDashboardResponse(report: any) {
     summary: {
       total_income: rd.total_income,
       total_expenses: rd.total_expenses,
+      total_saved: rd.total_saved ?? 0,
       savings_rate: rd.savings_rate,
       net: rd.total_income - rd.total_expenses,
     },
@@ -362,8 +363,9 @@ export async function getPersonalDashboardForMonth(
     .eq("report_month", month)
     .maybeSingle();
 
-  // Use report if it has meaningful data
-  if (report) {
+  // Use the report if it has meaningful data and is up to date (an out-of-date one is rebuilt when the
+  // report itself is opened; until then the live numbers are the right ones)
+  if (report && !report.has_new_data) {
     const rd = report.report_data as any;
     if (rd.total_income > 0 || rd.total_expenses > 0) {
       return {
@@ -505,8 +507,9 @@ export async function getHouseholdDashboardForMonth(
     .eq("report_month", month)
     .maybeSingle();
 
-  // Use report if it has meaningful data
-  if (report) {
+  // Use the report if it has meaningful data and is up to date (an out-of-date one is rebuilt when the
+  // report itself is opened; until then the live numbers are the right ones)
+  if (report && !report.has_new_data) {
     const rd = report.report_data as any;
     if (rd.total_income > 0 || rd.total_expenses > 0) {
       return {

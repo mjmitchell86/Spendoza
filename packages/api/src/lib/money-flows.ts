@@ -2,9 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AllocationBreakdown } from "../ai/report-insights";
 
 /**
- * How a category's money counts. `savings` is money kept (moved to savings, paying down debt);
- * `transfer` is money moving between the person's own accounts (incl. credit-card payments) and
- * counts as neither income nor spending.
+ * How a category's money counts. `savings` is money kept (moved to savings or investments);
+ * `transfer` is money moving between the person's own accounts (and card payments, for people who
+ * also import the card's statement) and counts as neither income nor spending.
  */
 export type FlowClass = "need" | "want" | "savings" | "transfer" | "other";
 
@@ -23,11 +23,11 @@ export interface CategoryTotal {
 }
 
 export interface MoneyFlows {
-  /** Credits, without transfers. */
+  /** Credits, without transfers or money taken back out of savings. */
   income: number;
   /** Debits that were spent: needs, wants, other and unknown categories. */
   spending: number;
-  /** Debits kept: savings-class categories. */
+  /** Money put into savings-class categories minus money taken back out; never below 0. */
   saved: number;
   /** Debits by category without transfers, largest first; percentages are of spending plus saved. */
   byCategory: CategoryTotal[];
@@ -62,7 +62,13 @@ export function summarizeFlows(transactions: FlowTransaction[], classOf: ClassOf
     if (flowClass === "transfer") continue;
 
     if (t.type === "credit") {
-      income += amount;
+      if (flowClass === "savings") {
+        // Money taken back out of savings: less saved this period, not income.
+        saved -= amount;
+        categoryMap.set(category, (categoryMap.get(category) ?? 0) - amount);
+      } else {
+        income += amount;
+      }
     } else if (t.type === "debit") {
       if (flowClass === "savings") saved += amount;
       else spending += amount;
@@ -70,8 +76,11 @@ export function summarizeFlows(transactions: FlowTransaction[], classOf: ClassOf
     }
   }
 
+  // More taken out of savings than put in isn't negative saving here (it's not income either).
+  saved = Math.max(0, saved);
   const outflow = spending + saved;
   const byCategory = Array.from(categoryMap.entries())
+    .filter(([, amount]) => amount > 0)
     .map(([category, amount]) => ({ category, amount, percentage: pct(amount, outflow) }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -107,10 +116,12 @@ export function allocationFor(byCategory: CategoryTotal[], classOf: ClassOf, inc
  */
 export async function loadClassOf(userIds: string[], db: SupabaseClient): Promise<ClassOf> {
   if (userIds.length === 0) return () => undefined;
-  const { data: categories } = await db
+  const { data: categories, error } = await db
     .from("categories")
     .select("user_id, name, budget_class")
     .in("user_id", userIds);
+  // Without categories every debit counts as spending — the totals stay usable, just less precise.
+  if (error) console.error(`[money-flows] category lookup failed: ${error.message}`);
   const rank = (id: string) => userIds.indexOf(id);
   const ordered = [...(categories ?? [])].sort((a: any, b: any) => rank(a.user_id) - rank(b.user_id));
   return classMapFrom(ordered as Array<{ name: string; budget_class: string }>);

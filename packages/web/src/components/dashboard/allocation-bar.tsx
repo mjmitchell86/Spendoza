@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { allocationScale } from "@spendoza/shared";
 
 interface AllocationBarProps {
   allocation: {
@@ -30,12 +31,14 @@ export function AllocationBar({ allocation }: AllocationBarProps) {
     ...seg,
     ...allocation[seg.key],
   })).filter((seg) => seg.percentage > 0);
+  // Shares of income can add up past 100% when spending beat income; the bar then shrinks to fit.
+  const scale = allocationScale(segments.map((seg) => seg.percentage));
 
   return (
     <Card>
       <CardHeader className="pb-0">
         <CardTitle className="text-sm font-medium text-muted-foreground">
-          Spending Allocation
+          Share of income
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -43,22 +46,22 @@ export function AllocationBar({ allocation }: AllocationBarProps) {
         <div className="relative">
           {/* Benchmark labels */}
           <div className="mb-1 flex text-[10px] text-muted-foreground">
-            <span style={{ width: "50%" }} className="text-right pr-1">
+            <span style={{ width: `${scale.marks[0]}%` }} className="text-right pr-1">
               50%
             </span>
-            <span style={{ width: "30%" }} className="text-right pr-1">
+            <span style={{ width: `${scale.marks[1] - scale.marks[0]}%` }} className="text-right pr-1">
               80%
             </span>
           </div>
 
           <div className="flex h-8 w-full overflow-hidden rounded-lg">
-            {segments.map((seg) => (
+            {segments.map((seg, i) => (
               <div
                 key={seg.key}
                 className="h-full cursor-default transition-all hover:opacity-80"
                 title={`${seg.label}: ${formatCurrency(seg.amount)} (${seg.percentage.toFixed(0)}%)`}
                 style={{
-                  width: `${seg.percentage}%`,
+                  width: `${scale.widths[i]}%`,
                   backgroundColor: seg.color,
                 }}
               />
@@ -68,11 +71,11 @@ export function AllocationBar({ allocation }: AllocationBarProps) {
           {/* Benchmark dashed lines */}
           <div
             className="absolute top-5 h-8 w-px border-l border-dashed border-foreground/30"
-            style={{ left: "50%" }}
+            style={{ left: `${scale.marks[0]}%` }}
           />
           <div
             className="absolute top-5 h-8 w-px border-l border-dashed border-foreground/30"
-            style={{ left: "80%" }}
+            style={{ left: `${scale.marks[1]}%` }}
           />
         </div>
 
@@ -91,7 +94,9 @@ export function AllocationBar({ allocation }: AllocationBarProps) {
         </div>
 
         <p className="mt-2 text-[10px] text-muted-foreground">
-          Dashed markers show 50/30/20 rule boundaries
+          {scale.overIncome
+            ? "You spent more than you earned, so the bar is shrunk to fit. Dashed markers show 50/30/20 rule boundaries."
+            : "Dashed markers show 50/30/20 rule boundaries"}
         </p>
       </CardContent>
     </Card>

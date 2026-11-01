@@ -26,7 +26,7 @@ Rules:
 - Every transaction MUST be classified — use the closest matching category
 - The "index" field must match the transaction number from the input list
 - Match based on merchant name patterns (e.g. WALMART/TARGET → Groceries, SHELL/EXXON → Gas/Transportation, NETFLIX/SPOTIFY → Entertainment, restaurants/cafes → Dining)
-- Money the person moves between their own accounts: a debit going OUT to their savings or investment account (e.g. "TRANSFER TO SAVINGS ...1234") is "Savings". If a "Transfers" category is available, use it for every other move between their own accounts — money coming IN from another of their accounts (e.g. "TRANSFER FROM CHECKING", "TRANSFER FROM SAVINGS") and moves out to another of their checking accounts — and for payments to their own credit cards (e.g. "CHASE CARD PAYMENT", "AUTOPAY CAPITAL ONE"). Loan payments (student, auto, personal loans) are "Debt Payments"
+- Money the person moves between their own accounts: a debit going OUT to their savings or investment account (e.g. "TRANSFER TO SAVINGS ...1234") is "Savings". If a "Transfers" category is available, use it for every other move between their own bank accounts — money coming IN from another of their accounts (e.g. "TRANSFER FROM CHECKING", "TRANSFER FROM SAVINGS") and moves out to another of their checking accounts. Payments to credit cards (e.g. "CHASE CARD PAYMENT", "AUTOPAY CAPITAL ONE") and loan payments (student, auto, personal loans) are "Debt Payments"
 - For ambiguous transactions, prefer the most specific matching category over generic ones
 - If no category is a good fit, pick the broadest/most general category available — never leave a transaction unclassified`;
 

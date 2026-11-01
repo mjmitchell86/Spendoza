@@ -39,6 +39,24 @@ describe("summarizeFlows", () => {
     expect(f.byCategory.map((c) => c.category)).toEqual(["Housing"]);
   });
 
+  it("treats money taken back out of savings as less saved, not as income", () => {
+    const f = summarizeFlows(
+      [credit(4000), debit(4000, "Housing"), debit(1000, "Savings"), credit(1000, "Savings")],
+      classOf
+    );
+    expect(f.income).toBe(4000);
+    expect(f.spending).toBe(4000);
+    expect(f.saved).toBe(0);
+    expect(f.savingsRate).toBe(0);
+    expect(f.byCategory.map((c) => c.category)).toEqual(["Housing"]);
+  });
+
+  it("never reports a negative amount saved when more came out of savings than went in", () => {
+    const f = summarizeFlows([credit(3000), debit(500, "Savings"), credit(800, "Savings")], classOf);
+    expect(f.saved).toBe(0);
+    expect(f.income).toBe(3000);
+  });
+
   it("goes negative when spending beats income", () => {
     const f = summarizeFlows([credit(2000), debit(3000, "Housing")], classOf);
     expect(f.savingsRate).toBe(-50);

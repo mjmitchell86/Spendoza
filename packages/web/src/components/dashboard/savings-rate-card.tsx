@@ -81,8 +81,11 @@ export function SavingsRateCard({ summary }: SavingsRateCardProps) {
             >
               {formatSavingsRate(rate)}
             </p>
+            {overspendNote(rate) && (
+              <p className="text-sm font-medium text-foreground">{overspendNote(rate)}</p>
+            )}
             <p className="text-sm text-muted-foreground">
-              {overspendNote(rate) ?? `Net: ${formatCurrency(summary.net)}`}
+              Net: {formatCurrency(summary.net)}
             </p>
           </div>
         </div>

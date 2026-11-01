@@ -444,21 +444,23 @@ export async function generateHouseholdPdfForHousehold(
     .toISOString()
     .slice(0, 10);
 
+  const memberClassOf = await loadClassOf(
+    await headFirst(householdId, (members ?? []).map((m) => m.id)),
+    supabaseAdmin
+  );
   const memberContributions = await Promise.all(
     (members ?? []).map(async (member) => {
       const { data: txns } = await db
         .from("transactions")
-        .select("type, amount")
+        .select("type, amount, ai_category")
         .eq("user_id", member.id)
         .gte("date", monthStart)
         .lte("date", monthEnd);
 
-      let income = 0;
-      let expenses = 0;
-      for (const t of txns ?? []) {
-        if (t.type === "credit") income += Number(t.amount);
-        else if (t.type === "debit") expenses += Number(t.amount);
-      }
+      // Same rules as the household totals: savings is saved, transfers count as neither
+      const flows = summarizeFlows(txns ?? [], memberClassOf);
+      const income = flows.income;
+      const expenses = flows.spending;
 
       return {
         display_name: member.display_name ?? "Unknown",
@@ -512,6 +514,20 @@ function formatRangeLabel(fromDate: string, toDate: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: member ids with the household head first (whose categories win on a shared name)
+// ---------------------------------------------------------------------------
+async function headFirst(householdId: string, memberIds: string[]): Promise<string[]> {
+  const { data: household } = await supabaseAdmin
+    .from("households")
+    .select("head_of_household_id")
+    .eq("id", householdId)
+    .single();
+  const headId = household?.head_of_household_id as string | undefined;
+  if (!headId || !memberIds.includes(headId)) return memberIds;
+  return [headId, ...memberIds.filter((id) => id !== headId)];
+}
+
+// ---------------------------------------------------------------------------
 // Helper: aggregate transactions into ReportData shape for a date range
 // ---------------------------------------------------------------------------
 async function aggregateTransactionsForRange(
@@ -531,7 +547,8 @@ async function aggregateTransactionsForRange(
     throw new Error(`Transaction query failed: ${txnError.message}`);
   }
   // Savings-class categories are saved (not spent); transfer-class ones are neither income nor spending.
-  const classOf = await loadClassOf(userIds, db);
+  // Service role: a household's members can't see each other's categories under RLS.
+  const classOf = await loadClassOf(userIds, supabaseAdmin);
   const flows = summarizeFlows(transactions ?? [], classOf);
   const totalIncome = flows.income;
   const totalExpenses = flows.spending;
@@ -710,7 +727,8 @@ export async function generateHouseholdPdfForRange(
     .select("id, display_name")
     .eq("household_id", householdId);
 
-  const memberIds = (members ?? []).map((m) => m.id);
+  // The head's categories win when members share a category name, like the household report
+  const memberIds = await headFirst(householdId, (members ?? []).map((m) => m.id));
 
   if (memberIds.length === 0) return null;
 
@@ -812,21 +830,20 @@ export async function generateHouseholdPdfForRange(
   );
 
   // Compute member contributions for the date range
+  const memberClassOf = await loadClassOf(memberIds, supabaseAdmin);
   const memberContributions = await Promise.all(
     (members ?? []).map(async (member) => {
       const { data: txns } = await db
         .from("transactions")
-        .select("type, amount")
+        .select("type, amount, ai_category")
         .eq("user_id", member.id)
         .gte("date", fromDate)
         .lte("date", toDate);
 
-      let income = 0;
-      let expenses = 0;
-      for (const t of txns ?? []) {
-        if (t.type === "credit") income += Number(t.amount);
-        else if (t.type === "debit") expenses += Number(t.amount);
-      }
+      // Same rules as the household totals: savings is saved, transfers count as neither
+      const flows = summarizeFlows(txns ?? [], memberClassOf);
+      const income = flows.income;
+      const expenses = flows.spending;
 
       return {
         display_name: member.display_name ?? "Unknown",

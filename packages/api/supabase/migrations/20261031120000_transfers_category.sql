@@ -1,7 +1,11 @@
--- Transfers: money moving between the person's own accounts (including credit-card payments) counts as
--- neither income nor spending. Adds the 'transfer' budget class and a Transfers category for everyone,
--- and marks every report as having new data so it is rebuilt with the corrected math the next time it
--- is opened (savings-class money counts as saved, needs and wants are measured against income).
+-- How categories count toward the savings rate:
+--   * 'savings' (Savings) is money kept — saved, not spent.
+--   * new 'transfer' (Transfers) is money moving between the person's own accounts — neither income nor
+--     spending.
+--   * the default Debt Payments category becomes a 'need' (minimum debt payments are needs in 50/30/20).
+--     It used to be 'savings', which would now make every credit-card payment filed there look "saved".
+-- Every report is marked as having new data so it is rebuilt with the corrected math the next time it is
+-- opened, and a category change from now on marks its owner's reports the same way.
 
 ALTER TABLE public.categories DROP CONSTRAINT IF EXISTS categories_budget_class_check;
 ALTER TABLE public.categories ADD CONSTRAINT categories_budget_class_check
@@ -23,12 +27,16 @@ BEGIN
     (NEW.id, 'Subscriptions',  true, 'want'),
     (NEW.id, 'Automotive',     true, 'want'),
     (NEW.id, 'Savings',        true, 'savings'),
-    (NEW.id, 'Debt Payments',  true, 'savings'),
+    (NEW.id, 'Debt Payments',  true, 'need'),
     (NEW.id, 'Transfers',      true, 'transfer'),
     (NEW.id, 'Other',          true, 'other');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
+
+-- The default Debt Payments category counts as a need from now on (custom categories keep their class).
+UPDATE public.categories SET budget_class = 'need'
+WHERE is_system_default = true AND name = 'Debt Payments' AND budget_class = 'savings';
 
 -- A category someone already named Transfers now counts as one; everyone else gets a Transfers category.
 UPDATE public.categories SET budget_class = 'transfer'
@@ -40,5 +48,35 @@ FROM public.profiles p
 WHERE NOT EXISTS (
   SELECT 1 FROM public.categories c WHERE c.user_id = p.id AND lower(c.name) = 'transfers'
 );
+
+-- A category's name and class decide how its transactions count, so changing, adding or deleting one
+-- marks its owner's reports (and their household's) as having new data.
+CREATE OR REPLACE FUNCTION public.mark_reports_stale_on_category_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  owner_id UUID := COALESCE(NEW.user_id, OLD.user_id);
+BEGIN
+  UPDATE public.reports r
+  SET has_new_data = true
+  WHERE r.has_new_data = false
+    AND (
+      (r.entity_type = 'user' AND r.entity_id = owner_id)
+      OR (r.entity_type = 'household'
+          AND r.entity_id = (SELECT p.household_id FROM public.profiles p WHERE p.id = owner_id))
+    );
+  RETURN NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.mark_reports_stale_on_category_change() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS categories_mark_reports_stale ON public.categories;
+CREATE TRIGGER categories_mark_reports_stale
+  AFTER INSERT OR DELETE OR UPDATE OF name, budget_class ON public.categories
+  FOR EACH ROW EXECUTE FUNCTION public.mark_reports_stale_on_category_change();
 
 UPDATE public.reports SET has_new_data = true WHERE has_new_data = false;

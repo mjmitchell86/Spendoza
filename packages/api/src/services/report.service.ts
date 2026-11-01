@@ -368,9 +368,11 @@ export async function generateHouseholdReport(
     .eq("id", householdId)
     .single();
   const headId = household?.head_of_household_id as string | undefined;
+  // Service role: members' categories aren't visible to each other under RLS, and the totals must not
+  // depend on who opened the report.
   const classOf = await loadClassOf(
     [...(headId ? [headId] : []), ...memberIds.filter((id: string) => id !== headId)],
-    db
+    supabaseAdmin
   );
 
   // 4. Build totals and the category breakdown
