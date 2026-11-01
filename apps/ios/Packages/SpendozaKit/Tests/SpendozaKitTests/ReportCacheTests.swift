@@ -251,7 +251,7 @@ private struct OfflineAPI: SpendozaAPI {
     func transactions(statementID: String) async throws -> [Transaction] { [] }
     func setCategory(transactionID: String, category: String?) async throws {}
     func createBudgetGoal(name: String, categoryID: String, amount: Int) async throws {}
-    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement { throw APIError.offline }
+    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?, shared: Bool, accountLabel: String?) async throws -> Statement { throw APIError.offline }
     func statements() async throws -> [Statement] { [] }
     func reprocessStatement(id: String) async throws {}
     func removeStatement(id: String) async throws {}
@@ -307,7 +307,7 @@ private struct GatedAPI: SpendozaAPI {
     func transactions(statementID: String) async throws -> [Transaction] { [] }
     func setCategory(transactionID: String, category: String?) async throws {}
     func createBudgetGoal(name: String, categoryID: String, amount: Int) async throws {}
-    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement { throw APIError.offline }
+    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?, shared: Bool, accountLabel: String?) async throws -> Statement { throw APIError.offline }
     func statements() async throws -> [Statement] { [] }
     func reprocessStatement(id: String) async throws {}
     func removeStatement(id: String) async throws {}
