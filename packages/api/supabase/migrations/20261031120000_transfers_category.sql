@@ -2,8 +2,9 @@
 --   * 'savings' (Savings) is money kept — saved, not spent.
 --   * new 'transfer' (Transfers) is money moving between the person's own accounts — neither income nor
 --     spending.
---   * the default Debt Payments category becomes a 'need' (minimum debt payments are needs in 50/30/20).
---     It used to be 'savings', which would now make every credit-card payment filed there look "saved".
+--   * the default Debt Payments category becomes 'other': still spending, but not scored as a need or a
+--     want (a whole credit-card payment would swamp the needs share). It used to be 'savings', which would
+--     now make every card payment filed there look "saved".
 -- Every report is marked as having new data so it is rebuilt with the corrected math the next time it is
 -- opened, and a category change from now on marks its owner's reports the same way.
 
@@ -27,15 +28,15 @@ BEGIN
     (NEW.id, 'Subscriptions',  true, 'want'),
     (NEW.id, 'Automotive',     true, 'want'),
     (NEW.id, 'Savings',        true, 'savings'),
-    (NEW.id, 'Debt Payments',  true, 'need'),
+    (NEW.id, 'Debt Payments',  true, 'other'),
     (NEW.id, 'Transfers',      true, 'transfer'),
     (NEW.id, 'Other',          true, 'other');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
--- The default Debt Payments category counts as a need from now on (custom categories keep their class).
-UPDATE public.categories SET budget_class = 'need'
+-- The default Debt Payments category counts as other spending from now on (custom ones keep their class).
+UPDATE public.categories SET budget_class = 'other'
 WHERE is_system_default = true AND name = 'Debt Payments' AND budget_class = 'savings';
 
 -- A category someone already named Transfers now counts as one; everyone else gets a Transfers category.

@@ -95,7 +95,7 @@ export function AllocationBar({ allocation }: AllocationBarProps) {
 
         <p className="mt-2 text-[10px] text-muted-foreground">
           {scale.overIncome
-            ? "You spent more than you earned, so the bar is shrunk to fit. Dashed markers show 50/30/20 rule boundaries."
+            ? "More went out than came in, so the bar is shrunk to fit. Dashed markers show 50/30/20 rule boundaries."
             : "Dashed markers show 50/30/20 rule boundaries"}
         </p>
       </CardContent>

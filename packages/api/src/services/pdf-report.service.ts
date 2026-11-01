@@ -919,7 +919,7 @@ function drawAllocationBar(
   doc
     .fontSize(8)
     .fillColor(C.muted)
-    .text(scale.overIncome ? "You spent more than you earned, so the bar is shrunk to fit. 50/30/20 Guideline" : "50/30/20 Guideline", left, doc.y, {
+    .text(scale.overIncome ? "More went out than came in, so the bar is shrunk to fit. 50/30/20 Guideline" : "50/30/20 Guideline", left, doc.y, {
       width: pageWidth,
       align: "center",
     });
