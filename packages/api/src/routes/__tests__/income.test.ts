@@ -67,8 +67,9 @@ const mockInsert = mock(() => ({
 const mockUpdateSingle = mock(() =>
   Promise.resolve({ data: incomeEntry, error: null })
 );
+const mockUpdateOr = mock((_filter: string) => ({ select: () => ({ single: mockUpdateSingle }) }));
 const mockUpdate = mock(() => ({
-  eq: () => ({ eq: () => ({ select: () => ({ single: mockUpdateSingle }) }) }),
+  eq: () => ({ or: mockUpdateOr }),
 }));
 
 // DELETE terminal: .delete().eq("id", ...).eq("user_id", ...)
@@ -330,6 +331,23 @@ describe("PUT /api/income/:id", () => {
 
     expect(mockFrom).toHaveBeenCalledWith("income_entries");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the attributed user edit an entry they do not own", async () => {
+    mockUpdateOr.mockClear();
+    const res = await fetch(url("inc-1"), {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ amount: 5100 }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUpdateOr).toHaveBeenCalledWith(
+      `user_id.eq.${TEST_USER_ID},attributed_to_user_id.eq.${TEST_USER_ID}`
+    );
   });
 
   it("returns 404 for non-existent entry", async () => {

@@ -57,7 +57,7 @@ export async function createIncome(ctx: ServiceContext, input: CreateIncomeInput
 }
 
 // ---------------------------------------------------------------------------
-// updateIncome — updates by id + user_id (owner only)
+// updateIncome — updates by id for the owner or the attributed user
 // ---------------------------------------------------------------------------
 export async function updateIncome(
   ctx: ServiceContext,
@@ -70,7 +70,7 @@ export async function updateIncome(
     .from("income_entries")
     .update(input)
     .eq("id", id)
-    .eq("user_id", userId)
+    .or(`user_id.eq.${userId},attributed_to_user_id.eq.${userId}`)
     .select()
     .single();
 

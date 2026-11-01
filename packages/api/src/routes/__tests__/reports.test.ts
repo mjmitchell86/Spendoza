@@ -547,6 +547,45 @@ describe("POST /api/reports/generate", () => {
     expect(mockGenerateUserReport).toHaveBeenCalledTimes(1);
   });
 
+  it("generates the chosen month when the body has one", async () => {
+    mockGenerateUserReport.mockClear();
+    mockGenerateHouseholdReport.mockClear();
+    rlsResults.profiles = { selectSingle: { data: { household_id: TEST_HOUSEHOLD_ID }, error: null } };
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ month: "2026-09-01" }),
+    });
+
+    expect(res.status).toBe(200);
+    const [, date, force] = mockGenerateUserReport.mock.calls[0] as any[];
+    expect(date.toISOString().slice(0, 7)).toBe("2026-09");
+    expect(force).toBe(true);
+    const [, hhDate] = mockGenerateHouseholdReport.mock.calls[0] as any[];
+    expect(hhDate.toISOString().slice(0, 7)).toBe("2026-09");
+  });
+
+  it.each(["2026-09", "2026-09-15", "nope", 5])("returns 400 for an invalid month %p", async (month) => {
+    mockGenerateUserReport.mockClear();
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ month }),
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Validation failed");
+    expect(mockGenerateUserReport).not.toHaveBeenCalled();
+  });
+
   it("returns 429 when at 24h limit in production", async () => {
     const originalEnv = process.env.VERCEL_ENV;
     process.env.VERCEL_ENV = "production";

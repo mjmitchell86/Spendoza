@@ -182,8 +182,8 @@ export function CategoriesPage() {
             <DialogTitle>Delete Category</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete &ldquo;{deleteTarget?.name}
-              &rdquo;? Expenses using this category will remain but become
-              uncategorized.
+              &rdquo;? Its transactions become uncategorized and its bills
+              move to Other.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

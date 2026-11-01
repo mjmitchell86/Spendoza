@@ -64,12 +64,33 @@ const mockSelect = mock(() => ({
   }),
 }));
 
-const mockFrom = mock((_table: string) => ({
-  select: mockSelect,
-  insert: mockInsert,
-  update: mockUpdate,
-  delete: mockDelete,
+// "Other" lookup: .select("id").eq(user_id).eq(name).eq(is_system_default).maybeSingle()
+const otherCategory = { id: "cat-other" };
+const mockOtherMaybeSingle = mock(() => Promise.resolve({ data: otherCategory, error: null }));
+
+// transactions / expenses updates: .update({...}).eq(...).eq(...) (awaited)
+const mockTxnUpdateEq2 = mock((..._a: any[]) => Promise.resolve({ error: null }));
+const mockTxnUpdate = mock((_v: any) => ({
+  eq: (..._a: any[]) => ({ eq: mockTxnUpdateEq2 }),
 }));
+const mockExpUpdateEq2 = mock((..._a: any[]) => Promise.resolve({ error: null }));
+const mockExpUpdate = mock((_v: any) => ({
+  eq: (..._a: any[]) => ({ eq: mockExpUpdateEq2 }),
+}));
+
+const mockFrom = mock((table: string) => {
+  if (table === "transactions") return { update: mockTxnUpdate };
+  if (table === "expenses") return { update: mockExpUpdate };
+  return {
+    select: (cols: string) =>
+      cols === "id"
+        ? { eq: () => ({ eq: () => ({ eq: () => ({ maybeSingle: mockOtherMaybeSingle }) }) }) }
+        : mockSelect(),
+    insert: mockInsert,
+    update: mockUpdate,
+    delete: mockDelete,
+  };
+});
 
 const mockSupabase = { from: mockFrom } as any;
 const mockSupabaseAdmin = { from: mock() } as any;
@@ -95,7 +116,15 @@ beforeEach(() => {
   mockSelectSingle.mockClear();
   mockSelect.mockClear();
   mockFrom.mockClear();
+  mockOtherMaybeSingle.mockClear();
+  mockTxnUpdate.mockClear();
+  mockTxnUpdateEq2.mockClear();
+  mockExpUpdate.mockClear();
+  mockExpUpdateEq2.mockClear();
 
+  mockOtherMaybeSingle.mockImplementation(() => Promise.resolve({ data: otherCategory, error: null }));
+  mockTxnUpdateEq2.mockImplementation(() => Promise.resolve({ error: null }));
+  mockExpUpdateEq2.mockImplementation(() => Promise.resolve({ error: null }));
   mockOrder.mockImplementation(() => Promise.resolve({ data: categoriesList, error: null }));
   mockInsertSingle.mockImplementation(() => Promise.resolve({ data: categoryData, error: null }));
   mockUpdateSingle.mockImplementation(() => Promise.resolve({ data: categoryData, error: null }));
@@ -187,6 +216,31 @@ describe("updateCategory", () => {
     expect(mockUpdate).toHaveBeenCalledTimes(1);
   });
 
+  it("moves this user's transactions from the old name to the new name", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
+    mockUpdateSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...categoryData, name: "Food" }, error: null })
+    );
+
+    const { error } = await updateCategory(ctx, "cat-1", { name: "Food" });
+
+    expect(error).toBeNull();
+    expect(mockTxnUpdate).toHaveBeenCalledWith({ ai_category: "Food" });
+    expect(mockTxnUpdateEq2).toHaveBeenCalledWith("ai_category", "Groceries");
+  });
+
+  it("leaves transactions alone when the name is unchanged or not sent", async () => {
+    await updateCategory(ctx, "cat-1", { icon: "x" });
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
+    await updateCategory(ctx, "cat-1", { name: "Groceries" });
+
+    expect(mockTxnUpdate).not.toHaveBeenCalled();
+  });
+
   it("returns error when category not found", async () => {
     mockUpdateSingle.mockImplementation(() =>
       Promise.resolve({ data: null, error: { message: "Not found", code: "PGRST116" } })
@@ -212,6 +266,36 @@ describe("deleteCategory", () => {
 
     expect(error).toBeNull();
     expect(mockDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("uncategorizes transactions and moves expenses to Other before deleting", async () => {
+    const { error } = await deleteCategory(ctx, "cat-1");
+
+    expect(error).toBeNull();
+    expect(mockTxnUpdate).toHaveBeenCalledWith({ ai_category: null });
+    expect(mockTxnUpdateEq2).toHaveBeenCalledWith("ai_category", "Groceries");
+    expect(mockExpUpdate).toHaveBeenCalledWith({ category_id: "cat-other" });
+    expect(mockExpUpdateEq2).toHaveBeenCalledWith("category_id", "cat-1");
+    expect(mockDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses with a clear message and deletes nothing when Other is missing", async () => {
+    mockOtherMaybeSingle.mockImplementation(() => Promise.resolve({ data: null, error: null }));
+
+    const { error } = await deleteCategory(ctx, "cat-1");
+
+    expect((error as any).message).toContain('"Other" category');
+    expect(mockExpUpdate).not.toHaveBeenCalled();
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it("does not delete when moving expenses fails", async () => {
+    mockExpUpdateEq2.mockImplementation(() => Promise.resolve({ error: { message: "boom" } }));
+
+    const { error } = await deleteCategory(ctx, "cat-1");
+
+    expect(error).toBeDefined();
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   it("returns 403 error for system default category", async () => {

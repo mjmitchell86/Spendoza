@@ -114,7 +114,12 @@ export function useHouseholdDashboard(params?: DashboardParams, enabled = true) 
 export function useGenerateReport() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiClient("/reports/generate", { method: "POST" }),
+    // A single-month dashboard refreshes that month; any other period sends no body
+    mutationFn: (month?: string) =>
+      apiClient("/reports/generate", {
+        method: "POST",
+        ...(month ? { body: JSON.stringify({ month }) } : {}),
+      }),
     onSuccess: () => {
       toast.success("Report generated");
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });

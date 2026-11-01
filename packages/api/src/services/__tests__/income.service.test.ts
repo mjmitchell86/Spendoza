@@ -39,10 +39,11 @@ const mockOr = mock(() => ({ order: mockOrder }));
 const mockInsertSingle = mock(() => Promise.resolve({ data: incomeEntry, error: null }));
 const mockInsert = mock(() => ({ select: () => ({ single: mockInsertSingle }) }));
 
-// updateIncome: .from("income_entries").update({...}).eq("id",...).eq("user_id",...).select().single()
+// updateIncome: .from("income_entries").update({...}).eq("id",...).or(owner/attributed).select().single()
 const mockUpdateSingle = mock(() => Promise.resolve({ data: incomeEntry, error: null }));
+const mockUpdateOr = mock((_filter: string) => ({ select: () => ({ single: mockUpdateSingle }) }));
 const mockUpdate = mock(() => ({
-  eq: () => ({ eq: () => ({ select: () => ({ single: mockUpdateSingle }) }) }),
+  eq: () => ({ or: mockUpdateOr }),
 }));
 
 // deleteIncome: .from("income_entries").delete().eq("id",...).eq("user_id",...)
@@ -226,6 +227,14 @@ describe("updateIncome", () => {
     expect(data!.amount).toBe(6000);
     expect(mockFrom).toHaveBeenCalledWith("income_entries");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("matches the owner or the attributed user", async () => {
+    await updateIncome(ctx, "inc-1", { amount: 1 });
+
+    expect(mockUpdateOr).toHaveBeenCalledWith(
+      `user_id.eq.${TEST_USER_ID},attributed_to_user_id.eq.${TEST_USER_ID}`
+    );
   });
 
   it("returns error when entry not found", async () => {

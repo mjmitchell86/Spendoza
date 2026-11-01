@@ -41,6 +41,17 @@ export async function updateCategory(
 ) {
   const { supabase, userId } = ctx;
 
+  let oldName: string | null = null;
+  if (input.name !== undefined) {
+    const { data: current } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+    oldName = current?.name ?? null;
+  }
+
   const { data, error } = await supabase
     .from("categories")
     .update(input)
@@ -48,6 +59,16 @@ export async function updateCategory(
     .eq("user_id", userId)
     .select()
     .single();
+
+  // Transactions match categories by name (free text), so a rename carries them along
+  if (data && oldName !== null && input.name !== undefined && input.name !== oldName) {
+    const { error: renameError } = await supabase
+      .from("transactions")
+      .update({ ai_category: input.name })
+      .eq("user_id", userId)
+      .eq("ai_category", oldName);
+    if (renameError) return { data: null, error: renameError };
+  }
 
   return { data: data ?? null, error: error ?? null };
 }
@@ -79,6 +100,36 @@ export async function deleteCategory(ctx: ServiceContext, id: string) {
       error: { message: "Cannot delete system default categories", status: 403 },
     };
   }
+
+  // expenses.category_id is NOT NULL, so this user's bills move to their "Other" category
+  const { data: other } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("name", "Other")
+    .eq("is_system_default", true)
+    .maybeSingle();
+
+  if (!other) {
+    return {
+      data: null,
+      error: { message: 'Cannot delete this category: your "Other" category is missing' },
+    };
+  }
+
+  const { error: txnError } = await supabase
+    .from("transactions")
+    .update({ ai_category: null })
+    .eq("user_id", userId)
+    .eq("ai_category", category.name);
+  if (txnError) return { data: null, error: txnError };
+
+  const { error: expenseError } = await supabase
+    .from("expenses")
+    .update({ category_id: other.id })
+    .eq("user_id", userId)
+    .eq("category_id", id);
+  if (expenseError) return { data: null, error: expenseError };
 
   const { error: deleteError } = await supabase
     .from("categories")

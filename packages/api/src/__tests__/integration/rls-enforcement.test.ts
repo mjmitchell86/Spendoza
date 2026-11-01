@@ -70,6 +70,7 @@ function buildChain(results: Record<string, any>, calls: typeof rlsCalls) {
         calls.push({ table, op: "update" });
         const makeUpdateEq = (): any => ({
           eq: () => makeUpdateEq(),
+          or: () => makeUpdateEq(),
           select: () => ({
             single: () =>
               Promise.resolve(cfg.updateSingle ?? { data: null, error: null }),

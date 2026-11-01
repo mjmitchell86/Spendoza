@@ -85,12 +85,28 @@ const mockSelect = mock(() => ({
   }),
 }));
 
-const mockFrom = mock(() => ({
-  select: mockSelect,
-  insert: mockInsert,
-  update: mockUpdate,
-  delete: mockDelete,
+// Rename / delete side effects: transactions + expenses updates, and the "Other" lookup
+const mockSideEffectUpdate = mock((_v: any) => ({
+  eq: () => ({ eq: () => Promise.resolve({ error: null }) }),
 }));
+const mockOtherMaybeSingle = mock(() =>
+  Promise.resolve({ data: { id: "cat-other" }, error: null })
+);
+
+const mockFrom = mock((table: string) => {
+  if (table === "transactions" || table === "expenses") {
+    return { update: mockSideEffectUpdate };
+  }
+  return {
+    select: (cols?: string) =>
+      cols === "id"
+        ? { eq: () => ({ eq: () => ({ eq: () => ({ maybeSingle: mockOtherMaybeSingle }) }) }) }
+        : mockSelect(),
+    insert: mockInsert,
+    update: mockUpdate,
+    delete: mockDelete,
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Mock for supabaseAdmin (auth middleware uses getUser)
@@ -292,6 +308,9 @@ describe("PUT /api/categories/:id", () => {
   const url = (id: string) => `${baseUrl}/api/categories/${id}`;
 
   it("returns 200 with updated category", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
     const updatedCategory = { ...categoryData, name: "Food & Drinks" };
     mockUpdateSingle.mockImplementation(() =>
       Promise.resolve({ data: updatedCategory, error: null })
@@ -312,6 +331,7 @@ describe("PUT /api/categories/:id", () => {
 
     expect(mockFrom).toHaveBeenCalledWith("categories");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockFrom).toHaveBeenCalledWith("transactions");
   });
 
   it("returns 404 for non-existent category", async () => {
@@ -353,6 +373,8 @@ describe("DELETE /api/categories/:id", () => {
 
     expect(res.status).toBe(204);
     expect(mockFrom).toHaveBeenCalledWith("categories");
+    expect(mockFrom).toHaveBeenCalledWith("transactions");
+    expect(mockFrom).toHaveBeenCalledWith("expenses");
     expect(mockDelete).toHaveBeenCalledTimes(1);
   });
 
