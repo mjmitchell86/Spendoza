@@ -1,5 +1,7 @@
 # Money tab inventory: web, API, recurring detection, and existing iOS code
 
+> **Updated by Plan 3 Tasks 1–2:** the statement limit is now 4 MB everywhere ("Max 4MB per file", "{name}: exceeds 4MB", Support "up to 4 MB"); single-transaction "Assign To" uses `PUT /transactions/:id/attribute`; category rename carries transactions, delete moves bills to Other and uncategorizes transactions, duplicate names → 409 "You already have a category with that name"; the attributed user can edit shared income; `POST /reports/generate` takes `{month}`. Where this inventory says otherwise below, these win.
+
 Paths are relative to `/Users/matt/dev/Spendoza/.claude/worktrees/spendoza-support-privacy`. Web files are under `packages/web/src` (abbreviated W/), API files under `packages/api/src` (A/), shared files under `packages/shared/src` (S/). Strings are quoted verbatim.
 
 ## 0. Findings that change the plan
