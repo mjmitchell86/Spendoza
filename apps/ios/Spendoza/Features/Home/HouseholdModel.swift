@@ -2,6 +2,20 @@ import Foundation
 import Observation
 import SpendozaKit
 
+/// What an action failed with: the plan refusal is shown as the plan notice, anything else as the server's words.
+enum AreaError: Equatable {
+    case plan
+    case message(String)
+
+    init(_ error: Error, fallback: String) {
+        if case APIError.notOnPlan = error {
+            self = .plan
+        } else {
+            self = .message((error as? APIError)?.userMessage ?? fallback)
+        }
+    }
+}
+
 /// Managing the household you are in: the invite code, invitations, members, rename, delete and leave.
 /// `household` is what the Home tab last fetched; every change that alters it asks `reload` to fetch it again.
 @Observable @MainActor
@@ -14,6 +28,7 @@ final class HouseholdModel {
 
     enum InviteResult: Equatable {
         case sent
+        case plan
         case failed(String)
     }
 
@@ -23,24 +38,27 @@ final class HouseholdModel {
     private(set) var pending: [PendingInvitation] = []
     private(set) var inviteResult: InviteResult?
     /// The last failure of each area, in the server's words.
-    private(set) var codeError: String?
-    private(set) var memberError: String?
-    private(set) var pendingError: String?
-    private(set) var settingsError: String?
-    private(set) var leaveError: String?
+    private(set) var codeError: AreaError?
+    private(set) var memberError: AreaError?
+    private(set) var pendingError: AreaError?
+    private(set) var settingsError: AreaError?
+    private(set) var leaveError: AreaError?
 
     @ObservationIgnored private let api: any SpendozaAPI
     /// Read at the moment it is needed: the signed-in profile can change under a long-lived screen.
     @ObservationIgnored private let selfID: @MainActor () -> String?
     @ObservationIgnored private let reload: @MainActor () async -> Void
+    /// Called after the person left or deleted the household (sign-up's "You've joined" is stale then).
+    @ObservationIgnored private let afterLeaving: @MainActor () -> Void
 
     init(api: any SpendozaAPI, selfID: @escaping @MainActor () -> String?, household: Household,
-         reload: @escaping @MainActor () async -> Void) {
+         reload: @escaping @MainActor () async -> Void, afterLeaving: @escaping @MainActor () -> Void = {}) {
         self.api = api
         self.selfID = selfID
         self.household = household
         self.inviteCode = household.inviteCode
         self.reload = reload
+        self.afterLeaving = afterLeaving
     }
 
     var isHead: Bool { household.headID == selfID() }
@@ -126,8 +144,10 @@ final class HouseholdModel {
     /// Clears the "Invitation sent" line when the address is edited.
     func clearInviteResult() { inviteResult = nil }
 
-    func sendInvitation(email: String) async {
-        guard working == nil else { return }
+    /// True when the invitation went out (the screen then clears the address).
+    @discardableResult
+    func sendInvitation(email: String) async -> Bool {
+        guard working == nil else { return false }
         working = .inviting
         inviteResult = nil
         defer { working = nil }
@@ -135,10 +155,14 @@ final class HouseholdModel {
             try await api.invite(email: email.trimmingCharacters(in: .whitespacesAndNewlines))
             inviteResult = .sent
         } catch {
-            inviteResult = .failed(Self.message(error, fallback: Self.inviteFallback))
-            return
+            switch AreaError(error, fallback: Self.inviteFallback) {
+            case .plan: inviteResult = .plan
+            case .message(let text): inviteResult = .failed(text)
+            }
+            return false
         }
         await fetchPending()
+        return true
     }
 
     func loadPending() async {
@@ -152,7 +176,7 @@ final class HouseholdModel {
         do {
             pending = try await api.pendingInvitations()
         } catch {
-            pendingError = Self.message(error, fallback: "Failed to load invitations")
+            pendingError = AreaError(error, fallback: "Failed to load invitations")
         }
     }
 
@@ -185,11 +209,13 @@ final class HouseholdModel {
     func deleteHousehold(typed: String) async -> Bool {
         guard Self.canDelete(typed: typed, name: household.name) else { return false }
         let name = household.name
-        await perform(.deleting, error: \.settingsError, fallback: "Failed to delete household") {
+        let ran = await perform(.deleting, error: \.settingsError, fallback: "Failed to delete household") {
             try await $0.deleteHousehold(confirmName: name)
             await self.reload()
         }
-        return settingsError == nil
+        guard ran, settingsError == nil else { return false }
+        afterLeaving()
+        return true
     }
 
     func clearSettingsError() { settingsError = nil }
@@ -225,26 +251,30 @@ final class HouseholdModel {
     }
 
     func leaveHousehold() async {
-        await perform(.leaving, error: \.leaveError, fallback: "Failed to leave household") {
+        let ran = await perform(.leaving, error: \.leaveError, fallback: "Failed to leave household") {
             try await $0.leaveHousehold()
             await self.reload()
         }
+        if ran, leaveError == nil { afterLeaving() }
     }
 
     // MARK: Plumbing
 
     /// Runs one action: clears the area's error, shows the server's words (or the fallback) when it fails.
-    private func perform(_ action: Working, error area: ReferenceWritableKeyPath<HouseholdModel, String?>,
-                         fallback: String, _ call: (any SpendozaAPI) async throws -> Void) async {
-        guard working == nil else { return }
+    /// False when it did not run (something else was in progress).
+    @discardableResult
+    private func perform(_ action: Working, error area: ReferenceWritableKeyPath<HouseholdModel, AreaError?>,
+                         fallback: String, _ call: (any SpendozaAPI) async throws -> Void) async -> Bool {
+        guard working == nil else { return false }
         working = action
         self[keyPath: area] = nil
         defer { working = nil }
         do {
             try await call(api)
         } catch {
-            self[keyPath: area] = Self.message(error, fallback: fallback)
+            self[keyPath: area] = AreaError(error, fallback: fallback)
         }
+        return true
     }
 
     private static func message(_ error: Error, fallback: String) -> String {

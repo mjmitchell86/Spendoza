@@ -15,18 +15,21 @@ struct InviteByEmailSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             AuthField(label: "Invite by email", text: $email, contentType: .emailAddress,
                       keyboard: .emailAddress, placeholder: "email@example.com")
-                .onChange(of: email) { model.clearInviteResult() }
+                // Clearing the field after a send must not also clear the "Invitation sent" line.
+                .onChange(of: email) { if !email.isEmpty { model.clearInviteResult() } }
             switch model.inviteResult {
             case .sent:
                 Text("Invitation sent")
                     .font(.sans(14, weight: .semibold, relativeTo: .subheadline))
                     .foregroundStyle(Theme.note)
+            case .plan:
+                PlanNotAvailableView()
             case .failed(let message):
                 InlineError(message: message)
             case nil:
                 EmptyView()
             }
-            Button { Task { await model.sendInvitation(email: email) } } label: {
+            Button { Task { if await model.sendInvitation(email: email) { email = "" } } } label: {
                 if model.working == .inviting {
                     ProgressView().tint(Theme.onNote)
                 } else {

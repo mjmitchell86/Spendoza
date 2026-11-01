@@ -4,7 +4,7 @@ public enum IncomeSharing: String, Codable, Sendable, CaseIterable {
     case all, none, partial
 
     /// A mode this version does not know yet reads as `none`, the most private: a blind save must never widen sharing.
-    /// (An absent key is the server default, `all`; callers handle that.)
+    /// An absent key reads as `none` too: that is the database default.
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = IncomeSharing(rawValue: raw) ?? .none
@@ -38,8 +38,8 @@ public struct Member: Decodable, Sendable, Equatable, Identifiable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         displayName = try c.decode(String.self, forKey: .displayName)
-        incomeSharing = try c.decodeIfPresent(IncomeSharing.self, forKey: .incomeSharing) ?? .all
-        expenseSharing = try c.decodeIfPresent(ExpenseSharing.self, forKey: .expenseSharing) ?? .all
+        incomeSharing = try c.decodeIfPresent(IncomeSharing.self, forKey: .incomeSharing) ?? .none
+        expenseSharing = try c.decodeIfPresent(ExpenseSharing.self, forKey: .expenseSharing) ?? .none
     }
 
     enum CodingKeys: String, CodingKey {

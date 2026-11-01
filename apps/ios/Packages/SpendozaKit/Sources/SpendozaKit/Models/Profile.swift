@@ -57,8 +57,9 @@ public struct Profile: Codable, Sendable, Equatable {
         emailReportHour = try c.decodeIfPresent(Int.self, forKey: .emailReportHour) ?? 9
         subscriptionTier = try c.decodeIfPresent(String.self, forKey: .subscriptionTier) ?? "free"
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
-        incomeSharing = try c.decodeIfPresent(IncomeSharing.self, forKey: .incomeSharing) ?? .all
-        expenseSharing = try c.decodeIfPresent(ExpenseSharing.self, forKey: .expenseSharing) ?? .all
+        // Absent means the database default, 'none'.
+        incomeSharing = try c.decodeIfPresent(IncomeSharing.self, forKey: .incomeSharing) ?? .none
+        expenseSharing = try c.decodeIfPresent(ExpenseSharing.self, forKey: .expenseSharing) ?? .none
         sharedIncomeAmount = try c.decodeIfPresent(FlexibleNumber.self, forKey: .sharedIncomeAmount)?.double
     }
 

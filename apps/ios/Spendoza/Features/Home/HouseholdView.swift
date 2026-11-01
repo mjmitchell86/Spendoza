@@ -11,7 +11,8 @@ struct HouseholdView: View {
         self.household = household
         let reload: @MainActor () async -> Void = { await home.load() }
         _model = State(initialValue: HouseholdModel(api: store.api, selfID: { [store] in store.profile?.id },
-                                                    household: household, reload: reload))
+                                                    household: household, reload: reload,
+                                                    afterLeaving: { [store] in store.dismissSignUpNotice() }))
         _sharing = State(initialValue: SharingSettingsModel(api: store.api, reload: reload))
     }
 
@@ -30,7 +31,7 @@ struct HouseholdView: View {
                 } else if let error = model.pendingError {
                     // The list is empty, so its section is hidden: say why, and let the head try again.
                     VStack(alignment: .leading, spacing: 8) {
-                        InlineError(message: error)
+                        AreaErrorView(error: error)
                         Button("Try again") { Task { await model.loadPending() } }.buttonStyle(SecondaryButtonStyle())
                     }
                 }

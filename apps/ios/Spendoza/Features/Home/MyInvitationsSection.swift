@@ -50,6 +50,13 @@ private struct InvitationRow: View {
                 .accessibilityLabel("Invitation code")
             Text("Enter the code from your invitation email.")
                 .font(.sans(13, relativeTo: .footnote))
+            if model.planRefused.contains(invitation.id) {
+                // On the card colour, like the error below: the plan notice's ink would not read on the green.
+                PlanNotAvailableView()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
+            }
             if let error = model.invitationErrors[invitation.id] {
                 // Oxblood on the green panel would not read; the card-coloured note keeps contrast.
                 Text(error)
@@ -75,10 +82,10 @@ private struct InvitationRow: View {
                 .font(.sans(15, weight: .semibold, relativeTo: .callout))
                 .foregroundStyle(Theme.note)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
+                // Dim the fill, not the label: a faded label on the green would not keep its contrast.
+                .background(Theme.card.opacity(canAct || busy ? 1 : 0.5), in: RoundedRectangle(cornerRadius: Theme.corner))
         }
         .disabled(!canAct)
-        .opacity(canAct || busy ? 1 : 0.5)
         .accessibilityLabel(busy ? "Accept, working" : "Accept")
     }
 
@@ -88,9 +95,9 @@ private struct InvitationRow: View {
                 .font(.sans(15, weight: .semibold, relativeTo: .callout))
                 .foregroundStyle(Theme.onNote)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .overlay(RoundedRectangle(cornerRadius: Theme.corner).strokeBorder(Theme.onNote, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: Theme.corner)
+                    .strokeBorder(Theme.onNote.opacity(canAct ? 1 : 0.5), lineWidth: 1))
         }
         .disabled(!canAct)
-        .opacity(canAct ? 1 : 0.5)
     }
 }

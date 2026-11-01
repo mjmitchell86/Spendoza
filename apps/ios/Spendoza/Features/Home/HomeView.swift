@@ -8,7 +8,8 @@ struct HomeView: View {
 
     init(store: SessionStore) {
         self.store = store
-        _model = State(initialValue: HomeModel(api: store.api, selfID: { [store] in store.profile?.id }))
+        _model = State(initialValue: HomeModel(api: store.api, selfID: { [store] in store.profile?.id },
+                                               householdChanged: { [store] in store.dismissSignUpNotice() }))
     }
 
     var body: some View {
@@ -51,14 +52,7 @@ struct HomeView: View {
 
     /// What sign-up said about the code entered, once the household (if joined) is known.
     private var notice: String? {
-        guard let result = store.signUpNotice else { return nil }
-        var name: String?
-        switch model.state {
-        case .loading: return nil
-        case .member(let household, _): name = household.name
-        default: break
-        }
-        return HomeModel.signUpNotice(result, householdName: name)
+        store.signUpNotice.flatMap { model.signUpNotice($0) }
     }
 
     private func noticePanel(_ text: String) -> some View {

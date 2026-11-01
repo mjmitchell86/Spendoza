@@ -29,7 +29,7 @@ struct HouseholdSettingsView: View {
             .disabled(!canRename)
             .opacity(canRename || model.working == .renaming ? 1 : 0.45)
             .onChange(of: model.household.name) { name = model.household.name }
-            if let error = model.settingsError, !deleting { InlineError(message: error) }
+            if let error = model.settingsError, !deleting { AreaErrorView(error: error) }
             Text("Deleting removes the household and its shared reports, goals and debts. Everyone's personal data stays.")
                 .font(.sans(14, relativeTo: .subheadline))
                 .foregroundStyle(Theme.soft)
@@ -83,7 +83,7 @@ private struct DeleteHouseholdSheet: View {
                         .hairlineBorder(Theme.engraving)
                         .accessibilityLabel("Type the household name to confirm")
                 }
-                if let error = model.settingsError { InlineError(message: error) }
+                if let error = model.settingsError { AreaErrorView(error: error) }
                 Button(deleting ? "Deleting…" : "Delete household") {
                     Task { if await model.deleteHousehold(typed: typed) { dismiss() } }
                 }
@@ -125,7 +125,7 @@ struct LeaveSection: View {
             .buttonStyle(OutlinedDestructiveButtonStyle())
             .disabled(plan.isDisabled || model.working != nil)
             .opacity(plan.isDisabled || (model.working != nil && model.working != .leaving) ? 0.45 : 1)
-            if let error = model.leaveError { InlineError(message: error) }
+            if let error = model.leaveError { AreaErrorView(error: error) }
         }
         .padding(.top, 12)
         .topRule()

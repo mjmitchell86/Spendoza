@@ -12,7 +12,7 @@ struct PendingInvitationsSection: View {
                     row(invitation)
                 }
             }
-            if let error = model.pendingError { InlineError(message: error) }
+            if let error = model.pendingError { AreaErrorView(error: error) }
         }
     }
 

@@ -66,8 +66,8 @@ enum UITestStub {
         return api
     }
 
-    /// `-uiTestHousehold head|member|none`: the signed-in user heads a household of three (with an invitation
-    /// waiting), is a member of one, or is in none. The household actions change what the stub answers next.
+    /// `-uiTestHousehold head|member|none|invited`: the signed-in user heads a household of three (with an
+    /// invitation waiting), is a member of one, is in none, or is in none with an invitation of their own. The household actions change what the stub answers next.
     static var householdMode: String? {
         let arguments = CommandLine.arguments
         guard isOn, let index = arguments.firstIndex(of: "-uiTestHousehold"), arguments.indices.contains(index + 1) else { return nil }
@@ -100,6 +100,12 @@ enum UITestStub {
                 Member(id: me, displayName: "Test"),
                 Member(id: "u-ann", displayName: "Ann Smith", incomeSharing: .partial, expenseSharing: .category),
             ]))
+        case "invited":
+            api.householdResult = .success(nil)
+            api.myInvitationsResult = .success([
+                MyInvitation(id: "inv1", householdName: "The Smiths", inviterName: "Ann Smith",
+                             expiresAt: sent.addingTimeInterval(7 * 86_400)),
+            ])
         default:
             api.householdResult = .success(nil)
         }
@@ -107,7 +113,7 @@ enum UITestStub {
         let current = api.profileResult
         api.profileResult = current.map {
             Profile(id: $0.id, displayName: $0.displayName, onboardingCompleted: true, isAdmin: $0.isAdmin,
-                    emailReportsEnabled: $0.emailReportsEnabled, householdID: mode == "none" ? nil : "h1", avatarURL: $0.avatarURL,
+                    emailReportsEnabled: $0.emailReportsEnabled, householdID: mode == "none" || mode == "invited" ? nil : "h1", avatarURL: $0.avatarURL,
                     subscriptionTier: $0.subscriptionTier, createdAt: $0.createdAt,
                     incomeSharing: sharesByCategory ? .partial : .all, expenseSharing: sharesByCategory ? .category : .all,
                     sharedIncomeAmount: sharesByCategory ? 500 : nil)

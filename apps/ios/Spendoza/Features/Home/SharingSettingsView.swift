@@ -71,12 +71,13 @@ struct SharingSettingsView: View {
                             .font(.sans(16, relativeTo: .body))
                             .foregroundStyle(Theme.ink)
                             .tint(Theme.note)
+                            .disabled(model.isUpdating(category.id))
                             .frame(minHeight: 34)
                     }
                 }
             }
             .topRule()
-            if let error = model.categoryError { InlineError(message: error) }
+            if let error = model.categoryError { AreaErrorView(error: error) }
         }
     }
 
@@ -86,6 +87,8 @@ struct SharingSettingsView: View {
             Text("Sharing preferences updated.")
                 .font(.sans(14, weight: .semibold, relativeTo: .subheadline))
                 .foregroundStyle(Theme.note)
+        case .plan:
+            PlanNotAvailableView()
         case .failed(let message):
             InlineError(message: message)
         case nil:

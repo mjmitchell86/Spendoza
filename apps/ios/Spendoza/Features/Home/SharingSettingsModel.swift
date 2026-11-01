@@ -7,6 +7,7 @@ import SpendozaKit
 final class SharingSettingsModel {
     enum Message: Equatable {
         case saved
+        case plan
         case failed(String)
     }
 
@@ -18,16 +19,31 @@ final class SharingSettingsModel {
     private(set) var loaded = false
     private(set) var saving = false
     private(set) var message: Message?
-    private(set) var categoryError: String?
+    private(set) var categoryError: AreaError?
     private(set) var loadError: String?
 
     @ObservationIgnored private let api: any SpendozaAPI
     @ObservationIgnored private let reload: @MainActor () async -> Void
     @ObservationIgnored private var categoriesLoaded = false
+    /// Numbers in the amount field are read and written the way the device's keyboard types them.
+    @ObservationIgnored private let locale: Locale
+    /// Categories whose switch is being saved; each is held until its PUT returns so saves can't race.
+    private var inFlight: Set<String> = []
 
-    init(api: any SpendozaAPI, reload: @escaping @MainActor () async -> Void) {
+    init(api: any SpendozaAPI, locale: Locale = .current, reload: @escaping @MainActor () async -> Void) {
         self.api = api
+        self.locale = locale
         self.reload = reload
+    }
+
+    private var numberFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.locale = locale
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
     }
 
     /// Prefills from the profile (the amount lives only there).
@@ -36,7 +52,7 @@ final class SharingSettingsModel {
             let profile = try await api.profile()
             income = profile.incomeSharing
             expense = profile.expenseSharing
-            amountText = profile.sharedIncomeAmount.map { String(format: "%.2f", $0) } ?? ""
+            amountText = profile.sharedIncomeAmount.flatMap { numberFormatter.string(from: NSNumber(value: $0)) } ?? ""
             loaded = true
             loadError = nil
         } catch {
@@ -57,7 +73,7 @@ final class SharingSettingsModel {
             categoriesLoaded = true
             categoryError = nil
         } catch {
-            categoryError = (error as? APIError)?.userMessage ?? "Failed to load categories"
+            categoryError = AreaError(error, fallback: "Failed to load categories")
         }
     }
 
@@ -65,6 +81,9 @@ final class SharingSettingsModel {
 
     /// Saves one category switch at once; if that fails the switch goes back and the error shows.
     func setShared(_ id: String, _ value: Bool) async {
+        guard !inFlight.contains(id) else { return }
+        inFlight.insert(id)
+        defer { inFlight.remove(id) }
         let before = isShared(id)
         shared[id] = value
         categoryError = nil
@@ -72,13 +91,16 @@ final class SharingSettingsModel {
             try await api.setCategoryShared(id: id, shared: value)
         } catch {
             shared[id] = before
-            categoryError = (error as? APIError)?.userMessage ?? "Failed to update category"
+            categoryError = AreaError(error, fallback: "Failed to update category")
         }
     }
 
+    /// True while that category's switch is being saved.
+    func isUpdating(_ id: String) -> Bool { inFlight.contains(id) }
+
     private var amount: Double? {
         let text = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let value = Double(text), value.isFinite else { return nil }
+        guard let value = numberFormatter.number(from: text)?.doubleValue, value.isFinite else { return nil }
         return value
     }
 
@@ -99,7 +121,10 @@ final class SharingSettingsModel {
                                                       expense: expense))
             message = .saved
         } catch {
-            message = .failed((error as? APIError)?.userMessage ?? "Failed to update sharing")
+            switch AreaError(error, fallback: "Failed to update sharing") {
+            case .plan: message = .plan
+            case .message(let text): message = .failed(text)
+            }
             return
         }
         await reload()

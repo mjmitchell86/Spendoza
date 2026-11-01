@@ -10,6 +10,13 @@ final class HouseholdUITests: XCTestCase {
         XCTAssertTrue(element.isHittable, "\(element) never scrolled into reach")
     }
 
+    /// Waits until the element is gone (a failed `waitForExistence` is how "absent" used to be, wrongly, asserted).
+    @MainActor private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 5,
+                                                 _ message: String) {
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element)
+        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: timeout), .completed, message)
+    }
+
     @MainActor private func shot(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
@@ -35,7 +42,7 @@ final class HouseholdUITests: XCTestCase {
         scrollTo(revoke, in: app)
         revoke.tap()
         XCTAssertTrue(app.buttons["Revoke, dan@example.com"].exists)
-        XCTAssertFalse(revoke.waitForExistence(timeout: 2), "The revoked invitation is still listed")
+        waitForDisappearance(revoke, "The revoked invitation is still listed")
 
         let remove = app.buttons["Remove from household, Ann Smith"]
         for _ in 0..<15 where !remove.isHittable { app.swipeDown() }
@@ -45,7 +52,7 @@ final class HouseholdUITests: XCTestCase {
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         XCTAssertTrue(confirm.staticTexts["Remove Ann Smith from the household? Your invite code will change."].exists)
         confirm.buttons["Remove from household"].tap()
-        XCTAssertFalse(app.staticTexts["Ann Smith"].waitForExistence(timeout: 3), "Ann is still listed")
+        waitForDisappearance(app.staticTexts["Ann Smith"], "Ann is still listed")
         for _ in 0..<15 where !app.staticTexts["householdInviteCode"].isHittable { app.swipeDown() }
         XCTAssertEqual(app.staticTexts["householdInviteCode"].label, "KMNPQ-RSTUV")
     }

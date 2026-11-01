@@ -181,8 +181,8 @@ extension APIClientTests {
 
         let bare = #"{"id":"p1","display_name":"Sam","onboarding_completed":true,"is_admin":false,"email_reports_enabled":true,"household_id":null,"shared_income_amount":null}"#
         let defaults = try APICoding.makeDecoder().decode(Profile.self, from: Data(bare.utf8))
-        #expect(defaults.incomeSharing == .all)
-        #expect(defaults.expenseSharing == .all)
+        #expect(defaults.incomeSharing == IncomeSharing.none)
+        #expect(defaults.expenseSharing == ExpenseSharing.none)
         #expect(defaults.sharedIncomeAmount == nil)
     }
 
@@ -198,11 +198,12 @@ extension APIClientTests {
         #expect(p.expenseSharing == ExpenseSharing.none)
     }
 
-    @Test func absentSharingModesStillMeanAll() throws {
+    @Test func absentSharingModesMeanNone() throws {
+        // The database default is 'none' (initial_schema.sql), so a missing key is private, not shared.
         let member = #"{"id":"u2","display_name":"Bo"}"#
         let decoded = try APICoding.makeDecoder().decode(Member.self, from: Data(member.utf8))
-        #expect(decoded.incomeSharing == .all)
-        #expect(decoded.expenseSharing == .all)
+        #expect(decoded.incomeSharing == IncomeSharing.none)
+        #expect(decoded.expenseSharing == ExpenseSharing.none)
     }
 
     // MARK: errors

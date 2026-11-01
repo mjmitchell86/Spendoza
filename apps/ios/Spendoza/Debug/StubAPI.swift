@@ -238,9 +238,16 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         }
     }
 
+    /// Runs inside `household()` after the answer is chosen and before it returns (tests hold a load open with it).
+    var householdHook: @Sendable () async -> Void = {}
+    /// Runs at the start of every `setCategoryShared`.
+    var categorySharedHook: @Sendable (String) async -> Void = { _ in }
+
     func household() async throws -> Household? {
         record("household")
-        return try householdResult.get()
+        let result = householdResult
+        await householdHook()
+        return try result.get()
     }
 
     func createHousehold(name: String) async throws -> String? {
@@ -331,7 +338,9 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     }
 
     func setCategoryShared(id: String, shared: Bool) async throws {
-        try householdAction("setCategoryShared", "setCategoryShared(\(id), \(shared))")
+        record("setCategoryShared(\(id), \(shared))")
+        await categorySharedHook(id)
+        if let error = lock.withLock({ householdActionErrors["setCategoryShared"] }) { throw error }
     }
 
     func leaveHousehold() async throws {

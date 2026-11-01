@@ -15,9 +15,91 @@ struct HouseholdManagementTests {
     }
 
     private func model(_ api: StubAPI, _ household: Household? = nil, selfID: String = "me",
-                       reloads: ReloadCounter = ReloadCounter()) -> HouseholdModel {
+                       reloads: ReloadCounter = ReloadCounter(),
+                       afterLeaving: @escaping @MainActor () -> Void = {}) -> HouseholdModel {
         HouseholdModel(api: api, selfID: { selfID }, household: household ?? self.household(),
-                       reload: { reloads.count += 1 })
+                       reload: { reloads.count += 1 }, afterLeaving: afterLeaving)
+    }
+
+    private let notOnPlan = APIError.notOnPlan(requiredTier: "pro")
+
+    // MARK: plan refusals stay their own state in every area
+
+    @Test func aPlanRefusalIsItsOwnStateInEachArea() async {
+        let api = StubAPI()
+        let pending = PendingInvitation(id: "p1", email: "cara@example.com", createdAt: .now, expiresAt: .now)
+        api.pendingInvitationsResult = .success([pending])
+        for name in ["rotateInviteCode", "removeMember", "makeHead", "invite", "revokeInvitation",
+                     "renameHousehold", "deleteHousehold", "leaveHousehold"] {
+            api.householdActionErrors[name] = notOnPlan
+        }
+        let m = model(api)
+        await m.loadPending()
+        await m.rotateCode()
+        #expect(m.codeError == .plan)
+        await m.remove(ann)
+        #expect(m.memberError == .plan)
+        await m.makeHead(ann)
+        #expect(m.memberError == .plan)
+        await m.sendInvitation(email: "x@y.co")
+        #expect(m.inviteResult == .plan)
+        await m.revoke(pending)
+        #expect(m.pendingError == .plan)
+        await m.rename(to: "New")
+        #expect(m.settingsError == .plan)
+        _ = await m.deleteHousehold(typed: "The Smiths")
+        #expect(m.settingsError == .plan)
+        await m.leaveHousehold()
+        #expect(m.leaveError == .plan)
+    }
+
+    @Test func leavingOrDeletingTellsTheSessionOnlyOnSuccess() async {
+        final class Count { var n = 0 }
+        let count = Count()
+        let api = StubAPI()
+        let m = model(api, afterLeaving: { count.n += 1 })
+        await m.leaveHousehold()
+        #expect(count.n == 1)
+        #expect(await m.deleteHousehold(typed: "The Smiths"))
+        #expect(count.n == 2)
+        api.householdActionErrors["leaveHousehold"] = .message("No")
+        api.householdActionErrors["deleteHousehold"] = .message("No")
+        await m.leaveHousehold()
+        _ = await m.deleteHousehold(typed: "The Smiths")
+        #expect(count.n == 2)
+    }
+
+    @Test func deletingWhileSomethingElseIsWorkingDoesNotClaimSuccess() async {
+        final class Gate: @unchecked Sendable {
+            private let lock = NSLock()
+            private var cont: CheckedContinuation<Void, Never>?
+            private var _entered = false
+            var entered: Bool { lock.withLock { _entered } }
+            func wait() async { await withCheckedContinuation { c in lock.withLock { _entered = true; cont = c } } }
+            func open() { lock.withLock { cont?.resume(); cont = nil } }
+        }
+        let gate = Gate()
+        let api = StubAPI()
+        let reloads = ReloadCounter()
+        let m = HouseholdModel(api: api, selfID: { "me" }, household: household(), reload: {
+            reloads.count += 1
+            await gate.wait()
+        })
+        let renaming = Task { await m.rename(to: "Other") }
+        while !gate.entered { await Task.yield() }
+        #expect(m.working == .renaming)
+        #expect(await m.deleteHousehold(typed: "The Smiths") == false)
+        #expect(!api.calls.contains { $0.hasPrefix("deleteHousehold") })
+        gate.open()
+        await renaming.value
+    }
+
+    @Test func aSentInviteReportsItAndAFailedOneDoesNot() async {
+        let api = StubAPI()
+        let m = model(api)
+        #expect(await m.sendInvitation(email: "cara@example.com"))
+        api.householdActionErrors["invite"] = .message("Household is full")
+        #expect(await m.sendInvitation(email: "dan@example.com") == false)
     }
 
     // MARK: invite code
@@ -58,7 +140,7 @@ struct HouseholdManagementTests {
         let m = model(api)
         await m.rotateCode()
         #expect(m.codeText == "ABCDE-FGHJK")
-        #expect(m.codeError == "Only the head can do that")
+        #expect(m.codeError == .message("Only the head can do that"))
     }
 
     @Test func rotateDialogCopyIsTheWebsSentence() {
@@ -89,7 +171,7 @@ struct HouseholdManagementTests {
         let reloads = ReloadCounter()
         let m = model(api, reloads: reloads)
         await m.remove(ann)
-        #expect(m.memberError == "Member not found")
+        #expect(m.memberError == .message("Member not found"))
         #expect(reloads.count == 0)
     }
 
@@ -107,7 +189,7 @@ struct HouseholdManagementTests {
         api.householdActionErrors["makeHead"] = .offline
         let m = model(api)
         await m.makeHead(ann)
-        #expect(m.memberError == APIError.offline.userMessage)
+        #expect(m.memberError == .message(APIError.offline.userMessage))
     }
 
     @Test func memberLinesNameHeadAndYouAndSharingModes() {
@@ -162,7 +244,7 @@ struct HouseholdManagementTests {
         let m = model(api)
         await m.loadPending()
         #expect(m.pending.isEmpty)
-        #expect(m.pendingError == "Boom")
+        #expect(m.pendingError == .message("Boom"))
         api.pendingInvitationsResult = .success([])
         await m.loadPending()
         #expect(m.pendingError == nil)
@@ -174,7 +256,7 @@ struct HouseholdManagementTests {
         let m = model(api)
         await m.sendInvitation(email: "cara@example.com")
         #expect(m.inviteResult == .sent)
-        #expect(m.pendingError == APIError.offline.userMessage)
+        #expect(m.pendingError == .message(APIError.offline.userMessage))
     }
 
     @Test func revokingCallsTheApiAndListsAgain() async {
@@ -198,7 +280,7 @@ struct HouseholdManagementTests {
         await m.loadPending()
         await m.revoke(pending)
         #expect(m.pending == [pending])
-        #expect(m.pendingError == "Invitation not found")
+        #expect(m.pendingError == .message("Invitation not found"))
     }
 
     // MARK: settings
@@ -247,7 +329,7 @@ struct HouseholdManagementTests {
         api.householdActionErrors["deleteHousehold"] = .message("Name does not match")
         let m = model(api)
         #expect(await m.deleteHousehold(typed: "The Smiths") == false)
-        #expect(m.settingsError == "Name does not match")
+        #expect(m.settingsError == .message("Name does not match"))
     }
 
     // MARK: leave
@@ -292,8 +374,15 @@ struct HouseholdManagementTests {
         api.householdActionErrors["leaveHousehold"] = .message("Transfer head of household first")
         let m = model(api)
         await m.leaveHousehold()
-        #expect(m.leaveError == "Transfer head of household first")
+        #expect(m.leaveError == .message("Transfer head of household first"))
     }
+}
+
+/// True the first time it is asked, false after.
+final class Held: @unchecked Sendable {
+    private let lock = NSLock()
+    private var used = false
+    func take() -> Bool { lock.withLock { defer { used = true }; return !used } }
 }
 
 @MainActor
@@ -304,7 +393,75 @@ struct SharingSettingsModelTests {
     }
 
     private func model(_ api: StubAPI, reloads: ReloadCounter = ReloadCounter()) -> SharingSettingsModel {
-        SharingSettingsModel(api: api, reload: { reloads.count += 1 })
+        SharingSettingsModel(api: api, locale: Locale(identifier: "en_US"), reload: { reloads.count += 1 })
+    }
+
+    @Test func aPlanRefusalOnSaveOrOnACategorySwitchIsItsOwnState() async {
+        let api = StubAPI()
+        api.profileResult = profile(expense: .category)
+        api.categoryList = [.init(id: "c1", name: "Housing", budgetClass: .need)]
+        let m = model(api)
+        await m.load()
+        api.householdActionErrors["updateSharing"] = .notOnPlan(requiredTier: "pro")
+        await m.save()
+        #expect(m.message == .plan)
+        api.householdActionErrors["setCategoryShared"] = .notOnPlan(requiredTier: "pro")
+        await m.setShared("c1", true)
+        #expect(m.categoryError == .plan)
+        #expect(!m.isShared("c1"))
+    }
+
+    @Test func aSecondToggleWhileOneIsInFlightIsIgnored() async {
+        final class Gate: @unchecked Sendable {
+            private let lock = NSLock()
+            private var cont: CheckedContinuation<Void, Never>?
+            private var _entered = false
+            var entered: Bool { lock.withLock { _entered } }
+            func wait() async { await withCheckedContinuation { c in lock.withLock { _entered = true; cont = c } } }
+            func open() { lock.withLock { cont?.resume(); cont = nil } }
+        }
+        let api = StubAPI()
+        api.profileResult = profile(expense: .category)
+        api.categoryList = [.init(id: "c1", name: "Housing", budgetClass: .need), .init(id: "c2", name: "Dining", budgetClass: .want)]
+        let gate = Gate()
+        // Only the first c1 save is held; later ones go straight through.
+        let held = Held()
+        api.categorySharedHook = { id in if id == "c1", held.take() { await gate.wait() } }
+        let m = model(api)
+        await m.load()
+        let first = Task { await m.setShared("c1", true) }
+        while !gate.entered { await Task.yield() }
+        #expect(m.isUpdating("c1"))
+        await m.setShared("c1", false)
+        #expect(api.calls.filter { $0.hasPrefix("setCategoryShared(c1") } == ["setCategoryShared(c1, true)"])
+        #expect(m.isShared("c1"))
+        // Another category is not held up.
+        await m.setShared("c2", true)
+        #expect(api.calls.contains("setCategoryShared(c2, true)"))
+        gate.open()
+        await first.value
+        #expect(!m.isUpdating("c1"))
+        await m.setShared("c1", false)
+        #expect(api.calls.contains("setCategoryShared(c1, false)"))
+    }
+
+    @Test func theSharedAmountIsReadInTheDevicesLocale() async {
+        let api = StubAPI()
+        api.profileResult = profile(income: .partial, amount: 1250.5)
+        let german = SharingSettingsModel(api: api, locale: Locale(identifier: "de_DE"), reload: {})
+        await german.load()
+        #expect(german.amountText == "1250,50")
+        german.amountText = "500,50"
+        #expect(german.canSave)
+        await german.save()
+        #expect(api.calls.contains("updateSharing(income: partial, amount: 500.5, expense: all)"))
+        german.amountText = "abc"
+        #expect(!german.canSave)
+        let american = model(api)
+        await american.load()
+        american.amountText = "500.50"
+        await american.save()
+        #expect(api.calls.filter { $0 == "updateSharing(income: partial, amount: 500.5, expense: all)" }.count == 2)
     }
 
     @Test func loadPrefillsFromTheProfileIncludingTheAmount() async {
@@ -395,7 +552,7 @@ struct SharingSettingsModelTests {
         api.householdActionErrors["setCategoryShared"] = .message("Category not found")
         await m.setShared("c1", false)
         #expect(m.isShared("c1"))
-        #expect(m.categoryError == "Category not found")
+        #expect(m.categoryError == .message("Category not found"))
     }
 
     @Test func choosingByCategoryAfterLoadFetchesTheCategories() async {

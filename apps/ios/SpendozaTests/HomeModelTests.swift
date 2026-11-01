@@ -126,6 +126,100 @@ struct HomeModelTests {
         await #expect(throws: APIError.notOnPlan(requiredTier: "pro")) { try await m.create(name: "x") }
     }
 
+    @Test func aPlanRefusalOnAcceptKeepsTheTabAndFlagsThatInvitation() async {
+        let api = StubAPI()
+        api.myInvitationsResult = .success([invitation])
+        api.householdActionErrors["acceptInvitation"] = .notOnPlan(requiredTier: "pro")
+        let m = HomeModel(api: api, selfID: { "me" })
+        await m.load()
+        await m.accept(invitation, code: "abcdefghjk")
+        #expect(m.state == .none(invitations: [invitation]))
+        #expect(m.planRefused.contains("inv1"))
+        #expect(m.invitationErrors["inv1"] == nil)
+        #expect(m.busyInvitationID == nil)
+        // Trying again clears the flag.
+        api.householdActionErrors["acceptInvitation"] = nil
+        api.householdResult = .success(household)
+        await m.accept(invitation, code: "abcdefghjk")
+        #expect(!m.planRefused.contains("inv1"))
+    }
+
+    @Test func aPlanRefusalOnDeclineKeepsTheTabAndFlagsThatInvitation() async {
+        let api = StubAPI()
+        api.myInvitationsResult = .success([invitation])
+        api.householdActionErrors["declineInvitation"] = .notOnPlan(requiredTier: "pro")
+        let m = HomeModel(api: api, selfID: { "me" })
+        await m.load()
+        await m.decline(invitation, code: "abcdefghjk")
+        #expect(m.state == .none(invitations: [invitation]))
+        #expect(m.planRefused.contains("inv1"))
+    }
+
+    @Test func aSlowerEarlierLoadDoesNotOverwriteANewerOne() async {
+        final class Gate: @unchecked Sendable {
+            private let lock = NSLock()
+            private var cont: CheckedContinuation<Void, Never>?
+            private var _entered = false
+            var entered: Bool { lock.withLock { _entered } }
+            func wait() async {
+                await withCheckedContinuation { c in lock.withLock { _entered = true; cont = c } }
+            }
+            func open() { lock.withLock { cont?.resume(); cont = nil } }
+        }
+        let api = StubAPI()
+        api.householdResult = .success(household)
+        let gate = Gate()
+        api.householdHook = { await gate.wait() }
+        let m = HomeModel(api: api, selfID: { "me" })
+        let older = Task { await m.load() }
+        while !gate.entered { await Task.yield() }
+        // The member was removed meanwhile; the newer load sees the household without them.
+        let smaller = Household(id: "h1", name: "The Smiths", headID: "u1", members: [Member(id: "u1", displayName: "Sam")])
+        api.householdResult = .success(smaller)
+        api.householdHook = {}
+        await m.load()
+        #expect(m.state == .member(smaller, isHead: false))
+        gate.open()
+        await older.value
+        #expect(m.state == .member(smaller, isHead: false))
+    }
+
+    @Test func creatingJoiningAndAcceptingTellTheSessionTheHouseholdChanged() async throws {
+        final class Count { var n = 0 }
+        let count = Count()
+        let api = StubAPI()
+        api.myInvitationsResult = .success([invitation])
+        let m = HomeModel(api: api, selfID: { "me" }, householdChanged: { count.n += 1 })
+        await m.load()
+        try await m.create(name: "A")
+        try await m.join(code: "abcdefghjk")
+        await m.accept(invitation, code: "abcdefghjk")
+        #expect(count.n == 3)
+        // Failures and declines do not.
+        api.householdActionErrors["createHousehold"] = .message("No")
+        api.householdActionErrors["joinHousehold"] = .message("No")
+        api.householdActionErrors["acceptInvitation"] = .message("No")
+        _ = try? await m.create(name: "A")
+        _ = try? await m.join(code: "x")
+        await m.accept(invitation, code: "x")
+        await m.decline(invitation, code: "x")
+        #expect(count.n == 3)
+    }
+
+    @Test func theJoinedNoticeShowsOnlyOnceTheHouseholdIsShown() async {
+        let api = StubAPI()
+        let m = HomeModel(api: api, selfID: { "me" })
+        let joined = SignUpResult(joinedHousehold: true)
+        #expect(m.signUpNotice(joined) == nil)
+        await m.load()
+        #expect(m.signUpNotice(joined) == nil)
+        api.householdResult = .success(household)
+        await m.load()
+        #expect(m.signUpNotice(joined) == "You've joined The Smiths")
+        // The other notices say something with or without a household.
+        #expect(m.signUpNotice(SignUpResult(householdFull: true)) == "That household is full now")
+    }
+
     @Test func signUpNoticeWords() {
         #expect(HomeModel.signUpNotice(SignUpResult(joinedHousehold: true), householdName: "The Smiths") == "You've joined The Smiths")
         #expect(HomeModel.signUpNotice(SignUpResult(joinedHousehold: true), householdName: nil) == "You've joined the household")

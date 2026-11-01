@@ -45,7 +45,7 @@ struct InviteCodeCard: View {
                     .opacity(model.working == nil || model.working == .rotating ? 1 : 0.5)
                 }
             }
-            if let error = model.codeError { InlineError(message: error) }
+            if let error = model.codeError { AreaErrorView(error: error) }
         }
         .alert(HouseholdModel.rotateTitle, isPresented: $confirming) {
             Button("Cancel", role: .cancel) {}

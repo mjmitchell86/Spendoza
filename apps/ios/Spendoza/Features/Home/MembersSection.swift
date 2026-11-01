@@ -14,7 +14,7 @@ struct MembersSection: View {
                     row(member)
                 }
             }
-            if let error = model.memberError { InlineError(message: error) }
+            if let error = model.memberError { AreaErrorView(error: error) }
         }
     }
 
