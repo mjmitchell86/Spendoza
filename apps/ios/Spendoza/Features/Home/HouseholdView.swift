@@ -25,7 +25,15 @@ struct HouseholdView: View {
             if model.isHead {
                 InviteCodeCard(model: model)
                 InviteByEmailSheet(model: model)
-                if !model.pending.isEmpty { PendingInvitationsSection(model: model) }
+                if !model.pending.isEmpty {
+                    PendingInvitationsSection(model: model)
+                } else if let error = model.pendingError {
+                    // The list is empty, so its section is hidden: say why, and let the head try again.
+                    VStack(alignment: .leading, spacing: 8) {
+                        InlineError(message: error)
+                        Button("Try again") { Task { await model.loadPending() } }.buttonStyle(SecondaryButtonStyle())
+                    }
+                }
             }
             SharingSettingsView(model: sharing)
             if model.isHead { HouseholdSettingsView(model: model) }

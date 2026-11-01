@@ -254,7 +254,15 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         return createdInviteCode
     }
 
-    func joinHousehold(code: String) async throws { try householdAction("joinHousehold", "joinHousehold(\(code))") }
+    func joinHousehold(code: String) async throws {
+        try householdAction("joinHousehold", "joinHousehold(\(code))")
+        if simulatesHousehold {
+            lock.withLock {
+                householdResult = .success(Household(id: "h-joined", name: "The Smiths", headID: "u-ann", members: [
+                    Member(id: "u-ann", displayName: "Ann Smith"), Member(id: simulatedUserID, displayName: "Test")]))
+            }
+        }
+    }
 
     func rotateInviteCode() async throws -> String {
         try householdAction("rotateInviteCode", "rotateInviteCode")

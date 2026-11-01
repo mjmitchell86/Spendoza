@@ -156,6 +156,27 @@ struct HouseholdManagementTests {
         #expect(other.pending.isEmpty)
     }
 
+    @Test func aFailedPendingLoadWithNoRowsStillSurfacesTheError() async {
+        let api = StubAPI()
+        api.pendingInvitationsResult = .failure(.message("Boom"))
+        let m = model(api)
+        await m.loadPending()
+        #expect(m.pending.isEmpty)
+        #expect(m.pendingError == "Boom")
+        api.pendingInvitationsResult = .success([])
+        await m.loadPending()
+        #expect(m.pendingError == nil)
+    }
+
+    @Test func aFailedRefetchAfterASentInviteSurfacesTheError() async {
+        let api = StubAPI()
+        api.pendingInvitationsResult = .failure(.offline)
+        let m = model(api)
+        await m.sendInvitation(email: "cara@example.com")
+        #expect(m.inviteResult == .sent)
+        #expect(m.pendingError == APIError.offline.userMessage)
+    }
+
     @Test func revokingCallsTheApiAndListsAgain() async {
         let api = StubAPI()
         let pending = PendingInvitation(id: "p1", email: "cara@example.com", createdAt: .now, expiresAt: .now)

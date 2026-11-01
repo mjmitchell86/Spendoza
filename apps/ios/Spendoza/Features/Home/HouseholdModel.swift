@@ -148,6 +148,7 @@ final class HouseholdModel {
 
     private func fetchPending() async {
         guard isHead else { return }
+        pendingError = nil
         do {
             pending = try await api.pendingInvitations()
         } catch {

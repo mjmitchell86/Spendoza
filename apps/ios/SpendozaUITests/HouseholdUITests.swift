@@ -80,6 +80,24 @@ final class HouseholdUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["householdInviteCode"].label, "ABCDE-FGHJK")
     }
 
+    /// Joining with a code closes the sheet and shows the household.
+    @MainActor func testJoiningAHouseholdShowsIt() {
+        let app = Launch.stubbed(household: "none")
+        let join = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Join a household'")).firstMatch
+        XCTAssertTrue(join.waitForExistence(timeout: 15))
+        join.tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("ABCDE-FGHJK")
+        app.buttons["Join household"].tap()
+        XCTAssertTrue(app.staticTexts["Members"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Join household"].exists, "The sheet is still open")
+        XCTAssertTrue(app.staticTexts["The Smiths"].exists)
+        XCTAssertTrue(app.staticTexts["Ann Smith (Head)"].exists)
+        XCTAssertFalse(app.buttons["Get a new code"].exists)
+    }
+
     /// The sole member is the head of a household of one, who can leave and delete it.
     @MainActor func testSoleHeadLeavesAndDeletes() {
         let app = Launch.stubbed(household: "none")
