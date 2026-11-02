@@ -6,6 +6,7 @@ import SwiftUI
 struct StatementsView: View {
     let model: StatementsModel
     let api: any SpendozaAPI
+    let incoming: IncomingStatements
     let selfID: @MainActor () -> String?
     let onSessionEnded: @MainActor () -> Void
     let onAccountDisabled: @MainActor (String) -> Void
@@ -40,7 +41,7 @@ struct StatementsView: View {
         .toolbar(removing: .title)
         .task { await model.load() }
         .refreshable { await model.load() }
-        .sheet(isPresented: $uploading) { UploadStatementSheet(model: model) }
+        .sheet(isPresented: $uploading) { UploadStatementSheet(model: model, incoming: incoming) }
         .navigationDestination(item: $opened) { id in
             StatementDetailView(api: api, statementID: id, statements: model, selfID: selfID,
                                 onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)

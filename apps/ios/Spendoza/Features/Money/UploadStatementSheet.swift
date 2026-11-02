@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 /// sheet closes when every file went; otherwise the files that failed stay, each with its reason.
 struct UploadStatementSheet: View {
     let model: StatementsModel
+    /// Files opened from the share sheet or Files; the sheet takes them as they arrive (also while it is open).
+    let incoming: IncomingStatements
     @Environment(\.dismiss) private var dismiss
     @State private var picking = false
     @State private var files: [URL] = []
@@ -46,10 +48,13 @@ struct UploadStatementSheet: View {
             guard case .success(let urls) = result else { return }
             add(urls.filter { $0.startAccessingSecurityScopedResource() }, picked: urls)
         }
+        .task { takeOpenedFiles() }
+        .onChange(of: incoming.pending) { takeOpenedFiles() }
         .onDisappear {
             // Closed (or signed out) mid-upload: the rest of the files are not sent.
             uploadTask?.cancel()
             held.forEach { $0.stopAccessingSecurityScopedResource() }
+            files.forEach(OpenedFile.discard)
         }
     }
 
@@ -184,7 +189,20 @@ struct UploadStatementSheet: View {
         }
     }
 
+    /// Files opened from outside the app join the list; one with a name already in it is dropped (a second file
+    /// arriving while the sheet is open is added, not a replacement).
+    private func takeOpenedFiles() {
+        for url in incoming.take() {
+            if files.contains(where: { $0.lastPathComponent == url.lastPathComponent }) {
+                OpenedFile.discard(url)
+            } else {
+                files.append(url)
+            }
+        }
+    }
+
     private func remove(_ url: URL) {
+        OpenedFile.discard(url)
         files.removeAll { $0 == url }
         problems[url.lastPathComponent] = nil
         if held.contains(url) {
@@ -204,7 +222,8 @@ struct UploadStatementSheet: View {
             // Files that went are done with; the ones that failed stay for another try.
             for url in queued where failed[url.lastPathComponent] == nil { remove(url) }
             uploading = false
-            if failed.isEmpty { dismiss() }
+            // A file opened while the uploads ran is still waiting.
+            if failed.isEmpty, files.isEmpty { dismiss() }
         }
     }
 }

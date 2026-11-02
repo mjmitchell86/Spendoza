@@ -11,6 +11,9 @@ struct MoneyView: View {
 
     let api: any SpendozaAPI
     let poller: StatementPoller
+    let incoming: IncomingStatements
+    /// Files opened from outside wait for the app to be unlocked.
+    let isLocked: Bool
     let selfID: @MainActor () -> String?
     let onSessionEnded: @MainActor () -> Void
     let onAccountDisabled: @MainActor (String) -> Void
@@ -29,10 +32,12 @@ struct MoneyView: View {
     @State private var addingStatement = false
     @State private var categoriesChanged = false
 
-    init(api: any SpendozaAPI, poller: StatementPoller, selfID: @escaping @MainActor () -> String?,
+    init(api: any SpendozaAPI, poller: StatementPoller, incoming: IncomingStatements, isLocked: Bool, selfID: @escaping @MainActor () -> String?,
          onSessionEnded: @escaping @MainActor () -> Void, onAccountDisabled: @escaping @MainActor (String) -> Void) {
         self.api = api
         self.poller = poller
+        self.incoming = incoming
+        self.isLocked = isLocked
         self.selfID = selfID
         self.onSessionEnded = onSessionEnded
         self.onAccountDisabled = onAccountDisabled
@@ -84,11 +89,14 @@ struct MoneyView: View {
                                         onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
                 }
                 .navigationDestination(isPresented: $showingStatements) {
-                    StatementsView(model: statements, api: api, selfID: selfID,
+                    StatementsView(model: statements, api: api, incoming: incoming, selfID: selfID,
                                    onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
                 }
         }
-        .sheet(isPresented: $addingStatement) { UploadStatementSheet(model: statements) }
+        .sheet(isPresented: $addingStatement) { UploadStatementSheet(model: statements, incoming: incoming) }
+        .onChange(of: openedFilesAreWaiting, initial: true) { _, waiting in
+            if waiting { addingStatement = true }
+        }
         .task { await model.open() }
         .task(id: model.selected) { await showSelectedMonth() }
         .onChange(of: showingCategories) { _, showing in
@@ -99,6 +107,8 @@ struct MoneyView: View {
             if new == nil, let old { PDFReportsModel.discard(old) }
         }
     }
+
+    private var openedFilesAreWaiting: Bool { !incoming.pending.isEmpty && !isLocked }
 
     private var page: some View {
         VStack(alignment: .leading, spacing: 0) {

@@ -5,13 +5,15 @@ import SwiftUI
 struct MainTabs: View {
     let store: SessionStore
     let lock: AppLock
+    let incoming: IncomingStatements
     @State private var selection = Self.initialTab
     /// The one statement poller of this signed-in session; it stops when the signed-in screens go away.
     @State private var poller: StatementPoller
 
-    init(store: SessionStore, lock: AppLock) {
+    init(store: SessionStore, lock: AppLock, incoming: IncomingStatements) {
         self.store = store
         self.lock = lock
+        self.incoming = incoming
         let poller = StatementPoller(api: store.api)
         poller.onSessionEnded = { [store] in Task { await store.signOut() } }
         poller.onAccountDisabled = { [store] text in Task { await store.accountDisabled(text) } }
@@ -40,6 +42,8 @@ struct MainTabs: View {
             Tab("Money", systemImage: "banknote", value: "Money") {
                 MoneyView(api: store.api,
                           poller: poller,
+                          incoming: incoming,
+                          isLocked: lock.isLocked,
                           selfID: { [store] in store.profile?.id },
                           onSessionEnded: { Task { await store.signOut() } },
                           onAccountDisabled: { text in Task { await store.accountDisabled(text) } })
@@ -56,6 +60,10 @@ struct MainTabs: View {
         }
         .tint(Theme.note)
         .onDisappear { poller.stop() }
+        // A statement opened from outside the app goes to Money's upload sheet (once the app is unlocked).
+        .onChange(of: !incoming.pending.isEmpty && !lock.isLocked, initial: true) { _, waiting in
+            if waiting { selection = "Money" }
+        }
         // After sign-up with a household code, open on Home where the result is told.
         .onChange(of: store.signUpNotice != nil, initial: true) { _, hasNotice in
             if hasNotice { selection = "Home" }
