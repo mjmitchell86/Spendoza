@@ -33,6 +33,7 @@ router.post("/", validate(createIncomeSchema), async (req, res: Response) => {
 router.put("/:id", validate(updateIncomeSchema), async (req, res: Response) => {
   const ctx = toServiceContext(req as AuthenticatedRequest);
   const { data, error } = await updateIncome(ctx, req.params.id, req.body);
+  if ((error as any)?.status === 403) return res.status(403).json({ error: error!.message });
   if (error || !data) return res.status(404).json({ error: "Income entry not found" });
   return res.status(200).json(data);
 });
@@ -42,8 +43,9 @@ router.put("/:id", validate(updateIncomeSchema), async (req, res: Response) => {
 // ---------------------------------------------------------------------------
 router.delete("/:id", async (req, res: Response) => {
   const ctx = toServiceContext(req as AuthenticatedRequest);
-  const { error } = await deleteIncome(ctx, req.params.id);
+  const { deleted, error } = await deleteIncome(ctx, req.params.id);
   if (error) return res.status(400).json({ error: error.message });
+  if (deleted === 0) return res.status(404).json({ error: "Income entry not found" });
   return res.status(204).send();
 });
 

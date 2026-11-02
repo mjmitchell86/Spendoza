@@ -107,9 +107,12 @@ export function registerIncomeTools(
         id: z.string().describe("ID of the income entry to delete"),
       },
       async (args) => {
-        const { error } = await deleteIncome(ctx, args.id);
+        const { deleted, error } = await deleteIncome(ctx, args.id);
         if (error) {
           return { content: [{ type: "text" as const, text: `Error: ${error.message}` }] };
+        }
+        if (deleted === 0) {
+          return { content: [{ type: "text" as const, text: "Error: Income entry not found" }] };
         }
         return { content: [{ type: "text" as const, text: "Income entry deleted successfully." }] };
       }

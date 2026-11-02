@@ -405,6 +405,43 @@ describe("PUT /api/categories/:id", () => {
     const body = await res.json();
     expect(body.error).toBe("Category not found");
   });
+
+  it("returns 403 when renaming or reclassifying a system default", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...systemCategory, budget_class: "other" }, error: null })
+    );
+    mockUpdate.mockClear();
+
+    for (const body of [{ name: "Misc" }, { budget_class: "need" }]) {
+      const res = await fetch(url("cat-system-1"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
+        body: JSON.stringify(body),
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "Cannot rename or reclassify system default categories" });
+    }
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("still shares a system default with the household", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...systemCategory, budget_class: "other" }, error: null })
+    );
+    mockUpdateSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...systemCategory, is_shared_with_household: true }, error: null })
+    );
+
+    const res = await fetch(url("cat-system-1"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
+      body: JSON.stringify({ is_shared_with_household: true }),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).is_shared_with_household).toBe(true);
+  });
 });
 
 // ===========================================================================

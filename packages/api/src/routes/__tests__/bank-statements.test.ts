@@ -185,15 +185,23 @@ let currentMockFile: {
   size: fakePdfBuffer.length,
 };
 
+// The options the route gave multer, and an error for the next upload to fail with (as multer would).
+let multerOptions: any;
+let currentUploadError: (Error & { code?: string }) | null = null;
+
 mock.module("multer", () => {
-  const multerInstance = () => ({
-    single: (_fieldName: string) => {
-      return (req: any, _res: any, next: any) => {
-        req.file = { ...currentMockFile };
-        next();
-      };
-    },
-  });
+  const multerInstance = (options: any) => {
+    multerOptions = options;
+    return {
+      single: (_fieldName: string) => {
+        return (req: any, _res: any, next: any) => {
+          if (currentUploadError) return next(currentUploadError);
+          req.file = { ...currentMockFile };
+          next();
+        };
+      },
+    };
+  };
   multerInstance.memoryStorage = () => ({});
   return { default: multerInstance };
 });
@@ -245,6 +253,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  currentUploadError = null;
   // Reset mock file to PDF default
   currentMockFile = {
     fieldname: "file",
@@ -406,6 +415,26 @@ describe("POST /api/bank-statements/upload", () => {
     const body = await res.json();
     expect(body.error).toBe("Missing authorization header");
     expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it("caps uploads at the shared 4 MiB limit", async () => {
+    const { MAX_BANK_STATEMENT_BYTES } = await import("@spendoza/shared");
+    expect(MAX_BANK_STATEMENT_BYTES).toBe(4_194_304);
+    expect(multerOptions?.limits?.fileSize).toBe(MAX_BANK_STATEMENT_BYTES);
+  });
+
+  it("returns 413 with the limit when the file is too large", async () => {
+    currentUploadError = Object.assign(new Error("File too large"), { code: "LIMIT_FILE_SIZE" });
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "This file is too large (max 4 MB)" });
+    expect(mockStorageFrom).not.toHaveBeenCalled();
   });
 });
 

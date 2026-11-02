@@ -345,6 +345,43 @@ describe("updateCategory", () => {
     expect(data).toBeNull();
     expect(error).toBeDefined();
   });
+
+  describe("a system default", () => {
+    const stored = { ...systemCategory, budget_class: "other" };
+    const refused = { message: "Cannot rename or reclassify system default categories", status: 403 };
+
+    beforeEach(() => {
+      mockSelectSingle.mockImplementation(() => Promise.resolve({ data: stored, error: null }) as any);
+    });
+
+    it("refuses a rename with 403 and moves no transactions", async () => {
+      const { data, error } = await updateCategory(ctx, "cat-system-1", { name: "Misc" });
+
+      expect(data).toBeNull();
+      expect(error).toEqual(refused);
+      expect(mockTxnUpdate).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it("refuses a new budget class with 403", async () => {
+      const { error } = await updateCategory(ctx, "cat-system-1", { budget_class: "need" });
+
+      expect(error).toEqual(refused);
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it("allows the sharing switch, alone or with its name and class unchanged", async () => {
+      expect((await updateCategory(ctx, "cat-system-1", { is_shared_with_household: true })).error).toBeNull();
+      expect(
+        (await updateCategory(ctx, "cat-system-1", {
+          name: "Uncategorized",
+          budget_class: "other",
+          is_shared_with_household: false,
+        })).error
+      ).toBeNull();
+      expect(mockUpdate).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 
 // ===========================================================================

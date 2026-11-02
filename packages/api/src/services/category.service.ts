@@ -56,7 +56,8 @@ export async function createCategory(ctx: ServiceContext, input: CreateCategoryI
 }
 
 // ---------------------------------------------------------------------------
-// updateCategory — updates by id + user_id
+// updateCategory — updates by id + user_id. A system default keeps its name and
+// budget class (deletes find "Other" by name); its sharing switch can change.
 // ---------------------------------------------------------------------------
 export async function updateCategory(
   ctx: ServiceContext,
@@ -66,14 +67,24 @@ export async function updateCategory(
   const { supabase, userId } = ctx;
 
   let oldName: string | null = null;
-  if (input.name !== undefined) {
+  if (input.name !== undefined || input.budget_class !== undefined) {
     const { data: current } = await supabase
       .from("categories")
       .select("*")
       .eq("id", id)
       .eq("user_id", userId)
       .single();
-    oldName = current?.name ?? null;
+    if (
+      current?.is_system_default &&
+      ((input.name !== undefined && input.name !== current.name) ||
+        (input.budget_class !== undefined && input.budget_class !== current.budget_class))
+    ) {
+      return {
+        data: null,
+        error: { message: "Cannot rename or reclassify system default categories", status: 403 },
+      };
+    }
+    oldName = input.name !== undefined ? (current?.name ?? null) : null;
   }
 
   if (oldName !== null && input.name !== undefined && input.name !== oldName) {

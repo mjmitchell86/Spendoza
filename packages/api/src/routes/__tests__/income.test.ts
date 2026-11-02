@@ -216,7 +216,7 @@ beforeEach(() => {
   );
 
   mockDeleteResult.mockImplementation(() =>
-    Promise.resolve({ data: null, error: null })
+    Promise.resolve({ data: null, error: null, count: 1 })
   );
 });
 
@@ -368,6 +368,53 @@ describe("PUT /api/income/:id", () => {
     const body = await res.json();
     expect(body.error).toBe("Income entry not found");
   });
+
+  // Stored entry owned by someone else and attributed to a household member (a uuid, as the schema requires).
+  const MEMBER_ID = "8f14e45f-ceea-4e7a-9b6c-0a1b2c3d4e5f";
+  const sharedWithMe = { user_id: "owner-9", attributed_to_user_id: MEMBER_ID, attributed_to_name: null };
+
+  it("returns 403 when someone the entry is attributed to changes who it is attributed to", async () => {
+    mockSelectSingle.mockImplementation(() => Promise.resolve({ data: sharedWithMe, error: null }) as any);
+
+    const res = await fetch(url("inc-1"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
+      body: JSON.stringify({ amount: 5100, attributed_to_user_id: null, attributed_to_name: "Jane" }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe("Only the owner can change who this income is attributed to");
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("lets someone the entry is attributed to send the attribution unchanged", async () => {
+    mockSelectSingle.mockImplementation(() => Promise.resolve({ data: sharedWithMe, error: null }) as any);
+
+    const res = await fetch(url("inc-1"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
+      body: JSON.stringify({ amount: 5100, attributed_to_user_id: MEMBER_ID, attributed_to_name: null }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the owner change who the entry is attributed to", async () => {
+    mockSelectSingle.mockImplementation(
+      () => Promise.resolve({ data: { user_id: TEST_USER_ID, attributed_to_user_id: null, attributed_to_name: null }, error: null }) as any
+    );
+
+    const res = await fetch(url("inc-1"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
+      body: JSON.stringify({ attributed_to_name: "Jane" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ===========================================================================
@@ -385,5 +432,18 @@ describe("DELETE /api/income/:id", () => {
     expect(res.status).toBe(204);
     expect(mockFrom).toHaveBeenCalledWith("income_entries");
     expect(mockDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 404 when nothing was deleted (not found, or attributed to you but not yours)", async () => {
+    mockDeleteResult.mockImplementation(() => Promise.resolve({ data: null, error: null, count: 0 }) as any);
+
+    const res = await fetch(url("inc-1"), {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe("Income entry not found");
   });
 });
