@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
+import { MAX_BANK_STATEMENT_BYTES, MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
 import { transactionUpdateRequest, oversizeFileError } from "../transaction-requests";
 
 describe("transactionUpdateRequest", () => {
@@ -21,6 +21,12 @@ describe("transactionUpdateRequest", () => {
 describe("upload limit", () => {
   it("is 4 MB", () => {
     expect(MAX_BANK_STATEMENT_SIZE_MB).toBe(4);
+  });
+
+  it("is 4 MiB in bytes, the same number the server and the phone use", () => {
+    expect(MAX_BANK_STATEMENT_BYTES).toBe(4_194_304);
+    expect(oversizeFileError({ name: "edge.pdf", size: MAX_BANK_STATEMENT_BYTES })).toBeNull();
+    expect(oversizeFileError({ name: "over.pdf", size: MAX_BANK_STATEMENT_BYTES + 1 })).toBe("over.pdf: exceeds 4MB");
   });
 
   it("rejects a 5 MB file and accepts a 4 MB one", () => {

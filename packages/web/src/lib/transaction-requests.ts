@@ -1,4 +1,4 @@
-import { MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
+import { MAX_BANK_STATEMENT_BYTES, MAX_BANK_STATEMENT_SIZE_MB } from "@spendoza/shared";
 
 type TransactionUpdate = { ai_category?: string | null; attributed_to_user_id?: string };
 
@@ -16,7 +16,7 @@ export function transactionUpdateRequest(
 
 // Error for a statement over the upload limit, or null when it fits.
 export function oversizeFileError(file: { name: string; size: number }): string | null {
-  return file.size > MAX_BANK_STATEMENT_SIZE_MB * 1024 * 1024
+  return file.size > MAX_BANK_STATEMENT_BYTES
     ? `${file.name}: exceeds ${MAX_BANK_STATEMENT_SIZE_MB}MB`
     : null;
 }
