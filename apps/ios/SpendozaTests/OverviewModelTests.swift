@@ -119,6 +119,20 @@ struct OverviewModelTests {
 
     // MARK: Upcoming bills
 
+    @Test func reloadingUpcomingFetchesOnlyTheBills() async {
+        let api = StubAPI()
+        api.upcomingBillList = [bill("b1", "Phone", due: day(2026, 11, 20))]
+        let m = model(api)
+        await m.load()
+        api.upcomingBillList = [bill("b1", "Phone", due: day(2026, 11, 20)), bill("b5", "Gym", due: day(2026, 11, 2))]
+        let reports = api.requestedMonths.count
+        await m.reloadUpcoming()
+        #expect(m.upcoming.map(\.id) == ["b5", "b1"])
+        // A bill changing doesn't touch the report or the statements.
+        #expect(api.requestedMonths.count == reports)
+        #expect(api.calls.filter { $0 == "statements" }.count == 1)
+    }
+
     @Test func upcomingBillsStartTodayAndRunSoonestFirst() async {
         let api = StubAPI()
         api.upcomingBillList = [
@@ -186,18 +200,24 @@ struct OverviewModelTests {
         #expect(m.statements.map(\.id) == ["s1", "s3", "s4"])
     }
 
-    @Test func aStatementWithNoMonthShowsOnlyWhileItIsBeingRead() async {
+    @Test func aStatementWithNoMonthShowsWhileItIsBeingReadOrWhenItFailed() async throws {
         let api = StubAPI()
         api.statementScript = [[
             Statement(id: "up", status: .uploaded, fileType: "pdf", createdAt: now),
             Statement(id: "pr", status: .processing, fileType: "csv", createdAt: now),
-            Statement(id: "fa", status: .failed, fileType: "pdf", createdAt: now),
+            Statement(id: "fa", status: .failed, fileType: "pdf", createdAt: now,
+                      failure: StatementFailure(reason: "Couldn't read this PDF")),
             Statement(id: "ok", status: .parsed, fileType: "pdf", createdAt: now),
             Statement(id: "oct", status: .processing, fileType: "pdf", createdAt: now, statementMonth: oct),
         ]]
         let m = model(api)
         await m.load()
-        #expect(m.statements.map(\.id) == ["up", "pr"])
+        // A statement that failed before it got a month would otherwise vanish from every month.
+        try #require(m.statements.map(\.id) == ["up", "pr", "fa"])
+        let failed = m.statementRows[2]
+        #expect(failed.statusText == "Failed")
+        #expect(failed.monthText == "Pending")
+        #expect(failed.failure?.reason == "Couldn't read this PDF")
     }
 
     @Test func overviewStatementRowsUseTheListsWords() async {

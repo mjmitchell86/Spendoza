@@ -7,6 +7,7 @@ import SwiftUI
 struct TransactionsView: View {
     @Bindable var model: TransactionsModel
     @State private var moving: Transaction?
+    @FocusState private var searching: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -25,21 +26,27 @@ struct TransactionsView: View {
                                 offersUncategorized: model.offersUncategorized(for: transaction)) { name in
                 Task { await model.recategorize(transaction, to: name) }
             }
+            .givesWayToOpenedFiles()
         }
     }
 
     private var searchField: some View {
-        TextField("", text: $model.search, prompt: Text("Search descriptions...").foregroundStyle(Theme.soft), axis: .vertical)
-            // The prompt wraps at the largest text sizes instead of being clipped; Return ends the search rather than adding a line.
+        // The prompt wraps at the largest text sizes instead of being clipped. A vertical field types Return as a
+        // newline, so every edit goes through `searchEdit`: Return puts the keyboard away, pasted lines join with a
+        // space, and the search only ever sees the one cleaned-up text.
+        let text = Binding(get: { model.search }, set: { typed in
+            let edit = TransactionsModel.searchEdit(old: model.search, new: typed)
+            if edit.text != model.search { model.search = edit.text }
+            if edit.endsEditing { searching = false }
+        })
+        return TextField("", text: text, prompt: Text("Search descriptions...").foregroundStyle(Theme.soft), axis: .vertical)
             .lineLimit(1...3)
             .font(.sans(16, relativeTo: .body))
             .foregroundStyle(Theme.ink)
             .tint(Theme.note)
             .autocorrectionDisabled()
             .submitLabel(.search)
-            .onChange(of: model.search) { _, text in
-                if text.contains("\n") { model.search = text.replacingOccurrences(of: "\n", with: "") }
-            }
+            .focused($searching)
             .padding(.horizontal, 12)
             .frame(minHeight: 44)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))

@@ -42,6 +42,8 @@ final class ExpensesModel {
     @ObservationIgnored private let api: any SpendozaAPI
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private let now: () -> Date
+    /// A bill was saved or deleted since the Overview last asked.
+    @ObservationIgnored private var changed = false
 
     init(api: any SpendozaAPI, calendar: Calendar = .current, now: @escaping () -> Date = { .now }) {
         self.api = api
@@ -137,21 +139,29 @@ final class ExpensesModel {
             let saved = try await api.saveExpense(draft, id: id)
             if let index = expenses.firstIndex(where: { $0.id == saved.id }) { expenses[index] = saved } else { expenses.append(saved) }
             expenses = Self.sorted(expenses)
+            changed = true
             return nil
         } catch {
             return endsSession(error) ? nil : userMessage(for: error)
         }
     }
 
-    /// Deletes the bill. Returns nil on success, otherwise the server's text (the web swallowed it).
+    /// Deletes the bill. Returns nil on success, otherwise the server's text.
     func delete(_ bill: Expense) async -> String? {
         do {
             try await api.deleteExpense(id: bill.id)
             expenses.removeAll { $0.id == bill.id }
+            changed = true
             return nil
         } catch {
             return endsSession(error) ? nil : userMessage(for: error)
         }
+    }
+
+    /// Whether a bill was saved or deleted since the last call (the Overview's upcoming bills are then stale).
+    func takeChanged() -> Bool {
+        defer { changed = false }
+        return changed
     }
 
     // MARK: Helpers

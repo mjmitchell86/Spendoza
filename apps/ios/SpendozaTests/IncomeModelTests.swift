@@ -305,4 +305,35 @@ struct IncomeModelTests {
         #expect(message == "Cannot delete this income entry")
         #expect(m.rows.count == 5)
     }
+
+    // MARK: Attribution belongs to the owner
+
+    @Test func theAttributionReadsInTheFormsWords() async {
+        let m = await model(api())
+        // i3 is Ann's, attributed to you.
+        #expect(m.attributionText(of: m.entries.first { $0.id == "i3" }!) == "You")
+        #expect(m.attributionText(of: m.entries.first { $0.id == "i5" }!) == "Ann Smith")
+        #expect(m.attributionText(of: m.entries.first { $0.id == "i4" }!) == "Jane")
+        #expect(m.attributionText(of: m.entries.first { $0.id == "i1" }!) == "Me (default)")
+        #expect(IncomeModel.ownerOnlyAttribution == "Only the owner can change who this income is attributed to.")
+    }
+
+    @Test func someoneTheEntryIsAttributedToSavesWithoutTheAttribution() throws {
+        // Owned by Ann, attributed to you: the server refuses an attribution change, so the draft leaves it out.
+        var f = IncomeForm(editing: entry("i3", "Ann pay", owner: "u-ann", attributedUser: me), locale: us)
+        f.canAttribute = false
+        f.amountText = "3100"
+        let draft = try #require(f.draft())
+        #expect(!draft.includesAttribution)
+        let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(draft)) as? [String: Any])
+        #expect(json["attributed_to_user_id"] == nil)
+        #expect(json["attributed_to_name"] == nil)
+        #expect(json["amount"] as? Double == 3100)
+    }
+
+    @Test func theOwnersDraftStillCarriesTheAttribution() throws {
+        let draft = try #require(IncomeForm(editing: entry("i5", "Partner job", attributedUser: "u-ann"), locale: us).draft())
+        #expect(draft.includesAttribution)
+        #expect(draft.attributedToUserID == "u-ann")
+    }
 }

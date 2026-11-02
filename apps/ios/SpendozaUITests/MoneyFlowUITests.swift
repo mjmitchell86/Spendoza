@@ -44,6 +44,18 @@ final class MoneyFlowUITests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 10), "Undo didn't restore the category")
     }
 
+    @MainActor func testReturnInSearchPutsTheKeyboardAwayAndKeepsTheText() {
+        let app = Launch.stubbed(startOnMoney: true)
+        app.open(.transactions)
+        let search = app.textFields["Search descriptions"]
+        XCTAssertTrue(search.waitForExistence(timeout: 15))
+        search.tap()
+        search.typeText("venmo\n")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 10), "Return didn't put the keyboard away")
+        XCTAssertEqual(search.value as? String, "venmo")
+        XCTAssertTrue(app.staticTexts["Transactions (1)"].exists)
+    }
+
     @MainActor func testAddAnExpenseFromBills() {
         let app = Launch.stubbed(startOnMoney: true)
         app.open(.bills)

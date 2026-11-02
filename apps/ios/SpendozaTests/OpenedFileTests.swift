@@ -132,14 +132,31 @@ struct OpenedFileTests {
         #expect(FileManager.default.fileExists(atPath: file.path))
     }
 
-    @Test func launchSweepEmptiesTheInboxesAndTheCopies() throws {
+    @Test func launchSweepEmptiesOldInboxFilesAndTheCopies() throws {
         let documentsInbox = try inboxFile("left.pdf", in: home.appendingPathComponent("Documents/Inbox"))
         let tmpInbox = try inboxFile("left.csv", in: home.appendingPathComponent("tmp/com.gravitaz.spendoza-Inbox"))
         let copy = try accepted(OpenedFile.accept(try source("a.pdf", bytes: 10)))
-        OpenedFile.removeLeftovers()
+        // A launch more than the grace period after iOS put the files there.
+        OpenedFile.removeLeftovers(now: Date().addingTimeInterval(OpenedFile.inboxGracePeriod + 60))
         #expect(!FileManager.default.fileExists(atPath: documentsInbox.path))
         #expect(!FileManager.default.fileExists(atPath: tmpInbox.path))
         #expect(!FileManager.default.fileExists(atPath: copy.path))
+    }
+
+    /// A share to a closed app: iOS puts the file in the Inbox, then launches the app, then hands it the URL. The
+    /// launch sweep must leave that file for `accept`; our own copies from an earlier run still go.
+    @Test func aFileSharedToAClosedAppSurvivesTheLaunchSweepAndOpens() throws {
+        let shared = try inboxFile("shared-\(UUID().uuidString).pdf", in: home.appendingPathComponent("Documents/Inbox"))
+        let tmpShared = try inboxFile("shared-\(UUID().uuidString).csv", in: home.appendingPathComponent("tmp/com.gravitaz.spendoza-Inbox"))
+        let earlierCopy = try accepted(OpenedFile.accept(try source("earlier.pdf", bytes: 10)))
+        OpenedFile.removeLeftovers()
+        #expect(FileManager.default.fileExists(atPath: shared.path))
+        #expect(FileManager.default.fileExists(atPath: tmpShared.path))
+        #expect(!FileManager.default.fileExists(atPath: earlierCopy.path))
+        let copy = try accepted(OpenedFile.accept(shared))
+        defer { OpenedFile.discard(copy) }
+        #expect(FileManager.default.contents(atPath: copy.path)?.count == 100)
+        if case .success(let other) = OpenedFile.accept(tmpShared) { OpenedFile.discard(other) }
     }
 
     @Test func theCopyIsExcludedFromBackup() throws {

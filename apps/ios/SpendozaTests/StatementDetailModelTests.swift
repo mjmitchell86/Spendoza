@@ -92,6 +92,19 @@ struct StatementDetailModelTests {
         #expect(m.actionError == "You're offline. Check your connection and try again.")
     }
 
+    @Test func aSavedCategoryChangeIsReportedOnceSoTransactionsReload() async {
+        let (m, api) = await make()
+        #expect(!m.takeChanged())
+        api.setCategoryError = .offline
+        await m.recategorize(m.transactions[0], to: "Dining out")
+        // Put back: nothing changed on the server.
+        #expect(!m.takeChanged())
+        api.setCategoryError = nil
+        await m.recategorize(m.transactions[0], to: "Dining out")
+        #expect(m.takeChanged())
+        #expect(!m.takeChanged())
+    }
+
     @Test func thePickerLeavesOutTheCurrentCategory() async {
         let (m, _) = await make()
         let targets = m.pickerTargets(for: m.transactions[0]).map(\.name)

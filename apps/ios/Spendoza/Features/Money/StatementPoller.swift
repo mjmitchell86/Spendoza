@@ -13,6 +13,9 @@ final class StatementPoller {
     private(set) var hasLoaded = false
     /// Why the last fetch failed; cleared by the next one that works.
     private(set) var loadError: String?
+    /// How many statements this poller has seen become parsed (each brings new transactions): the Money screens
+    /// reload when it goes up. The ones already parsed in the first list don't count.
+    private(set) var finishedCount = 0
 
     @ObservationIgnored var onSessionEnded: (@MainActor () -> Void)?
     @ObservationIgnored var onAccountDisabled: (@MainActor (String) -> Void)?
@@ -22,6 +25,8 @@ final class StatementPoller {
     @ObservationIgnored private var loop: Task<Void, Never>?
     /// `stop()` is final: a refresh still in flight when the session ended must not start polling again.
     @ObservationIgnored private var isStopped = false
+    /// A list has been fetched (`hasLoaded` is also true after a failure).
+    @ObservationIgnored private var hasList = false
 
     init(api: any SpendozaAPI, interval: Duration = StatementPoller.interval,
          sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
@@ -71,7 +76,11 @@ final class StatementPoller {
         do {
             let latest = try await api.statements()
             if Task.isCancelled { return }
+            let parsedBefore = Set(statements.filter { $0.status == .parsed }.map(\.id))
+            let finished = hasList ? latest.filter { $0.status == .parsed && !parsedBefore.contains($0.id) }.count : 0
+            hasList = true
             statements = latest
+            if finished > 0 { finishedCount += finished }
             loadError = nil
             hasLoaded = true
         } catch let error as APIError {

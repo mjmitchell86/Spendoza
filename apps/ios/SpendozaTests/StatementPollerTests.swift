@@ -102,6 +102,33 @@ struct StatementPollerTests {
         #expect(poller.statements.map(\.status) == [.parsed, .parsed])
     }
 
+    @Test func aStatementFinishingIsCountedOnceSoTheMoneyScreensReload() async {
+        let api = StubAPI()
+        api.statementScript = [[statement("s1", .parsed), statement("s2", .processing), statement("s3", .uploaded)],
+                               [statement("s1", .parsed), statement("s2", .parsed), statement("s3", .processing)],
+                               [statement("s1", .parsed), statement("s2", .parsed), statement("s3", .failed)],
+                               [statement("s1", .parsed), statement("s2", .parsed), statement("s3", .failed)]]
+        let poller = StatementPoller(api: api, sleep: SleepLog().sleeper)
+        await poller.refresh()
+        // Already parsed when first seen: nothing new to show.
+        #expect(poller.finishedCount == 0)
+        await poller.waitUntilIdle()
+        // s2 finished; s3 failing brings no new transactions.
+        #expect(poller.finishedCount == 1)
+        await poller.refresh()
+        #expect(poller.finishedCount == 1)
+    }
+
+    @Test func aStatementThatFinishesBetweenRefreshesCountsToo() async {
+        let api = StubAPI()
+        api.statementScript = [[statement("s1", .failed)], [statement("s1", .parsed), statement("s2", .parsed)]]
+        let poller = StatementPoller(api: api, sleep: SleepLog().sleeper)
+        await poller.refresh()
+        // s1 retried and s2 uploaded on the web, both parsed by the next look.
+        await poller.refresh()
+        #expect(poller.finishedCount == 2)
+    }
+
     @Test func aDroppedConnectionKeepsPolling() async {
         let api = StubAPI()
         api.statementScript = [[statement("s1", .processing)], [statement("s1", .parsed)]]

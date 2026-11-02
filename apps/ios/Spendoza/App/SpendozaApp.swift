@@ -29,10 +29,14 @@ struct SpendozaApp: App {
                 // Statements opened from the share sheet or Files; other links are not handled here.
                 .onOpenURL { incoming.handle($0) }
                 #if DEBUG
-                // `-uiTestOpenFile <path>` (with the stub API) opens that file the way the share sheet would.
+                // `-uiTestOpenFile <path>` (with the stub API) opens that file the way the share sheet would;
+                // `-uiTestOpenFileAfter <seconds>` waits first, so a test can have another sheet open by then.
                 .task {
                     let args = CommandLine.arguments
                     guard UITestStub.isOn, let i = args.firstIndex(of: "-uiTestOpenFile"), args.indices.contains(i + 1) else { return }
+                    if let d = args.firstIndex(of: "-uiTestOpenFileAfter"), args.indices.contains(d + 1), let seconds = Int(args[d + 1]) {
+                        try? await Task.sleep(for: .seconds(seconds))
+                    }
                     incoming.handle(URL(fileURLWithPath: args[i + 1]))
                 }
                 #endif

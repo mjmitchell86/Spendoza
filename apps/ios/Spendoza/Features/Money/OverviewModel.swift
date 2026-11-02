@@ -42,11 +42,10 @@ final class OverviewModel {
     /// Recurring bills due today or later, soonest first.
     private(set) var upcoming: [Expense] = []
     /// This month's statements, by `statementMonth`, from the shared poller (so they follow it while one processes).
-    /// One still being read has no month yet; it shows here until it gets one.
+    /// One still being read has no month yet; it shows here until it gets one. One that failed before it got a month
+    /// never will, so it stays (as "Failed", with why) until it is retried or removed.
     var statements: [Statement] {
-        poller.statements.filter {
-            $0.statementMonth == month || ($0.statementMonth == nil && ($0.status == .uploaded || $0.status == .processing))
-        }
+        poller.statements.filter { $0.statementMonth == month || ($0.statementMonth == nil && $0.status != .parsed) }
     }
 
     /// The same rows, words and statuses as the Statements list.
@@ -127,6 +126,18 @@ final class OverviewModel {
 
     // MARK: Loading
 
+    /// Only the upcoming bills (a bill was added, changed or deleted on the Bills segment).
+    func reloadUpcoming() async {
+        let today = calendar.startOfDay(for: now())
+        let api = self.api
+        guard let bills = try? await api.upcomingBills(from: today), !Task.isCancelled else { return }
+        upcoming = Self.upcoming(bills, from: today)
+    }
+
+    private static func upcoming(_ bills: [Expense], from today: Date) -> [Expense] {
+        bills.filter { $0.nextDueDate >= today }.sorted { $0.nextDueDate < $1.nextDueDate }
+    }
+
     func load() async {
         let today = calendar.startOfDay(for: now())
         let api = self.api, month = self.month
@@ -137,9 +148,7 @@ final class OverviewModel {
         if Task.isCancelled { return }
 
         // The bills and statements are extras: when they fail the report still shows.
-        upcoming = ((try? bills.get()) ?? [])
-            .filter { $0.nextDueDate >= today }
-            .sorted { $0.nextDueDate < $1.nextDueDate }
+        upcoming = Self.upcoming((try? bills.get()) ?? [], from: today)
         switch fetchedReport {
         case .success(let fetched):
             report = fetched.flatMap { $0.data.hasNoData ? nil : $0 }

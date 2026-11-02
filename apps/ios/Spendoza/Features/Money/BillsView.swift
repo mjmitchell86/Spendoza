@@ -29,10 +29,10 @@ struct BillsView: View {
         .task { await model.load() }
         .task { await income.load() }
         .sheet(item: $target) { target in
-            ExpenseFormSheet(model: model, bill: target.bill)
+            ExpenseFormSheet(model: model, bill: target.bill).givesWayToOpenedFiles()
         }
         .sheet(item: $incomeTarget) { target in
-            IncomeFormSheet(model: income, entry: target.entry)
+            IncomeFormSheet(model: income, entry: target.entry).givesWayToOpenedFiles()
         }
     }
 

@@ -21,10 +21,11 @@ final class StatementDetailModel {
     private(set) var isAssigning = false
     private(set) var isSelecting = false
     private(set) var selected: Set<String> = []
-
     @ObservationIgnored var onSessionEnded: (@MainActor () -> Void)?
     @ObservationIgnored var onAccountDisabled: (@MainActor (String) -> Void)?
     @ObservationIgnored private let api: any SpendozaAPI
+    /// A category change was saved since the last `takeChanged()`: the month's transactions (and report) are stale.
+    @ObservationIgnored private var changed = false
 
     init(api: any SpendozaAPI, statementID: String, poller: StatementPoller) {
         self.api = api
@@ -102,6 +103,12 @@ final class StatementDetailModel {
 
     // MARK: Category
 
+    /// Whether a category change was saved since the last call.
+    func takeChanged() -> Bool {
+        defer { changed = false }
+        return changed
+    }
+
     /// Moves a transaction to another category (nil is Uncategorized): at once, and back with an error if the call fails.
     func recategorize(_ transaction: Transaction, to name: String?) async {
         guard let index = transactions.firstIndex(where: { $0.id == transaction.id }) else { return }
@@ -110,6 +117,7 @@ final class StatementDetailModel {
         transactions[index] = Self.with(before, category: .some(name))
         do {
             try await api.setCategory(transactionID: transaction.id, category: name)
+            changed = true
         } catch {
             if let back = transactions.firstIndex(where: { $0.id == transaction.id }) { transactions[back] = before }
             if !endsSession(error) { actionError = (error as? APIError)?.userMessage ?? "Couldn't change the category. Try again." }

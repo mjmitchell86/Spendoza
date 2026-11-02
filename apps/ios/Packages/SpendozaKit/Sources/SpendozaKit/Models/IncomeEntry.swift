@@ -78,6 +78,8 @@ public struct IncomeDraft: Encodable, Sendable, Equatable {
     public var endDate: Date?
     public var attributedToUserID: String?
     public var attributedToName: String?
+    /// False leaves both attribution fields out (not null): only the owner may change who an entry is attributed to.
+    public var includesAttribution = true
 
     public init(sourceName: String, friendlyName: String? = nil, amount: Double, frequency: IncomeFrequency,
                 effectiveDate: Date, endDate: Date? = nil, attributedToUserID: String? = nil, attributedToName: String? = nil) {
@@ -109,6 +111,7 @@ public struct IncomeDraft: Encodable, Sendable, Equatable {
         try c.encode(frequency, forKey: .frequency)
         try c.encode(APIClient.dayString(effectiveDate), forKey: .effectiveDate)
         try c.encode(endDate.map(APIClient.dayString), forKey: .endDate)
+        guard includesAttribution else { return }
         try c.encode(attributedToUserID, forKey: .attributedToUserID)
         try c.encode(attributedToName.nonEmptyTrimmed, forKey: .attributedToName)
     }

@@ -38,6 +38,21 @@ struct TransactionsModelTests {
         #expect(m.categories.map(\.name).contains("Groceries"))
     }
 
+    // MARK: The search field
+
+    @Test func pastedLinesJoinWithASingleSpace() {
+        #expect(TransactionsModel.searchEdit(old: "", new: "a\nb") == .init(text: "a b", endsEditing: false))
+        #expect(TransactionsModel.searchEdit(old: "", new: "olive\r\n  garden\n") == .init(text: "olive garden ", endsEditing: false))
+        #expect(TransactionsModel.searchEdit(old: "ol", new: "olive") == .init(text: "olive", endsEditing: false))
+    }
+
+    @Test func returnEndsTheSearchWithoutChangingIt() {
+        // Return types one newline where the cursor is: the text stays as it was and the keyboard goes away.
+        #expect(TransactionsModel.searchEdit(old: "olive", new: "olive\n") == .init(text: "olive", endsEditing: true))
+        #expect(TransactionsModel.searchEdit(old: "olive", new: "ol\nive") == .init(text: "olive", endsEditing: true))
+        #expect(TransactionsModel.searchEdit(old: "", new: "\n") == .init(text: "", endsEditing: true))
+    }
+
     @Test func searchIgnoresCase() async {
         let m = await model(api())
         m.search = "OLIVE"

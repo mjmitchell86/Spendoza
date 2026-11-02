@@ -358,4 +358,28 @@ struct ExpensesModelTests {
         #expect(message == "Cannot delete: expense is linked to a transaction")
         #expect(m.rows.count == 4)
     }
+
+    // MARK: Telling the Overview
+
+    @Test func aSavedOrDeletedBillIsReportedOnceSoTheOverviewReloadsItsBills() async throws {
+        let api = api()
+        let m = await model(api)
+        #expect(!m.takeChanged())
+        _ = await m.save(try #require(filled().draft()), id: nil)
+        #expect(m.takeChanged())
+        // Taken: nothing more changed, so nothing more to reload.
+        #expect(!m.takeChanged())
+        _ = await m.delete(m.expenses.first { $0.id == "e3" }!)
+        #expect(m.takeChanged())
+    }
+
+    @Test func aFailedSaveOrDeleteReportsNoChange() async throws {
+        let api = api()
+        let m = await model(api)
+        api.moneyErrors["saveExpense"] = .message("Validation failed")
+        api.moneyErrors["deleteExpense"] = .message("No")
+        _ = await m.save(try #require(filled().draft()), id: nil)
+        _ = await m.delete(m.expenses.first { $0.id == "e3" }!)
+        #expect(!m.takeChanged())
+    }
 }

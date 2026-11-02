@@ -11,6 +11,8 @@ struct StatementsView: View {
     let selfID: @MainActor () -> String?
     let onSessionEnded: @MainActor () -> Void
     let onAccountDisabled: @MainActor (String) -> Void
+    /// A statement's review changed a category.
+    var statementChanged: @MainActor () -> Void = {}
     @State private var opened: String?
 
     var body: some View {
@@ -43,7 +45,8 @@ struct StatementsView: View {
         .refreshable { await model.load() }
         .navigationDestination(item: $opened) { id in
             StatementDetailView(api: api, statementID: id, statements: model, selfID: selfID,
-                                onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
+                                onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled,
+                                didChange: statementChanged)
         }
     }
 

@@ -68,6 +68,16 @@ final class IncomeModel {
         return entry.attributedToName.trimmedNonEmpty
     }
 
+    /// Who the entry is attributed to, in the form's words (shown read-only to someone who isn't the owner).
+    /// "You" when it is attributed to the person looking.
+    func attributionText(of entry: IncomeEntry) -> String {
+        if let id = entry.attributedToUserID, id == selfID() { return "You" }
+        return attribution(of: entry) ?? IncomeForm.Attribution.me.title
+    }
+
+    /// Under the read-only attribution; the server's 403 says the same.
+    static let ownerOnlyAttribution = "Only the owner can change who this income is attributed to."
+
     /// "Me (default)", then "Household member" when in a household, then "Custom name".
     var attributionChoices: [IncomeForm.Attribution] {
         members.isEmpty ? [.me, .custom] : [.me, .member, .custom]
@@ -181,6 +191,9 @@ struct IncomeForm: Equatable {
     var attribution = Attribution.me
     var memberID: String?
     var customName = ""
+    /// False for someone the entry is only attributed to: only the owner changes who it is attributed to, so the
+    /// draft leaves the attribution out.
+    var canAttribute = true
     /// How the amount is typed and shown.
     let locale: Locale
 
@@ -216,12 +229,13 @@ struct IncomeForm: Equatable {
 
     var canSave: Bool { draft() != nil }
 
-    /// Only the chosen attribution is set; "Me (default)" sends both as nulls so an edit clears the old one.
+    /// Only the chosen attribution is set; "Me (default)" sends both as nulls so an edit clears the old one. Without
+    /// `canAttribute` neither is sent.
     func draft() -> IncomeDraft? {
         guard let source = sourceName.trimmedNonEmpty, let amount else { return nil }
         var userID: String?
         var name: String?
-        switch attribution {
+        switch canAttribute ? attribution : .me {
         case .me: break
         case .member:
             guard let memberID else { return nil }
@@ -230,8 +244,10 @@ struct IncomeForm: Equatable {
             guard let custom = customName.trimmedNonEmpty else { return nil }
             name = custom
         }
-        return IncomeDraft(sourceName: source, friendlyName: friendlyName.trimmedNonEmpty, amount: amount, frequency: frequency,
-                           effectiveDate: effectiveDate, endDate: hasEndDate ? endDate : nil, attributedToUserID: userID,
-                           attributedToName: name)
+        var draft = IncomeDraft(sourceName: source, friendlyName: friendlyName.trimmedNonEmpty, amount: amount, frequency: frequency,
+                                effectiveDate: effectiveDate, endDate: hasEndDate ? endDate : nil, attributedToUserID: userID,
+                                attributedToName: name)
+        draft.includesAttribution = canAttribute
+        return draft
     }
 }

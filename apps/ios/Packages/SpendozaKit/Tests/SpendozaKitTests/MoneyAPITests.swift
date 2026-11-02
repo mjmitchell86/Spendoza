@@ -127,6 +127,19 @@ extension APIClientTests {
         #expect(json["end_date"] is NSNull)
     }
 
+    @Test func aDraftWithoutTheAttributionLeavesBothFieldsOut() async throws {
+        // Someone an entry is only attributed to can't change it; the API refuses the fields if they differ.
+        let log = stub(body: Self.incomeBody)
+        var draft = IncomeDraft(sourceName: "Acme", amount: 1, frequency: .monthly, effectiveDate: day(2026, 10, 2))
+        draft.includesAttribution = false
+        _ = try await client().saveIncome(draft, id: "i1")
+        let sent = try #require(log.all.first)
+        let json = try #require(sent.json as? [String: Any])
+        #expect(json["attributed_to_user_id"] == nil)
+        #expect(json["attributed_to_name"] == nil)
+        #expect(json["source_name"] as? String == "Acme")
+    }
+
     @Test func updateIncomeUsesPutAndDeleteUsesDelete() async throws {
         let log = stub(body: Self.incomeBody)
         _ = try await client().saveIncome(IncomeDraft(sourceName: "Acme", amount: 1, frequency: .oneTime, effectiveDate: day(2026, 10, 2)), id: "i1")

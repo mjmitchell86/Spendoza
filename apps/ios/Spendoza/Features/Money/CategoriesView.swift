@@ -52,7 +52,7 @@ struct CategoriesView: View {
         .refreshable { await model?.load() }
         .onDisappear { if model?.changed == true { didChange() } }
         .sheet(item: $target) { target in
-            if let model { CategoryFormSheet(model: model, category: target.category) }
+            if let model { CategoryFormSheet(model: model, category: target.category).givesWayToOpenedFiles() }
         }
         .alert("Delete category", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Cancel", role: .cancel) {}

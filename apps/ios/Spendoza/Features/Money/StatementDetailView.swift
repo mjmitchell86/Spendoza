@@ -6,13 +6,17 @@ import SwiftUI
 /// account in a household, "Assign to" per row and a select-and-assign bar.
 struct StatementDetailView: View {
     let statements: StatementsModel
+    /// Called on leaving when a category was changed here.
+    let didChange: @MainActor () -> Void
     @State private var model: StatementDetailModel
     @State private var moving: Transaction?
     @Environment(\.dismiss) private var dismiss
 
     init(api: any SpendozaAPI, statementID: String, statements: StatementsModel, selfID: @MainActor () -> String?,
-         onSessionEnded: @escaping @MainActor () -> Void, onAccountDisabled: @escaping @MainActor (String) -> Void) {
+         onSessionEnded: @escaping @MainActor () -> Void, onAccountDisabled: @escaping @MainActor (String) -> Void,
+         didChange: @escaping @MainActor () -> Void = {}) {
         self.statements = statements
+        self.didChange = didChange
         let model = StatementDetailModel(api: api, statementID: statementID, poller: statements.poller)
         model.onSessionEnded = onSessionEnded
         model.onAccountDisabled = onAccountDisabled
@@ -54,12 +58,14 @@ struct StatementDetailView: View {
         .onChange(of: model.row == nil) { _, gone in
             if gone { dismiss() }
         }
+        .onDisappear { if model.takeChanged() { didChange() } }
         .sheet(item: $moving) { transaction in
             CategoryPickerSheet(transaction: transaction, current: transaction.category ?? TransactionsModel.uncategorized,
                                 targets: model.pickerTargets(for: transaction),
                                 offersUncategorized: model.offersUncategorized(for: transaction)) { name in
                 Task { await model.recategorize(transaction, to: name) }
             }
+            .givesWayToOpenedFiles()
         }
     }
 

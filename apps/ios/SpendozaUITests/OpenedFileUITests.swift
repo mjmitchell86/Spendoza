@@ -26,6 +26,19 @@ final class OpenedFileUITests: XCTestCase {
         add(shot)
     }
 
+    @MainActor func testAFileOpenedWhileABillFormIsUpClosesItAndShowsTheUploadSheet() throws {
+        let path = try file("November.pdf", bytes: 2_000)
+        // The file arrives 12 seconds after launch: time enough to open the bill form first.
+        let app = Launch.stubbed(startOnMoney: true, openFile: path, openFileAfter: 12)
+        app.open(.bills)
+        app.buttons["Add expense"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Add expense"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Upload statements"].exists, "The file arrived before the form was open")
+        XCTAssertTrue(app.staticTexts["Upload statements"].waitForExistence(timeout: 30), "The upload sheet never showed")
+        XCTAssertTrue(app.staticTexts["November.pdf"].exists)
+        XCTAssertFalse(app.textFields["Description"].exists, "The bill form is still open")
+    }
+
     @MainActor func testAFileOverTheLimitIsRefusedWithAnAlert() throws {
         let path = try file("big.pdf", bytes: 5 * 1_048_576)
         let app = Launch.stubbed(openFile: path)

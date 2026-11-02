@@ -2,7 +2,8 @@ import SpendozaKit
 import SwiftUI
 
 /// Add or edit an income entry (the web's income dialog). Stays open with the server's text when saving or deleting
-/// fails. Delete is offered to the owner only: someone an entry is attributed to can edit it but not delete it.
+/// fails. Delete and the attribution choice are the owner's only: someone an entry is attributed to can edit the rest,
+/// and sees who it is attributed to read-only.
 struct IncomeFormSheet: View {
     let model: IncomeModel
     let entry: IncomeEntry?
@@ -16,7 +17,9 @@ struct IncomeFormSheet: View {
     init(model: IncomeModel, entry: IncomeEntry?) {
         self.model = model
         self.entry = entry
-        _form = State(initialValue: entry.map { IncomeForm(editing: $0) } ?? IncomeForm(today: model.today))
+        var form = entry.map { IncomeForm(editing: $0) } ?? IncomeForm(today: model.today)
+        form.canAttribute = entry.map(model.canDelete) ?? true
+        _form = State(initialValue: form)
     }
 
     private var canDelete: Bool { entry.map(model.canDelete) ?? false }
@@ -99,6 +102,24 @@ struct IncomeFormSheet: View {
     }
 
     @ViewBuilder private var attributionFields: some View {
+        if let entry, !form.canAttribute {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(model.attributionText(of: entry))
+                    .font(.sans(16, relativeTo: .body))
+                    .foregroundStyle(Theme.ink)
+                Text(IncomeModel.ownerOnlyAttribution)
+                    .font(.sans(13, relativeTo: .footnote))
+                    .foregroundStyle(Theme.soft)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Attributed to, \(model.attributionText(of: entry)). \(IncomeModel.ownerOnlyAttribution)")
+        } else {
+            attributionChoice
+        }
+    }
+
+    @ViewBuilder private var attributionChoice: some View {
         menu(title: form.attribution.title, label: "Attributed to") {
             ForEach(attributionChoices, id: \.self) { choice in
                 Button { form.attribution = choice } label: { checked(choice.title, form.attribution == choice) }

@@ -77,15 +77,26 @@ enum OpenedFile {
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    /// Copies (and Inbox files) left behind by a run that was closed before they were uploaded.
-    static func removeLeftovers() {
+    /// How long a file in the Inbox is left for `accept`. A share to a closed app puts the file in the Inbox before
+    /// the app launches, and `.onOpenURL` only hands it over after launch, so a new one is never swept.
+    static let inboxGracePeriod: TimeInterval = 10 * 60
+
+    private static let inboxDates: [URLResourceKey] = [.addedToDirectoryDateKey, .creationDateKey, .contentModificationDateKey]
+
+    /// Copies (and Inbox files older than the grace period) left behind by a run that was closed before they were
+    /// uploaded.
+    static func removeLeftovers(now: Date = Date()) {
         let files = FileManager.default
         try? files.removeItem(at: folder)
         let inboxes = [documentsInbox] + ((try? files.contentsOfDirectory(at: tmp, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.lastPathComponent.hasSuffix("-Inbox") }
         for inbox in inboxes {
-            for file in (try? files.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil)) ?? [] {
-                try? files.removeItem(at: file)
+            for file in (try? files.contentsOfDirectory(at: inbox, includingPropertiesForKeys: inboxDates)) ?? [] {
+                // The newest of its dates: a copy can keep its source's modification date.
+                let values = try? file.resourceValues(forKeys: Set(inboxDates))
+                let arrived = [values?.addedToDirectoryDate, values?.creationDate, values?.contentModificationDate]
+                    .compactMap { $0 }.max() ?? .distantPast
+                if now.timeIntervalSince(arrived) > inboxGracePeriod { try? files.removeItem(at: file) }
             }
         }
     }

@@ -55,6 +55,25 @@ final class TransactionsModel {
         self.calendar = calendar
     }
 
+    /// What the search field does with an edit.
+    struct SearchEdit: Equatable {
+        let text: String
+        /// Return was pressed: the keyboard goes away.
+        let endsEditing: Bool
+    }
+
+    /// The search field allows several lines (so its prompt wraps at large text sizes), so Return arrives as a
+    /// newline: a single newline typed into `old` is Return and leaves the text as it was; any other newlines (a
+    /// paste) become one space each run, so "a\nb" searches for "a b".
+    static func searchEdit(old: String, new: String) -> SearchEdit {
+        guard new.contains(where: \.isNewline) else { return SearchEdit(text: new, endsEditing: false) }
+        if new.count == old.count + 1, new.filter({ !$0.isNewline }) == old {
+            return SearchEdit(text: old, endsEditing: true)
+        }
+        let joined = new.replacingOccurrences(of: #"[ \t]*\R+[ \t]*"#, with: " ", options: .regularExpression)
+        return SearchEdit(text: joined, endsEditing: false)
+    }
+
     // MARK: What the screen shows
 
     var visible: [Transaction] {

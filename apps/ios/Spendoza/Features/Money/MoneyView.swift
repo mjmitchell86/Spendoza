@@ -29,7 +29,7 @@ struct MoneyView: View {
     @State private var showingCategories = false
     @State private var showingStatements = false
     @State private var openedStatement: String?
-    @State private var addingStatement = false
+    @State private var sheets = MoneySheetRouter()
     @State private var categoriesChanged = false
 
     init(api: any SpendozaAPI, poller: StatementPoller, incoming: IncomingStatements, isLocked: Bool, selfID: @escaping @MainActor () -> String?,
@@ -86,16 +86,28 @@ struct MoneyView: View {
                 }
                 .navigationDestination(item: $openedStatement) { id in
                     StatementDetailView(api: api, statementID: id, statements: statements, selfID: selfID,
-                                        onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
+                                        onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled) {
+                        Task { await reloadMonth() }
+                    }
                 }
                 .navigationDestination(isPresented: $showingStatements) {
-                    StatementsView(model: statements, api: api, addStatement: { addingStatement = true }, selfID: selfID,
-                                   onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
+                    StatementsView(model: statements, api: api, addStatement: { sheets.showUpload() }, selfID: selfID,
+                                   onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled) {
+                        Task { await reloadMonth() }
+                    }
                 }
         }
-        .sheet(isPresented: $addingStatement) { UploadStatementSheet(model: statements, incoming: incoming) }
+        .sheet(isPresented: $sheets.showingUpload) { UploadStatementSheet(model: statements, incoming: incoming) }
+        // Bill, income and category forms and the pickers close for it (see `MoneySheetRouter`).
+        .environment(sheets)
         .onChange(of: openedFilesAreWaiting, initial: true) { _, waiting in
-            if waiting { addingStatement = true }
+            if waiting { sheets.showUpload() }
+        }
+        // A statement finished: its transactions change the month's lists and report.
+        .onChange(of: poller.finishedCount) { Task { await reloadMonth() } }
+        // A bill saved or deleted on the Bills segment: the Overview's upcoming bills catch up when it shows again.
+        .onChange(of: segment) { _, shown in
+            if shown == .overview, bills.takeChanged() { Task { await overview?.reloadUpcoming() } }
         }
         .task { await model.open() }
         .task(id: model.selected) { await showSelectedMonth() }
@@ -135,7 +147,7 @@ struct MoneyView: View {
                 switch segment {
                 case .overview:
                     if let overview {
-                        OverviewView(model: overview, addStatement: { addingStatement = true },
+                        OverviewView(model: overview, addStatement: { sheets.showUpload() },
                                      openStatement: { openedStatement = $0 })
                     }
                 case .transactions:
@@ -153,7 +165,7 @@ struct MoneyView: View {
     }
 
     private var addStatementButton: some View {
-        Button { addingStatement = true } label: {
+        Button { sheets.showUpload() } label: {
             Label("Add statement", systemImage: "plus")
                 .font(.sans(15, weight: .semibold, relativeTo: .callout))
                 .foregroundStyle(Theme.onNote)
@@ -212,6 +224,13 @@ struct MoneyView: View {
         async let billsLoaded: Void = bills.load()
         async let incomeLoaded: Void = income.load()
         _ = await (overviewLoaded, listLoaded, billsLoaded, incomeLoaded)
+    }
+
+    /// The shown month's Overview and Transactions, again (a statement finished, or a category changed in one).
+    private func reloadMonth() async {
+        async let overviewLoaded: Void = overview?.load() ?? ()
+        async let listLoaded: Void = transactions?.load() ?? ()
+        _ = await (overviewLoaded, listLoaded)
     }
 
     /// Builds the Overview for the selected month (a month already shown is only reloaded) and loads it.
