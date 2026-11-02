@@ -152,7 +152,7 @@ struct ExpensesModelTests {
     // MARK: Form
 
     private func filled() -> ExpenseForm {
-        var form = ExpenseForm(today: day(2026, 11, 1))
+        var form = ExpenseForm(today: day(2026, 11, 1), locale: us)
         form.description = "Gym"
         form.amountText = "29.50"
         form.categoryID = "c4"
@@ -184,14 +184,14 @@ struct ExpensesModelTests {
         #expect(!form.hasEndDate)
     }
 
-    @Test func recurrenceIntervalIsSentOnlyForRecurring() throws {
+    @Test func recurrenceIntervalIsNullForOneTime() throws {
         var f = filled()
         f.frequency = .oneTime
         f.interval = .weekly
         let one = try #require(f.draft())
         #expect(one.interval == nil)
         let oneJSON = String(decoding: try JSONEncoder().encode(one), as: UTF8.self)
-        #expect(!oneJSON.contains("recurrence_interval"))
+        #expect(oneJSON.contains("\"recurrence_interval\":null"))
         f.frequency = .recurring
         let many = try #require(f.draft())
         #expect(many.interval == .weekly)
@@ -199,11 +199,53 @@ struct ExpensesModelTests {
         #expect(manyJSON.contains("\"recurrence_interval\":\"weekly\""))
     }
 
+    // MARK: Amounts by locale
+
+    private let us = Locale(identifier: "en_US"), de = Locale(identifier: "de_DE")
+
+    @Test func amountsParseWithTheLocalesSeparators() {
+        #expect(AmountText.parse("1,234.50", locale: us) == 1234.5)
+        #expect(AmountText.parse("12.50", locale: us) == 12.5)
+        #expect(AmountText.parse("1,234", locale: us) == 1234)
+        #expect(AmountText.parse("12,50", locale: de) == 12.5)
+        #expect(AmountText.parse("1.234,50", locale: de) == 1234.5)
+        #expect(AmountText.parse("1.234", locale: de) == 1234)
+        #expect(AmountText.parse(" 40 ", locale: us) == 40)
+    }
+
+    @Test func amountsThatCantBeReadAreRejectedNotGuessed() {
+        #expect(AmountText.parse("12,50", locale: us) == nil)
+        #expect(AmountText.parse("12.50", locale: de) == nil)
+        #expect(AmountText.parse("1,2,3", locale: us) == nil)
+        #expect(AmountText.parse("1.2.3", locale: us) == nil)
+        #expect(AmountText.parse("1,234,5", locale: us) == nil)
+        #expect(AmountText.parse("abc", locale: us) == nil)
+        #expect(AmountText.parse("", locale: us) == nil)
+        #expect(AmountText.parse("-5", locale: us) == nil)
+    }
+
+    @Test func formReadsItsAmountInTheFormsLocale() {
+        var f = ExpenseForm(today: day(2026, 11, 1), locale: de)
+        f.amountText = "12,50"
+        #expect(f.amount == 12.5)
+        f.amountText = "1250,5"
+        #expect(f.amount == 1250.5)
+        f.amountText = "12.50"
+        #expect(f.amount == nil)
+    }
+
+    @Test func editingPrefillsTheAmountInTheFormsLocale() {
+        let b = bill("e1", "x", amount: 15.49)
+        #expect(ExpenseForm(editing: b, locale: de).amountText == "15,49")
+        #expect(ExpenseForm(editing: b, locale: us).amountText == "15.49")
+        #expect(ExpenseForm(editing: bill("e2", "x", amount: 1234.5), locale: de).amountText == "1234,5")
+    }
+
     @Test func draftCarriesTrimmedTextAmountAndEndDate() throws {
         var f = filled()
         f.description = "  Gym  "
         f.friendlyName = " The gym "
-        f.amountText = "1,029.5"
+        f.amountText = "1,029.5"  // the test form is en_US
         f.hasEndDate = true
         f.endDate = day(2027, 3, 1)
         let draft = try #require(f.draft())
@@ -217,7 +259,7 @@ struct ExpensesModelTests {
 
     @Test func editingFillsTheFormFromTheBill() {
         let netflix = bill("e1", "NETFLIX.COM", friendly: "Netflix", amount: 15.49, due: day(2026, 11, 6))
-        let form = ExpenseForm(editing: netflix)
+        let form = ExpenseForm(editing: netflix, locale: us)
         #expect(form.description == "NETFLIX.COM")
         #expect(form.friendlyName == "Netflix")
         #expect(form.amountText == "15.49")
@@ -225,7 +267,7 @@ struct ExpensesModelTests {
         #expect(form.frequency == .recurring && form.interval == .monthly)
         #expect(form.nextDueDate == day(2026, 11, 6))
         #expect(!form.hasEndDate)
-        let ending = ExpenseForm(editing: bill("x", "x", amount: 40, due: day(2026, 11, 6), end: day(2027, 1, 1)))
+        let ending = ExpenseForm(editing: bill("x", "x", amount: 40, due: day(2026, 11, 6), end: day(2027, 1, 1)), locale: us)
         #expect(ending.hasEndDate && ending.endDate == day(2027, 1, 1))
         #expect(ending.amountText == "40")
     }
@@ -245,7 +287,7 @@ struct ExpensesModelTests {
     @Test func saveUpdatesTheBillInPlace() async throws {
         let api = api()
         let m = await model(api)
-        var form = ExpenseForm(editing: m.expenses.first { $0.id == "e2" }!)
+        var form = ExpenseForm(editing: m.expenses.first { $0.id == "e2" }!, locale: us)
         form.description = "Rent (new lease)"
         let message = await m.save(try #require(form.draft()), id: "e2")
         #expect(message == nil)

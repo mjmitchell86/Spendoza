@@ -68,7 +68,7 @@ extension APIClientTests {
         #expect(saved.id == "e1")
     }
 
-    @Test func oneTimeBillDraftOmitsTheInterval() async throws {
+    @Test func oneTimeBillUpdateSendsANullInterval() async throws {
         let log = stub(body: Self.expenseBody)
         let draft = ExpenseDraft(categoryID: "c1", description: "Plumber", friendlyName: " Plumber visit ", amount: 120,
                                  frequency: .oneTime, interval: .monthly, nextDueDate: day(2026, 12, 1), endDate: day(2026, 12, 31))
@@ -78,7 +78,8 @@ extension APIClientTests {
         #expect(sent.path == "/api/expenses/e1")
         let json = try #require(sent.json as? [String: Any])
         #expect(json["frequency"] as? String == "one_time")
-        #expect(json["recurrence_interval"] == nil)
+        // An explicit null, so switching a recurring bill to one-time clears the interval on the server.
+        #expect(json["recurrence_interval"] is NSNull)
         #expect(json["friendly_name"] as? String == "Plumber visit")
         #expect(json["end_date"] as? String == "2026-12-31")
     }

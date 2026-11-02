@@ -71,8 +71,8 @@ public struct Expense: Decodable, Sendable, Equatable, Identifiable {
     }
 }
 
-/// The body of a create or update. `recurrence_interval` is sent only for a recurring bill; an empty friendly name
-/// and a missing end date go as explicit nulls so an update clears them.
+/// The body of a create or update. `recurrence_interval` is null for a one-time bill, and an empty friendly name
+/// and a missing end date go as explicit nulls, so an update clears them.
 public struct ExpenseDraft: Encodable, Sendable, Equatable {
     public var categoryID: String
     public var description: String
@@ -111,7 +111,8 @@ public struct ExpenseDraft: Encodable, Sendable, Equatable {
         try c.encode(friendlyName.nonEmptyTrimmed, forKey: .friendlyName)
         try c.encode(amount, forKey: .amount)
         try c.encode(frequency, forKey: .frequency)
-        if frequency == .recurring { try c.encode(interval, forKey: .interval) }
+        // A one-time bill sends an explicit null so an update clears the interval a recurring bill had.
+        try c.encode(frequency == .recurring ? interval : nil, forKey: .interval)
         try c.encode(APIClient.dayString(nextDueDate), forKey: .nextDueDate)
         try c.encode(endDate.map(APIClient.dayString), forKey: .endDate)
     }

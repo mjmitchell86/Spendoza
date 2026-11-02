@@ -214,17 +214,21 @@ struct ExpenseForm: Equatable {
     var nextDueDate: Date
     var hasEndDate = false
     var endDate: Date
+    /// How the amount is typed and shown.
+    let locale: Locale
 
     /// A new bill: one-time, due today (like the web).
-    init(today: Date) {
+    init(today: Date, locale: Locale = .current) {
+        self.locale = locale
         nextDueDate = today
         endDate = today
     }
 
-    init(editing bill: Expense) {
+    init(editing bill: Expense, locale: Locale = .current) {
+        self.locale = locale
         description = bill.description
         friendlyName = bill.friendlyName ?? ""
-        amountText = bill.amount.formatted(.number.precision(.fractionLength(0...2)).grouping(.never).locale(Locale(identifier: "en_US")))
+        amountText = AmountText.format(bill.amount, locale: locale)
         categoryID = bill.categoryID
         frequency = bill.frequency
         interval = bill.interval ?? .monthly
@@ -234,8 +238,7 @@ struct ExpenseForm: Equatable {
     }
 
     var amount: Double? {
-        let text = amountText.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)
-        guard let value = Double(text), value > 0, value.isFinite else { return nil }
+        guard let value = AmountText.parse(amountText, locale: locale), value > 0 else { return nil }
         return value
     }
 
