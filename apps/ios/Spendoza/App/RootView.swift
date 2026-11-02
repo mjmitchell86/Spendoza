@@ -57,7 +57,12 @@ struct RootView: View {
             store.onInteractiveSignIn = { [coordinator] in coordinator.interactiveSignIn() }
             // Every sign-out reaches the lock, including one from "Couldn't load your account" (the phase was
             // already .signedOut there, so watching the phase would miss it).
-            store.onSessionEnded = { [coordinator] in coordinator.signedOut() }
+            // A file opened while signed out waits for sign-in; a sign-out drops the ones still waiting (not a brief
+            // "Couldn't load your account", which isn't one).
+            store.onSessionEnded = { [coordinator, incoming] in
+                incoming.discardAll()
+                coordinator.signedOut()
+            }
             await store.restore()
             await coordinator.launched(restoredSession: store.restoredSession)
         }
@@ -66,10 +71,6 @@ struct RootView: View {
             guard content == .ready else { return }
             checkup.schedule()
             await checkup.requestPermissionIfNeeded()
-        }
-        // A file opened while signed out waits for sign-in; signing out drops the ones already waiting.
-        .onChange(of: content) { old, new in
-            if old == .ready, new != .ready { incoming.discardAll() }
         }
         .alert("Couldn't open file", isPresented: Binding(get: { incoming.error != nil }, set: { if !$0 { incoming.error = nil } })) {
             Button("OK") {}

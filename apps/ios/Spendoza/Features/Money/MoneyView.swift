@@ -89,7 +89,7 @@ struct MoneyView: View {
                                         onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
                 }
                 .navigationDestination(isPresented: $showingStatements) {
-                    StatementsView(model: statements, api: api, incoming: incoming, selfID: selfID,
+                    StatementsView(model: statements, api: api, addStatement: { addingStatement = true }, selfID: selfID,
                                    onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
                 }
         }

@@ -3,7 +3,8 @@ import SpendozaKit
 import Testing
 @testable import Spendoza
 
-@MainActor
+// Serialized: the launch sweep tests delete the shared temp folder.
+@MainActor @Suite(.serialized)
 struct OpenedFileTests {
     private func source(_ name: String, bytes: Int) throws -> URL {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("opened-file-tests-\(UUID().uuidString)")
@@ -73,6 +74,79 @@ struct OpenedFileTests {
         #expect(!FileManager.default.fileExists(atPath: copy.path))
         OpenedFile.discard(original)
         #expect(FileManager.default.fileExists(atPath: original.path))
+    }
+
+    // MARK: The system's Inbox copy
+
+    private var home: URL { URL(fileURLWithPath: NSHomeDirectory()) }
+
+    private func inboxFile(_ name: String, in inbox: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        let url = inbox.appendingPathComponent(name)
+        try Data(repeating: 0x25, count: 100).write(to: url)
+        return url
+    }
+
+    @Test func theInboxCopyIsDeletedOnceAccepted() throws {
+        let inbox = try inboxFile("inbox-\(UUID().uuidString).pdf", in: home.appendingPathComponent("Documents/Inbox"))
+        let copy = try accepted(OpenedFile.accept(inbox))
+        defer { OpenedFile.discard(copy) }
+        #expect(!FileManager.default.fileExists(atPath: inbox.path))
+        #expect(FileManager.default.fileExists(atPath: copy.path))
+    }
+
+    @Test func aTmpInboxCopyIsDeletedToo() throws {
+        let tmpInbox = home.appendingPathComponent("tmp/com.gravitaz.spendoza-Inbox")
+        let inbox = try inboxFile("inbox-\(UUID().uuidString).csv", in: tmpInbox)
+        let copy = try accepted(OpenedFile.accept(inbox))
+        defer { OpenedFile.discard(copy) }
+        #expect(!FileManager.default.fileExists(atPath: inbox.path))
+    }
+
+    @Test func theInboxCopyIsDeletedWhenTheFileIsRefusedToo() throws {
+        let inbox = home.appendingPathComponent("Documents/Inbox")
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        let big = inbox.appendingPathComponent("big-\(UUID().uuidString).pdf")
+        try Data(repeating: 0x25, count: 5 * 1_048_576).write(to: big)
+        _ = OpenedFile.accept(big)
+        #expect(!FileManager.default.fileExists(atPath: big.path))
+    }
+
+    @Test func aPathThatOnlyLooksLikeTheInboxIsLeftAlone() throws {
+        // ".." out of the Inbox lands on a file that is not in it.
+        let outside = try source("dots.pdf", bytes: 10)
+        let inbox = home.appendingPathComponent("Documents/Inbox")
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        let sneaky = URL(fileURLWithPath: inbox.path + "/../../" + outside.path.replacingOccurrences(of: home.path + "/", with: ""))
+        let copy = try accepted(OpenedFile.accept(sneaky))
+        defer { OpenedFile.discard(copy) }
+        #expect(FileManager.default.fileExists(atPath: outside.path))
+    }
+
+    @Test func aFileOutsideTheAppContainerIsNeverDeleted() throws {
+        let folder = URL(fileURLWithPath: "/tmp/spendoza-outside-\(UUID().uuidString)/Inbox")
+        let file = try inboxFile("outside.pdf", in: folder)
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        let copy = try accepted(OpenedFile.accept(file))
+        defer { OpenedFile.discard(copy) }
+        #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    @Test func launchSweepEmptiesTheInboxesAndTheCopies() throws {
+        let documentsInbox = try inboxFile("left.pdf", in: home.appendingPathComponent("Documents/Inbox"))
+        let tmpInbox = try inboxFile("left.csv", in: home.appendingPathComponent("tmp/com.gravitaz.spendoza-Inbox"))
+        let copy = try accepted(OpenedFile.accept(try source("a.pdf", bytes: 10)))
+        OpenedFile.removeLeftovers()
+        #expect(!FileManager.default.fileExists(atPath: documentsInbox.path))
+        #expect(!FileManager.default.fileExists(atPath: tmpInbox.path))
+        #expect(!FileManager.default.fileExists(atPath: copy.path))
+    }
+
+    @Test func theCopyIsExcludedFromBackup() throws {
+        let copy = try accepted(OpenedFile.accept(try source("p.pdf", bytes: 10)))
+        defer { OpenedFile.discard(copy) }
+        #expect(try copy.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        // (The simulator doesn't report a file's protection class, so `.complete` is only set, not read back.)
     }
 
     // MARK: Waiting for the sheet

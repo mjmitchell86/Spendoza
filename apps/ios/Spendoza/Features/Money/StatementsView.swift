@@ -6,11 +6,11 @@ import SwiftUI
 struct StatementsView: View {
     let model: StatementsModel
     let api: any SpendozaAPI
-    let incoming: IncomingStatements
+    /// Opens Money's upload sheet (the one sheet, so a file opened from outside lands in whichever is showing).
+    let addStatement: () -> Void
     let selfID: @MainActor () -> String?
     let onSessionEnded: @MainActor () -> Void
     let onAccountDisabled: @MainActor (String) -> Void
-    @State private var uploading = false
     @State private var opened: String?
 
     var body: some View {
@@ -24,7 +24,7 @@ struct StatementsView: View {
                     .font(.sans(15, relativeTo: .subheadline))
                     .foregroundStyle(Theme.soft)
                     .padding(.top, 4)
-                Button("Add statement") { uploading = true }
+                Button("Add statement", action: addStatement)
                     .buttonStyle(SecondaryButtonStyle())
                     .padding(.top, 16)
                 if let error = model.actionError { InlineError(message: error).padding(.top, 12) }
@@ -41,7 +41,6 @@ struct StatementsView: View {
         .toolbar(removing: .title)
         .task { await model.load() }
         .refreshable { await model.load() }
-        .sheet(isPresented: $uploading) { UploadStatementSheet(model: model, incoming: incoming) }
         .navigationDestination(item: $opened) { id in
             StatementDetailView(api: api, statementID: id, statements: model, selfID: selfID,
                                 onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
