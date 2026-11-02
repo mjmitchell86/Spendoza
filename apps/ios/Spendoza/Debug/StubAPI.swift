@@ -43,8 +43,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     private func record(_ call: String) { lock.withLock { _calls.append(call) } }
 
     static let defaultCategories: [BudgetCategory] = [
-        .init(id: "c1", name: "Housing", budgetClass: .need),
-        .init(id: "c2", name: "Groceries", budgetClass: .need),
+        .init(id: "c1", name: "Housing", budgetClass: .need, isSystemDefault: true),
+        .init(id: "c2", name: "Groceries", budgetClass: .need, isSharedWithHousehold: true),
         .init(id: "c3", name: "Dining out", budgetClass: .want),
         .init(id: "c4", name: "Streaming", budgetClass: .want),
     ]

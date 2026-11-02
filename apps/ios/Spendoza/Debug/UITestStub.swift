@@ -155,7 +155,7 @@ enum UITestStub {
                 PendingInvitation(id: "p2", email: "dan@example.com", createdAt: sent, expiresAt: sent.addingTimeInterval(7 * 86_400)),
             ])
             api.categoryList = [
-                BudgetCategory(id: "c1", name: "Housing", budgetClass: .need, isSharedWithHousehold: true),
+                BudgetCategory(id: "c1", name: "Housing", budgetClass: .need, isSharedWithHousehold: true, isSystemDefault: true),
                 BudgetCategory(id: "c2", name: "Groceries", budgetClass: .need, isSharedWithHousehold: true),
                 BudgetCategory(id: "c3", name: "Dining out", budgetClass: .want),
                 BudgetCategory(id: "c4", name: "Streaming", budgetClass: .want),

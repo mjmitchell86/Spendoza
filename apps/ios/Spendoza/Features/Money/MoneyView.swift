@@ -20,6 +20,8 @@ struct MoneyView: View {
     @State private var segment = Segment.overview
     @State private var preview: URL?
     @State private var exporting = false
+    @State private var showingCategories = false
+    @State private var categoriesChanged = false
 
     init(api: any SpendozaAPI, selfID: @escaping @MainActor () -> String?, onSessionEnded: @escaping @MainActor () -> Void,
          onAccountDisabled: @escaping @MainActor (String) -> Void) {
@@ -56,9 +58,17 @@ struct MoneyView: View {
                 .background(Theme.paper.ignoresSafeArea())
                 .navigationTitle("Money")
                 .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(isPresented: $showingCategories) {
+                    CategoriesView(api: api, onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled) {
+                        categoriesChanged = true
+                    }
+                }
         }
         .task { await model.open() }
         .task(id: model.selected) { await showSelectedMonth() }
+        .onChange(of: showingCategories) { _, showing in
+            if !showing, categoriesChanged { Task { await reloadAfterCategoryChange() } }
+        }
         .quickLookPreview($preview)
         .onChange(of: preview) { old, new in
             if new == nil, let old { PDFReportsModel.discard(old) }
@@ -67,10 +77,10 @@ struct MoneyView: View {
 
     private var page: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Money")
-                .font(.serif(28, relativeTo: .largeTitle))
-                .foregroundStyle(Theme.ink)
-                .accessibilityAddTraits(.isHeader)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline) { title; Spacer(minLength: 8); categoriesLink }
+                VStack(alignment: .leading, spacing: 4) { title; categoriesLink }
+            }
             if model.selected == nil {
                 ProgressView().tint(Theme.note)
                     .frame(maxWidth: .infinity, minHeight: 240)
@@ -101,6 +111,38 @@ struct MoneyView: View {
         .padding(.top, 24)
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var title: some View {
+        Text("Money")
+            .font(.serif(28, relativeTo: .largeTitle))
+            .foregroundStyle(Theme.ink)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var categoriesLink: some View {
+        Button { showingCategories = true } label: {
+            HStack(spacing: 4) {
+                Text("Categories")
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).accessibilityHidden(true)
+            }
+            .font(.sans(15, weight: .semibold, relativeTo: .callout))
+            .foregroundStyle(Theme.note)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Add, rename or delete categories")
+    }
+
+    /// Category names (and what they count towards) may have changed: reload every list that shows them.
+    private func reloadAfterCategoryChange() async {
+        categoriesChanged = false
+        async let overviewLoaded: Void = overview?.load() ?? ()
+        async let listLoaded: Void = transactions?.load() ?? ()
+        async let billsLoaded: Void = bills.load()
+        async let incomeLoaded: Void = income.load()
+        _ = await (overviewLoaded, listLoaded, billsLoaded, incomeLoaded)
     }
 
     /// Builds the Overview for the selected month (a month already shown is only reloaded) and loads it.
