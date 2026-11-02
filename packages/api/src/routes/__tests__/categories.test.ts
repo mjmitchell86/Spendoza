@@ -85,12 +85,37 @@ const mockSelect = mock(() => ({
   }),
 }));
 
-const mockFrom = mock(() => ({
-  select: mockSelect,
-  insert: mockInsert,
-  update: mockUpdate,
-  delete: mockDelete,
+// Rename / delete side effects: transactions + expenses updates, and the "Other" lookup
+const mockSideEffectUpdate = mock((_v: any) => ({
+  eq: () => ({ eq: () => Promise.resolve({ error: null }) }),
 }));
+const mockOtherMaybeSingle = mock(() =>
+  Promise.resolve({ data: { id: "cat-other" }, error: null })
+);
+
+// Duplicate-name lookup: .select("id, name").eq(...).ilike(...)[.neq(...)].limit(1)
+const mockDupResult = mock(() => Promise.resolve({ data: [] as any[], error: null }));
+const mockDupIlike = mock((_c: string, _p: string) => ({
+  neq: () => ({ limit: mockDupResult }),
+  limit: mockDupResult,
+}));
+
+const mockFrom = mock((table: string) => {
+  if (table === "transactions" || table === "expenses") {
+    return { update: mockSideEffectUpdate };
+  }
+  return {
+    select: (cols?: string) =>
+      cols === "id, name"
+        ? { eq: () => ({ ilike: mockDupIlike }) }
+        : cols === "id"
+        ? { eq: () => ({ eq: () => ({ eq: () => ({ maybeSingle: mockOtherMaybeSingle }) }) }) }
+        : mockSelect(),
+    insert: mockInsert,
+    update: mockUpdate,
+    delete: mockDelete,
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Mock for supabaseAdmin (auth middleware uses getUser)
@@ -158,6 +183,7 @@ afterAll(() => {
 
 beforeEach(() => {
   // Clear all mocks
+  mockDupResult.mockImplementation(() => Promise.resolve({ data: [], error: null }));
   mockOrder.mockClear();
   mockInsertSingle.mockClear();
   mockInsert.mockClear();
@@ -266,6 +292,26 @@ describe("POST /api/categories", () => {
     expect(mockInsert).toHaveBeenCalledTimes(1);
   });
 
+  it("returns 409 when the user already has that name", async () => {
+    mockDupResult.mockImplementation(() =>
+      Promise.resolve({ data: [{ id: "cat-9", name: "groceries" }], error: null })
+    );
+    mockInsert.mockClear();
+
+    const res = await fetch(url(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "Groceries" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "You already have a category with that name" });
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
   it("returns 400 with invalid data (missing name)", async () => {
     const res = await fetch(url(), {
       method: "POST",
@@ -292,6 +338,9 @@ describe("PUT /api/categories/:id", () => {
   const url = (id: string) => `${baseUrl}/api/categories/${id}`;
 
   it("returns 200 with updated category", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
     const updatedCategory = { ...categoryData, name: "Food & Drinks" };
     mockUpdateSingle.mockImplementation(() =>
       Promise.resolve({ data: updatedCategory, error: null })
@@ -312,6 +361,30 @@ describe("PUT /api/categories/:id", () => {
 
     expect(mockFrom).toHaveBeenCalledWith("categories");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockFrom).toHaveBeenCalledWith("transactions");
+  });
+
+  it("returns 409 when renaming to a name the user already has", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: categoryData, error: null })
+    );
+    mockDupResult.mockImplementation(() =>
+      Promise.resolve({ data: [{ id: "cat-9", name: "Food" }], error: null })
+    );
+    mockUpdate.mockClear();
+
+    const res = await fetch(url("cat-1"), {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+      body: JSON.stringify({ name: "food" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "You already have a category with that name" });
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it("returns 404 for non-existent category", async () => {
@@ -331,6 +404,43 @@ describe("PUT /api/categories/:id", () => {
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error).toBe("Category not found");
+  });
+
+  it("returns 403 when renaming or reclassifying a system default", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...systemCategory, budget_class: "other" }, error: null })
+    );
+    mockUpdate.mockClear();
+
+    for (const body of [{ name: "Misc" }, { budget_class: "need" }]) {
+      const res = await fetch(url("cat-system-1"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
+        body: JSON.stringify(body),
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "Cannot rename or reclassify system default categories" });
+    }
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("still shares a system default with the household", async () => {
+    mockSelectSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...systemCategory, budget_class: "other" }, error: null })
+    );
+    mockUpdateSingle.mockImplementation(() =>
+      Promise.resolve({ data: { ...systemCategory, is_shared_with_household: true }, error: null })
+    );
+
+    const res = await fetch(url("cat-system-1"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
+      body: JSON.stringify({ is_shared_with_household: true }),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).is_shared_with_household).toBe(true);
   });
 });
 
@@ -353,6 +463,8 @@ describe("DELETE /api/categories/:id", () => {
 
     expect(res.status).toBe(204);
     expect(mockFrom).toHaveBeenCalledWith("categories");
+    expect(mockFrom).toHaveBeenCalledWith("transactions");
+    expect(mockFrom).toHaveBeenCalledWith("expenses");
     expect(mockDelete).toHaveBeenCalledTimes(1);
   });
 

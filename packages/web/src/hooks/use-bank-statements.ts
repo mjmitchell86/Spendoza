@@ -1,3 +1,4 @@
+import { transactionUpdateRequest } from "@/lib/transaction-requests";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, API_BASE } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -106,11 +107,10 @@ export function useUpdateTransaction() {
     }: {
       transactionId: string;
       data: { ai_category?: string | null; attributed_to_user_id?: string };
-    }) =>
-      apiClient(`/transactions/${transactionId}`, {
-        method: "PUT",
-        body: JSON.stringify(data),
-      }),
+    }) => {
+      const { path, init } = transactionUpdateRequest(transactionId, data);
+      return apiClient(path, init);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },

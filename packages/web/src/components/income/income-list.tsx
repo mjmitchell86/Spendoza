@@ -19,7 +19,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 import { useDeleteIncome } from "@/hooks/use-income";
+import { errorText } from "@/lib/api-error";
+import { ownsIncome } from "@/lib/income-ownership";
 
 const FREQUENCY_LABELS: Record<string, string> = {
   one_time: "One-time",
@@ -56,6 +60,7 @@ export function IncomeList({
   onEdit,
 }: IncomeListProps) {
   const deleteIncome = useDeleteIncome();
+  const { user } = useAuth();
   const [deleteTarget, setDeleteTarget] = useState<IncomeEntry | null>(null);
 
   function getAttributionLabel(entry: IncomeEntry) {
@@ -70,8 +75,8 @@ export function IncomeList({
     try {
       await deleteIncome.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
-    } catch {
-      // Error is handled by the mutation
+    } catch (err) {
+      toast.error(errorText(err, "Failed to delete income"));
     }
   }
 
@@ -154,14 +159,17 @@ export function IncomeList({
                       <Pencil className="size-4" />
                       <span className="sr-only">Edit</span>
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setDeleteTarget(entry)}
-                    >
-                      <Trash2 className="size-4" />
-                      <span className="sr-only">Delete</span>
-                    </Button>
+                    {/* Only the owner deletes; someone it is attributed to can only edit it. */}
+                    {ownsIncome(entry, user?.id) && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setDeleteTarget(entry)}
+                      >
+                        <Trash2 className="size-4" />
+                        <span className="sr-only">Delete</span>
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

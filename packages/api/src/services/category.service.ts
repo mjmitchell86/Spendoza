@@ -16,11 +16,35 @@ export async function listCategories(ctx: ServiceContext) {
   return { data: data ?? null, error: error ?? null };
 }
 
+const DUPLICATE_NAME_ERROR = {
+  message: "You already have a category with that name",
+  status: 409,
+};
+
+// True when the user has another category (not `exceptId`) whose name matches
+// case-insensitively. Transactions match categories by name, so two would be ambiguous.
+async function nameTaken(ctx: ServiceContext, name: string, exceptId?: string) {
+  const { supabase, userId } = ctx;
+  const literal = name.replace(/[\\%_]/g, "\\$&");
+  let query = supabase
+    .from("categories")
+    .select("id, name")
+    .eq("user_id", userId)
+    .ilike("name", literal);
+  if (exceptId) query = query.neq("id", exceptId);
+  const { data } = await query.limit(1);
+  return (data?.length ?? 0) > 0;
+}
+
 // ---------------------------------------------------------------------------
 // createCategory — inserts a new custom category for the user
 // ---------------------------------------------------------------------------
 export async function createCategory(ctx: ServiceContext, input: CreateCategoryInput) {
   const { supabase, userId } = ctx;
+
+  if (await nameTaken(ctx, input.name)) {
+    return { data: null, error: DUPLICATE_NAME_ERROR };
+  }
 
   const { data, error } = await supabase
     .from("categories")
@@ -32,7 +56,8 @@ export async function createCategory(ctx: ServiceContext, input: CreateCategoryI
 }
 
 // ---------------------------------------------------------------------------
-// updateCategory — updates by id + user_id
+// updateCategory — updates by id + user_id. A system default keeps its name and
+// budget class (deletes find "Other" by name); its sharing switch can change.
 // ---------------------------------------------------------------------------
 export async function updateCategory(
   ctx: ServiceContext,
@@ -40,6 +65,45 @@ export async function updateCategory(
   input: UpdateCategoryInput
 ) {
   const { supabase, userId } = ctx;
+
+  let oldName: string | null = null;
+  if (input.name !== undefined || input.budget_class !== undefined) {
+    const { data: current } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+    if (
+      current?.is_system_default &&
+      ((input.name !== undefined && input.name !== current.name) ||
+        (input.budget_class !== undefined && input.budget_class !== current.budget_class))
+    ) {
+      return {
+        data: null,
+        error: { message: "Cannot rename or reclassify system default categories", status: 403 },
+      };
+    }
+    oldName = input.name !== undefined ? (current?.name ?? null) : null;
+  }
+
+  if (oldName !== null && input.name !== undefined && input.name !== oldName) {
+    if (await nameTaken(ctx, input.name, id)) {
+      return { data: null, error: DUPLICATE_NAME_ERROR };
+    }
+  }
+
+  // Transactions match categories by name (free text). Carry them over first: if this
+  // fails nothing changed, and if the rename below fails a retry still renames the
+  // category (the carry-over then finds nothing left to move).
+  if (oldName !== null && input.name !== undefined && input.name !== oldName) {
+    const { error: carryError } = await supabase
+      .from("transactions")
+      .update({ ai_category: input.name })
+      .eq("user_id", userId)
+      .eq("ai_category", oldName);
+    if (carryError) return { data: null, error: carryError };
+  }
 
   const { data, error } = await supabase
     .from("categories")
@@ -79,6 +143,36 @@ export async function deleteCategory(ctx: ServiceContext, id: string) {
       error: { message: "Cannot delete system default categories", status: 403 },
     };
   }
+
+  // expenses.category_id is NOT NULL, so this user's bills move to their "Other" category
+  const { data: other } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("name", "Other")
+    .eq("is_system_default", true)
+    .maybeSingle();
+
+  if (!other) {
+    return {
+      data: null,
+      error: { message: 'Cannot delete this category: your "Other" category is missing' },
+    };
+  }
+
+  const { error: txnError } = await supabase
+    .from("transactions")
+    .update({ ai_category: null })
+    .eq("user_id", userId)
+    .eq("ai_category", category.name);
+  if (txnError) return { data: null, error: txnError };
+
+  const { error: expenseError } = await supabase
+    .from("expenses")
+    .update({ category_id: other.id })
+    .eq("user_id", userId)
+    .eq("category_id", id);
+  if (expenseError) return { data: null, error: expenseError };
 
   const { error: deleteError } = await supabase
     .from("categories")

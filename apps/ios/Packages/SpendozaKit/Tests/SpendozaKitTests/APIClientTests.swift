@@ -350,6 +350,12 @@ struct APIClientTests {
         #expect(!text.contains("\r\nX-Injected"))
     }
 
+    @Test func theLimitIsTheSharedFourMebibytes() {
+        // packages/shared MAX_BANK_STATEMENT_BYTES: the web and the API refuse anything bigger.
+        #expect(APIClient.maxStatementBytes == 4_194_304)
+        #expect(APIClient.maxStatementMB == 4)
+    }
+
     @Test func fileTooLargeNeverOverstatesTheLimit() {
         #expect(APIClient.maxStatementMB * 1_048_576 <= APIClient.maxStatementBytes)
         #expect(APIError.fileTooLarge(maxMB: 4).userMessage == "This file is too large (max 4 MB)")

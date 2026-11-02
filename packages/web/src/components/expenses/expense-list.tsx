@@ -26,7 +26,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { useDeleteExpense } from "@/hooks/use-expenses";
+import { errorText } from "@/lib/api-error";
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-US", {
@@ -82,8 +84,8 @@ export function ExpenseList({
     try {
       await deleteExpense.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
-    } catch {
-      // Error is handled by the mutation
+    } catch (err) {
+      toast.error(errorText(err, "Failed to delete expense"));
     }
   }
 

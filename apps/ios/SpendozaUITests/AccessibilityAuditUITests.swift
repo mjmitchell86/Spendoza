@@ -25,6 +25,19 @@ final class AccessibilityAuditUITests: XCTestCase {
     @MainActor func testAdminUserLight() throws { try audit(.adminUser, .light) }
     @MainActor func testAdminUserDark() throws { try audit(.adminUser, .dark) }
 
+    @MainActor func testMoneyOverviewLight() throws { try audit(.overview, .light) }
+    @MainActor func testMoneyOverviewDark() throws { try audit(.overview, .dark) }
+    @MainActor func testMoneyTransactionsLight() throws { try audit(.transactions, .light) }
+    @MainActor func testMoneyTransactionsDark() throws { try audit(.transactions, .dark) }
+    @MainActor func testMoneyBillsLight() throws { try audit(.bills, .light) }
+    @MainActor func testMoneyBillsDark() throws { try audit(.bills, .dark) }
+    @MainActor func testMoneyCategoriesLight() throws { try audit(.categories, .light) }
+    @MainActor func testMoneyCategoriesDark() throws { try audit(.categories, .dark) }
+    @MainActor func testMoneyStatementsLight() throws { try audit(.statements, .light) }
+    @MainActor func testMoneyStatementsDark() throws { try audit(.statements, .dark) }
+    @MainActor func testMoneyStatementDetailLight() throws { try audit(.statementDetail, .light) }
+    @MainActor func testMoneyStatementDetailDark() throws { try audit(.statementDetail, .dark) }
+
     @MainActor func testHouseholdHeadLight() throws { try auditHousehold("head", .light) }
     @MainActor func testHouseholdHeadDark() throws { try auditHousehold("head", .dark) }
     @MainActor func testHouseholdMemberLight() throws { try auditHousehold("member", .light) }
@@ -86,6 +99,24 @@ final class AccessibilityAuditUITests: XCTestCase {
             pages += 1
             attach(app, "task13-household-\(mode)-\(appearance.rawValue)-p\(pages)")
         }
+    }
+
+    /// A Money screen, audited from its top at the largest text size (tab bar hidden), then walked to its end for
+    /// screenshots. Bills and Statements are long, so the end walk gets generous swipes.
+    @MainActor
+    private func audit(_ screen: MoneyScreen, _ appearance: Launch.Appearance) throws {
+        let app = Launch.stubbed(appearance: appearance, textSize: Launch.largestText, hideTabBar: true, startOnMoney: true)
+        app.open(screen)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        let brightness = app.backgroundBrightness()
+        switch appearance {
+        case .light: XCTAssertGreaterThan(brightness, 0.8, "Expected light paper")
+        case .dark: XCTAssertLessThan(brightness, 0.3, "Expected dark paper")
+        }
+        try app.performAccessibilityAudit()
+        attach(app, "task11-money-\(screen.rawValue)-\(appearance.rawValue)-top")
+        app.scrollToEnd(maxSwipes: 40)
+        attach(app, "task11-money-\(screen.rawValue)-\(appearance.rawValue)-end")
     }
 
     /// A Me screen, audited from its top at the largest text size (the tab bar hidden, as for Health), then walked

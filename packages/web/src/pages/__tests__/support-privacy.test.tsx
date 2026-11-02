@@ -9,7 +9,7 @@ const SUPPORT_TEXT: [string, string][] = [
   ["h1", "Support"],
   ["p", "Spendoza is a personal and household finance tracker, made by Gravitaz LLC. Upload your bank statements and it sorts your spending into categories, so you can set goals based on what you actually spend. Use it on the web at spendoza.io or in the iPhone app; it's the same account in both. Signing up needs an invite code, or you can join the waitlist."],
   ["h2", "How it works"],
-  ["li", "Upload a bank statement, as a PDF or CSV file up to 10 MB."],
+  ["li", "Upload a bank statement, as a PDF or CSV file up to 4 MB."],
   ["li", "Spendoza reads it, finds the transactions and sorts them into categories. Check them, and change any category it got wrong."],
   ["li", "See where the money went: income against expenses, spending by category, and the recurring bills it found. The iPhone app sums it up as a monthly health score."],
   ["li", "Set savings and budget goals, and track debts, on the Starter or Pro plan."],

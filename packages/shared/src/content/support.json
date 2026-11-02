@@ -9,7 +9,7 @@
       "blocks": [
         {
           "ol": [
-            "Upload a bank statement, as a PDF or CSV file up to 10 MB.",
+            "Upload a bank statement, as a PDF or CSV file up to 4 MB.",
             "Spendoza reads it, finds the transactions and sorts them into categories. Check them, and change any category it got wrong.",
             "See where the money went: income against expenses, spending by category, and the recurring bills it found. The iPhone app sums it up as a monthly health score.",
             "Set savings and budget goals, and track debts, on the Starter or Pro plan.",

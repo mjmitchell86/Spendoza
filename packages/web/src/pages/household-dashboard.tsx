@@ -562,7 +562,7 @@ export function HouseholdPage() {
                   <TimePeriodFilter value={timePeriod} onValueChange={setTimePeriod} />
                   <Button
                     variant="outline"
-                    onClick={() => generateReport.mutate()}
+                    onClick={() => generateReport.mutate(month)}
                     disabled={generateReport.isPending || data?.has_transactions === false}
                     title={data?.has_transactions === false ? "No transactions for this period" : undefined}
                   >

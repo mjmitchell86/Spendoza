@@ -9,7 +9,7 @@ final class OnboardingModel {
 
     static let failedMessage = "We couldn't read this statement."
     static let stillWorkingMessage = "Still working — we'll finish in the background."
-    static let wrongTypeMessage = "Choose a PDF or CSV file."
+    static let wrongTypeMessage = StatementFile.wrongTypeMessage
 
     private(set) var step: Step = .welcome
     /// Statements uploaded in this flow, in upload order, with their latest known status.
@@ -127,9 +127,8 @@ final class OnboardingModel {
         let bank = bankName.trimmingCharacters(in: .whitespacesAndNewlines)
         for url in fileURLs {
             if Task.isCancelled { break }
-            guard let mime = Self.mimeType(for: url) else { errors.append(Self.wrongTypeMessage); continue }
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            if size > APIClient.maxStatementBytes {
+            guard let mime = StatementFile.mimeType(for: url) else { errors.append(Self.wrongTypeMessage); continue }
+            if StatementFile.isTooLarge(url) {
                 errors.append(APIError.fileTooLarge(maxMB: APIClient.maxStatementMB).userMessage)
                 continue
             }
@@ -146,14 +145,6 @@ final class OnboardingModel {
         if accepted > 0 {
             pollTimedOut = false
             step = .processing
-        }
-    }
-
-    private static func mimeType(for url: URL) -> String? {
-        switch url.pathExtension.lowercased() {
-        case "pdf": "application/pdf"
-        case "csv": "text/csv"
-        default: nil
         }
     }
 

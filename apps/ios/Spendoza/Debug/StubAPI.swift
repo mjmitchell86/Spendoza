@@ -33,8 +33,16 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     var statementScript: [[Statement]] = []
     /// The next this-many `statements()` calls throw `.offline`.
     var statementFailures = 0
+    /// Every `statements()` call throws this.
+    var statementError: APIError?
+    /// Runs inside `statements()` before it answers (tests hold a fetch open with it).
+    var statementsHook: @Sendable () async -> Void = {}
     var updateProfileError: APIError?
     var reprocessError: APIError?
+    var removeError: APIError?
+    /// When set, `statements()` answers this list and uploads, retries and removals change it (the UI-test stub's
+    /// live list); `statementScript` is then ignored.
+    var statementStore: [Statement]?
     private var pollIndex = 0
 
     var calls: [String] { lock.withLock { _calls } }
@@ -43,8 +51,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     private func record(_ call: String) { lock.withLock { _calls.append(call) } }
 
     static let defaultCategories: [BudgetCategory] = [
-        .init(id: "c1", name: "Housing", budgetClass: .need),
-        .init(id: "c2", name: "Groceries", budgetClass: .need),
+        .init(id: "c1", name: "Housing", budgetClass: .need, isSystemDefault: true),
+        .init(id: "c2", name: "Groceries", budgetClass: .need, isSharedWithHousehold: true),
         .init(id: "c3", name: "Dining out", budgetClass: .want),
         .init(id: "c4", name: "Streaming", budgetClass: .want),
     ]
@@ -114,25 +122,31 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         if let budgetError { throw budgetError }
     }
 
-    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement {
-        record("upload(\(fileURL.lastPathComponent), \(mimeType))" + (bankName.map { " bank=\($0)" } ?? ""))
+    func uploadStatement(fileURL: URL, mimeType: String, bankName: String?, shared: Bool, accountLabel: String?) async throws -> Statement {
+        record("upload(\(fileURL.lastPathComponent), \(mimeType))" + (bankName.map { " bank=\($0)" } ?? "")
+               + (shared ? " shared" : "") + (accountLabel.map { " label=\($0)" } ?? ""))
         let result: Result<Statement, APIError> = lock.withLock {
             uploadResults.isEmpty
-                ? .success(StubAPI.statement(id: "s-\(_calls.count)", status: .uploaded))
+                ? .success(StubAPI.statement(id: "s-\(_calls.count)", status: statementStore == nil ? .uploaded : .processing))
                 : uploadResults.removeFirst()
         }
-        return try result.get()
+        let uploaded = try result.get()
+        lock.withLock { if statementStore != nil { statementStore?.insert(uploaded, at: 0) } }
+        return uploaded
     }
 
     func statements() async throws -> [Statement] {
         record("statements")
+        await statementsHook()
         let fail: Bool = lock.withLock {
             guard statementFailures > 0 else { return false }
             statementFailures -= 1
             return true
         }
         if fail { throw APIError.offline }
+        if let statementError { throw statementError }
         return lock.withLock {
+            if let statementStore { return statementStore }
             guard !statementScript.isEmpty else { return [] }
             let entry = statementScript[min(pollIndex, statementScript.count - 1)]
             pollIndex += 1
@@ -143,9 +157,19 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     func reprocessStatement(id: String) async throws {
         record("reprocess(\(id))")
         if let reprocessError { throw reprocessError }
+        lock.withLock {
+            guard let index = statementStore?.firstIndex(where: { $0.id == id }), let old = statementStore?[index] else { return }
+            statementStore?[index] = Statement(id: old.id, status: .processing, fileType: old.fileType, bankName: old.bankName,
+                                               accountLabel: old.accountLabel, createdAt: old.createdAt, pipelineStep: "extract_text",
+                                               statementMonth: old.statementMonth, isShared: old.isShared)
+        }
     }
 
-    func removeStatement(id: String) async throws { record("remove(\(id))") }
+    func removeStatement(id: String) async throws {
+        record("remove(\(id))")
+        if let removeError { throw removeError }
+        lock.withLock { statementStore?.removeAll { $0.id == id } }
+    }
     func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws -> SignUpResult { SignUpResult() }
     func joinWaitlist(name: String, email: String) async throws {}
 
@@ -401,6 +425,117 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     static let defaultAdminStats = AdminStats(
         users: .init(totalUsers: 12, freeUsers: 6, starterUsers: 3, proUsers: 3, adminUsers: 1),
         activity: .init(totalTransactions: 1500, totalReports: 40, totalEmailsSent: 90, totalGoals: 12, totalHouseholds: 4))
+
+    // MARK: MoneyAPI
+
+    var expenseList: [Expense] = []
+    var incomeList: [IncomeEntry] = []
+    /// What `upcomingBills` answers; nil filters `expenseList` to the recurring bills due on or after the date.
+    var upcomingBillList: [Expense]?
+    /// Errors for the Money actions, by call name as recorded in `calls` without arguments, e.g. "saveExpense".
+    /// An action not listed succeeds.
+    var moneyErrors: [String: APIError] = [:]
+    /// Per-transaction errors `bulkAttribute` answers with; a transaction not listed saved.
+    var bulkAttributeErrors: [String: String] = [:]
+    /// Transaction ids `bulkAttribute` leaves out of its answer, as a short server response would.
+    var bulkAttributeOmits: Set<String> = []
+    /// What `createCategory` and `updateCategory` answer (nil builds one from the arguments).
+    var savedCategory: BudgetCategory?
+
+    private func moneyAction(_ name: String, _ call: String) throws {
+        record(call)
+        if let error = lock.withLock({ moneyErrors[name] }) { throw error }
+    }
+
+    func expenses() async throws -> [Expense] {
+        try moneyAction("expenses", "expenses")
+        return expenseList
+    }
+
+    func upcomingBills(from: Date) async throws -> [Expense] {
+        try moneyAction("upcomingBills", "upcomingBills")
+        return upcomingBillList ?? expenseList.filter { $0.frequency == .recurring && $0.nextDueDate >= from }
+    }
+
+    func saveExpense(_ draft: ExpenseDraft, id: String?) async throws -> Expense {
+        try moneyAction("saveExpense", "saveExpense(\(id ?? "new"), \(draft.description))")
+        let saved = Expense(id: id ?? "e-\(calls.count)", categoryID: draft.categoryID, description: draft.description,
+                            friendlyName: draft.friendlyName, amount: draft.amount, frequency: draft.frequency,
+                            interval: draft.frequency == .recurring ? draft.interval : nil, nextDueDate: draft.nextDueDate,
+                            endDate: draft.endDate)
+        lock.withLock {
+            if let index = expenseList.firstIndex(where: { $0.id == saved.id }) { expenseList[index] = saved } else { expenseList.append(saved) }
+        }
+        return saved
+    }
+
+    func deleteExpense(id: String) async throws {
+        try moneyAction("deleteExpense", "deleteExpense(\(id))")
+        lock.withLock { expenseList.removeAll { $0.id == id } }
+    }
+
+    func incomeEntries() async throws -> [IncomeEntry] {
+        try moneyAction("incomeEntries", "incomeEntries")
+        return incomeList
+    }
+
+    func saveIncome(_ draft: IncomeDraft, id: String?) async throws -> IncomeEntry {
+        try moneyAction("saveIncome", "saveIncome(\(id ?? "new"), \(draft.sourceName))")
+        // An update keeps whose entry it is.
+        let existing = lock.withLock { incomeList.first { $0.id == id } }
+        let saved = IncomeEntry(id: id ?? "i-\(calls.count)", ownerID: existing?.ownerID ?? simulatedUserID, sourceName: draft.sourceName,
+                                friendlyName: draft.friendlyName, amount: draft.amount, frequency: draft.frequency,
+                                effectiveDate: draft.effectiveDate, endDate: draft.endDate,
+                                attributedToUserID: draft.attributedToUserID, attributedToName: draft.attributedToName,
+                                autoDetected: existing?.autoDetected ?? false, aiSuggested: existing?.aiSuggested ?? false)
+        lock.withLock {
+            if let index = incomeList.firstIndex(where: { $0.id == saved.id }) { incomeList[index] = saved } else { incomeList.append(saved) }
+        }
+        return saved
+    }
+
+    func deleteIncome(id: String) async throws {
+        try moneyAction("deleteIncome", "deleteIncome(\(id))")
+        lock.withLock { incomeList.removeAll { $0.id == id } }
+    }
+
+    func createCategory(name: String, budgetClass: BudgetClass, shared: Bool) async throws -> BudgetCategory {
+        try moneyAction("createCategory", "createCategory(\(name), \(budgetClass.rawValue)\(shared ? ", shared" : ""))")
+        let made = savedCategory ?? BudgetCategory(id: "c-\(calls.count)", name: name, budgetClass: budgetClass, isSharedWithHousehold: shared)
+        lock.withLock { categoryList.append(made) }
+        return made
+    }
+
+    func updateCategory(id: String, name: String, budgetClass: BudgetClass) async throws -> BudgetCategory {
+        try moneyAction("updateCategory", "updateCategory(\(id), \(name), \(budgetClass.rawValue))")
+        let updated = savedCategory ?? BudgetCategory(id: id, name: name, budgetClass: budgetClass)
+        lock.withLock {
+            if let index = categoryList.firstIndex(where: { $0.id == id }) { categoryList[index] = updated }
+        }
+        return updated
+    }
+
+    func deleteCategory(id: String) async throws {
+        try moneyAction("deleteCategory", "deleteCategory(\(id))")
+        lock.withLock { categoryList.removeAll { $0.id == id } }
+    }
+
+    func generateReport(_ month: Month) async throws {
+        try moneyAction("generateReport", "generateReport(\(month.apiString))")
+    }
+
+    func attribute(transactionID: String, to userID: String) async throws {
+        try moneyAction("attribute", "attribute(\(transactionID), \(userID))")
+    }
+
+    func bulkAttribute(_ pairs: [(String, String)]) async throws -> [String: String?] {
+        try moneyAction("bulkAttribute", "bulkAttribute(\(pairs.map { "\($0.0)>\($0.1)" }.joined(separator: ",")))")
+        let errors = lock.withLock { bulkAttributeErrors }
+        var results: [String: String?] = [:]
+        let omitted = lock.withLock { bulkAttributeOmits }
+        for (id, _) in pairs where !omitted.contains(id) { results[id] = .some(errors[id]) }
+        return results
+    }
 
     // MARK: Builders
 

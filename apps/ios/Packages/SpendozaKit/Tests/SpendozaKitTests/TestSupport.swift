@@ -68,3 +68,20 @@ extension HouseholdAPI {
     func setCategoryShared(id: String, shared: Bool) async throws {}
     func leaveHousehold() async throws {}
 }
+
+/// Likewise the Money calls.
+extension MoneyAPI {
+    func expenses() async throws -> [Expense] { [] }
+    func upcomingBills(from: Date) async throws -> [Expense] { [] }
+    func saveExpense(_ draft: ExpenseDraft, id: String?) async throws -> Expense { throw APIError.offline }
+    func deleteExpense(id: String) async throws {}
+    func incomeEntries() async throws -> [IncomeEntry] { [] }
+    func saveIncome(_ draft: IncomeDraft, id: String?) async throws -> IncomeEntry { throw APIError.offline }
+    func deleteIncome(id: String) async throws {}
+    func createCategory(name: String, budgetClass: BudgetClass, shared: Bool) async throws -> BudgetCategory { throw APIError.offline }
+    func updateCategory(id: String, name: String, budgetClass: BudgetClass) async throws -> BudgetCategory { throw APIError.offline }
+    func deleteCategory(id: String) async throws {}
+    func generateReport(_ month: Month) async throws {}
+    func attribute(transactionID: String, to userID: String) async throws {}
+    func bulkAttribute(_ pairs: [(String, String)]) async throws -> [String: String?] { [:] }
+}

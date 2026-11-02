@@ -18,7 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuth } from "@/hooks/use-auth";
 import { useCreateIncome, useUpdateIncome } from "@/hooks/use-income";
+import {
+  OWNER_ONLY_ATTRIBUTION,
+  attributionText,
+  incomeSaveBody,
+  ownsIncome,
+} from "@/lib/income-ownership";
 
 const FREQUENCIES: { value: Frequency; label: string }[] = [
   { value: "one_time", label: "One-time" },
@@ -44,11 +51,12 @@ export function IncomeForm({
   const isEditing = !!income;
   const createIncome = useCreateIncome();
   const updateIncome = useUpdateIncome();
+  const { user } = useAuth();
+  // Someone an entry is attributed to sees who, but only the owner changes it.
+  const canAttribute = !income || ownsIncome(income, user?.id);
 
   const [sourceName, setSourceName] = useState(income?.source_name ?? "");
-  const [friendlyName, setFriendlyName] = useState(
-    income?.friendly_name ?? ""
-  );
+  const [friendlyName, setFriendlyName] = useState(income?.friendly_name ?? "");
   const [amount, setAmount] = useState(income?.amount?.toString() ?? "");
   const [frequency, setFrequency] = useState<Frequency>(
     income?.frequency ?? "monthly"
@@ -115,7 +123,7 @@ export function IncomeForm({
     e.preventDefault();
     setError(null);
 
-    const data = {
+    const fields = {
       source_name: sourceName.trim(),
       friendly_name: friendlyName.trim() || null,
       amount: parseFloat(amount),
@@ -123,7 +131,9 @@ export function IncomeForm({
       effective_date: effectiveDate,
       end_date: endDate || null,
       attributed_to_user_id:
-        attributionMode === "member" && attributedToUserId && attributedToUserId !== "none"
+        attributionMode === "member" &&
+        attributedToUserId &&
+        attributedToUserId !== "none"
           ? attributedToUserId
           : null,
       attributed_to_name:
@@ -134,9 +144,12 @@ export function IncomeForm({
 
     try {
       if (isEditing && income) {
-        await updateIncome.mutateAsync({ id: income.id, data });
+        await updateIncome.mutateAsync({
+          id: income.id,
+          data: incomeSaveBody(fields, canAttribute),
+        });
       } else {
-        await createIncome.mutateAsync(data);
+        await createIncome.mutateAsync(fields);
       }
       resetForm();
       onOpenChange(false);
@@ -155,9 +168,7 @@ export function IncomeForm({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {isEditing ? "Edit Income" : "Add Income"}
-          </DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Income" : "Add Income"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {error && (
@@ -178,9 +189,7 @@ export function IncomeForm({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="friendly_name">
-              Friendly Name (optional)
-            </Label>
+            <Label htmlFor="friendly_name">Friendly Name (optional)</Label>
             <Input
               id="friendly_name"
               value={friendlyName}
@@ -253,47 +262,64 @@ export function IncomeForm({
 
           <div className="flex flex-col gap-2">
             <Label>Attributed To (optional)</Label>
-            <Select
-              value={attributionMode}
-              onValueChange={(v) => setAttributionMode(v as "none" | "member" | "custom")}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Who earned this?" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Me (default)</SelectItem>
-                {householdMembers && householdMembers.length > 0 && (
-                  <SelectItem value="member">Household Member</SelectItem>
+            {!canAttribute && income ? (
+              <>
+                <p className="text-sm">
+                  {attributionText(income, householdMembers, user?.id)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {OWNER_ONLY_ATTRIBUTION}
+                </p>
+              </>
+            ) : (
+              <>
+                <Select
+                  value={attributionMode}
+                  onValueChange={(v) =>
+                    setAttributionMode(v as "none" | "member" | "custom")
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Who earned this?" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Me (default)</SelectItem>
+                    {householdMembers && householdMembers.length > 0 && (
+                      <SelectItem value="member">Household Member</SelectItem>
+                    )}
+                    <SelectItem value="custom">Custom Name</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {attributionMode === "member" &&
+                  householdMembers &&
+                  householdMembers.length > 0 && (
+                    <Select
+                      value={attributedToUserId}
+                      onValueChange={setAttributedToUserId}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select member" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {householdMembers.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.display_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                {attributionMode === "custom" && (
+                  <Input
+                    value={attributedToName}
+                    onChange={(e) => setAttributedToName(e.target.value)}
+                    placeholder="e.g. Jane, Partner"
+                    maxLength={100}
+                  />
                 )}
-                <SelectItem value="custom">Custom Name</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {attributionMode === "member" && householdMembers && householdMembers.length > 0 && (
-              <Select
-                value={attributedToUserId}
-                onValueChange={setAttributedToUserId}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {householdMembers.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            {attributionMode === "custom" && (
-              <Input
-                value={attributedToName}
-                onChange={(e) => setAttributedToName(e.target.value)}
-                placeholder="e.g. Jane, Partner"
-                maxLength={100}
-              />
+              </>
             )}
           </div>
 
@@ -306,11 +332,7 @@ export function IncomeForm({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? "Saving..."
-                : isEditing
-                  ? "Update"
-                  : "Add Income"}
+              {isPending ? "Saving..." : isEditing ? "Update" : "Add Income"}
             </Button>
           </DialogFooter>
         </form>
