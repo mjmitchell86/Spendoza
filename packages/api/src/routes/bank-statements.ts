@@ -1,6 +1,10 @@
-import { Router, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
-import { uploadBankStatementSchema } from "@spendoza/shared";
+import {
+  MAX_BANK_STATEMENT_BYTES,
+  MAX_BANK_STATEMENT_SIZE_MB,
+  uploadBankStatementSchema,
+} from "@spendoza/shared";
 import { supabaseAdmin } from "../lib/supabase";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { computeFileHash, listBankStatements, getBankStatement } from "../services/bank-statement.service";
@@ -12,7 +16,22 @@ import {
 } from "../services/statement-file.service";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_BANK_STATEMENT_BYTES },
+});
+
+// The statement file, refused with the limit's own words when it is too large.
+function statementFile(req: Request, res: Response, next: NextFunction) {
+  upload.single("file")(req, res, (err?: unknown) => {
+    if ((err as { code?: string } | undefined)?.code === "LIMIT_FILE_SIZE") {
+      return res
+        .status(413)
+        .json({ error: `This file is too large (max ${MAX_BANK_STATEMENT_SIZE_MB} MB)` });
+    }
+    next(err);
+  });
+}
 
 // bank_statements rows are server-owned: clients can read their own rows but
 // not write them, so writes go through supabaseAdmin scoped by user_id.
@@ -93,7 +112,7 @@ async function removeFailedStatement(
 // ---------------------------------------------------------------------------
 router.post(
   "/upload",
-  upload.single("file"),
+  statementFile,
   async (req, res: Response) => {
     const { user, supabase: db } = req as AuthenticatedRequest;
 

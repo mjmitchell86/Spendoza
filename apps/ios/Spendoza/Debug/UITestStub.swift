@@ -50,6 +50,7 @@ enum UITestStub {
                                     isAdmin: CommandLine.arguments.contains("-uiTestAdmin"), emailReportsEnabled: updateOffline, householdID: nil,
                                     avatarURL: URL(string: "http://127.0.0.1:9/avatar.jpg"), subscriptionTier: "pro",
                                     createdAt: Date(timeIntervalSince1970: 1_780_000_000))
+        configureMoney(api)
         if let mode = householdMode { configureHousehold(api, mode) }
         // Two of the three invite codes: one available, one used.
         api.inviteCodeList = [
@@ -64,6 +65,101 @@ enum UITestStub {
             api.adminUsersPages = Dictionary(uniqueKeysWithValues: pages.map { ($0.page, $0) })
         }
         return api
+    }
+
+    /// What the Money tab's Overview shows: bills due around the stub's "today" (one already past, which it leaves
+    /// out) and October's two statements.
+    private static func configureMoney(_ api: StubAPI) {
+        func due(_ day: Int) -> Date {
+            Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: day))!
+        }
+        func bill(_ id: String, _ name: String, _ amount: Double, day: Int, auto: Bool = false, category: String = "c4") -> Expense {
+            Expense(id: id, categoryID: category, description: name, amount: amount, frequency: .recurring, interval: .monthly,
+                    nextDueDate: due(day), autoDetected: auto)
+        }
+        api.expenseList = [
+            bill("e0", "Gym", 29, day: 3),
+            bill("e1", "Netflix", 15.49, day: 6, auto: true),
+            bill("e2", "Rent", 1800, day: 8, category: "c1"),
+            bill("e3", "Phone", 62.5, day: 15, category: "c5"),
+            bill("e4", "Car insurance", 148.2, day: 21, auto: true, category: "c1"),
+        ]
+        // What Overview's Upcoming bills lists stays these five; the Bills tab also shows the rest.
+        api.upcomingBillList = api.expenseList
+        // An AI-adjusted annual bill (its original amount struck through) and a one-time one.
+        api.expenseList += [
+            Expense(id: "e5", categoryID: "c5", description: "AMZN PRIME MEMBERSHIP", friendlyName: "Prime", amount: 139,
+                    frequency: .recurring, interval: .annually,
+                    nextDueDate: Calendar.current.date(from: DateComponents(year: 2027, month: 3, day: 14))!,
+                    autoDetected: true, isAIAdjusted: true, originalAmount: 119),
+            Expense(id: "e6", categoryID: "c1", description: "Car registration", amount: 212, frequency: .oneTime,
+                    nextDueDate: due(26)),
+        ]
+        // Bills ▸ Income: one of yours (auto-detected), one Ann (a household member) owns and attributed to you, one with a
+        // custom name, and an AI-suggested one-time entry.
+        func income(_ id: String, _ source: String, friendly: String? = nil, _ amount: Double, _ frequency: IncomeFrequency,
+                    _ month: Int, owner: String = "ui-test-user", attributedUser: String? = nil, attributedName: String? = nil,
+                    auto: Bool = false, ai: Bool = false) -> IncomeEntry {
+            IncomeEntry(id: id, ownerID: owner, sourceName: source, friendlyName: friendly, amount: amount, frequency: frequency,
+                        effectiveDate: Calendar.current.date(from: DateComponents(year: 2026, month: month, day: 1))!,
+                        attributedToUserID: attributedUser, attributedToName: attributedName, autoDetected: auto, aiSuggested: ai)
+        }
+        api.incomeList = [
+            income("in1", "ACME CORP PAYROLL", friendly: "Salary", 4200.5, .monthly, 10, auto: true),
+            income("in2", "Freelance design", 650, .monthly, 8, owner: "u-ann", attributedUser: "ui-test-user"),
+            income("in3", "Rental income", 900, .monthly, 6, attributedName: "Jane (partner)"),
+            income("in4", "Tax refund", 1200, .oneTime, 3, ai: true),
+        ]
+        // October's other transactions: pay and groceries, a refund, and one nothing has categorized yet.
+        func tx(_ id: String, _ date: String, _ name: String, _ amount: Double, _ category: String?,
+                type: TransactionType = .debit) -> Transaction {
+            Transaction(id: id, date: date, description: name, amount: amount, type: type, category: category)
+        }
+        api.transactionList += [
+            tx("m1", "2026-10-31", "Acme Corp payroll", 2500, nil, type: .credit),
+            tx("m2", "2026-10-23", "Whole Foods", 142.88, "Groceries"),
+            tx("m3", "2026-10-18", "Landlord rent", 1800, "Housing"),
+            tx("m4", "2026-10-15", "Amazon refund", 34.99, "Personal", type: .credit),
+            tx("m5", "2026-10-09", "Venmo J. Alvarez", 45, nil),
+            tx("m6", "2026-10-01", "Netflix", 15.49, "Entertainment"),
+        ]
+        configureStatements(api)
+    }
+
+    /// Statements in every state, as a live list (uploads, retries and removals change it): two parsed ones for
+    /// October (a shared joint account with transactions to assign, and a personal one), one just uploaded, two
+    /// processing (one on its first retry) and two that failed (with and without the server's reason).
+    private static func configureStatements(_ api: StubAPI) {
+        let uploaded = Date(timeIntervalSince1970: 1_792_000_000)
+        let oct = DrillFixture.oct
+        api.statementStore = [
+            Statement(id: "s1", status: .parsed, fileType: "pdf", bankName: "Chase", accountLabel: "Joint Checking", createdAt: uploaded,
+                      statementMonth: oct, isShared: true),
+            Statement(id: "s2", status: .parsed, fileType: "csv", bankName: "Amex", createdAt: uploaded, statementMonth: oct),
+            Statement(id: "s3", status: .uploaded, fileType: "pdf", createdAt: uploaded),
+            Statement(id: "s4", status: .processing, fileType: "csv", bankName: "Wells Fargo", createdAt: uploaded,
+                      pipelineStep: "classify_transactions", retryCount: 1),
+            Statement(id: "s5", status: .processing, fileType: "pdf", bankName: "Capital One", createdAt: uploaded,
+                      pipelineStep: "extract_text"),
+            Statement(id: "s6", status: .failed, fileType: "pdf", bankName: "Citi", createdAt: uploaded,
+                      failure: StatementFailure(reason: "Could not find any transactions in this PDF", step: "extract_transactions", retryCount: 2),
+                      retryCount: 2),
+            Statement(id: "s7", status: .failed, fileType: "pdf", createdAt: uploaded,
+                      failure: StatementFailure(reason: "", step: "match_and_insert", retryCount: 0)),
+        ]
+        func tx(_ id: String, _ date: String, _ name: String, _ amount: Double, _ category: String?,
+                type: TransactionType = .debit, by: String? = nil) -> Transaction {
+            Transaction(id: id, date: date, description: name, amount: amount, type: type, category: category,
+                        statementID: "s1", attributedTo: by)
+        }
+        api.statementTransactions["s1"] = [
+            tx("a1", "2026-10-28", "Whole Foods Market", 142.88, "Groceries", by: "ui-test-user"),
+            tx("a2", "2026-10-28", "Shell gas station", 48.2, "Transportation"),
+            tx("a3", "2026-10-21", "Landlord rent", 1800, "Housing", by: "u-ann"),
+            tx("a4", "2026-10-15", "Amazon refund", 34.99, "Personal", type: .credit),
+            tx("a5", "2026-10-09", "Venmo J. Alvarez", 45, nil),
+            tx("a6", "2026-10-01", "Netflix", 15.49, "Entertainment"),
+        ]
     }
 
     /// `-uiTestHousehold head|member|none|invited`: the signed-in user heads a household of three (with an
@@ -90,7 +186,7 @@ enum UITestStub {
                 PendingInvitation(id: "p2", email: "dan@example.com", createdAt: sent, expiresAt: sent.addingTimeInterval(7 * 86_400)),
             ])
             api.categoryList = [
-                BudgetCategory(id: "c1", name: "Housing", budgetClass: .need, isSharedWithHousehold: true),
+                BudgetCategory(id: "c1", name: "Housing", budgetClass: .need, isSharedWithHousehold: true, isSystemDefault: true),
                 BudgetCategory(id: "c2", name: "Groceries", budgetClass: .need, isSharedWithHousehold: true),
                 BudgetCategory(id: "c3", name: "Dining out", budgetClass: .want),
                 BudgetCategory(id: "c4", name: "Streaming", budgetClass: .want),

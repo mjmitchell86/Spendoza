@@ -28,6 +28,7 @@ router.get("/", async (req, res: Response) => {
 router.post("/", validate(createCategorySchema), async (req, res: Response) => {
   const ctx = toServiceContext(req as AuthenticatedRequest);
   const { data, error } = await createCategory(ctx, req.body);
+  if ((error as any)?.status === 409) return res.status(409).json({ error: error!.message });
   if (error) return res.status(400).json({ error: error.message });
   return res.status(201).json(data);
 });
@@ -38,6 +39,8 @@ router.post("/", validate(createCategorySchema), async (req, res: Response) => {
 router.put("/:id", validate(updateCategorySchema), async (req, res: Response) => {
   const ctx = toServiceContext(req as AuthenticatedRequest);
   const { data, error } = await updateCategory(ctx, req.params.id, req.body);
+  if ((error as any)?.status === 409) return res.status(409).json({ error: error!.message });
+  if ((error as any)?.status === 403) return res.status(403).json({ error: error!.message });
   if (error || !data) return res.status(404).json({ error: "Category not found" });
   return res.status(200).json(data);
 });

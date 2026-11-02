@@ -70,6 +70,13 @@ struct Endpoint {
     static let pendingInvitations = Endpoint.get("/api/household/invitations")
     static let myInvitations = Endpoint.get("/api/household/invitations/mine")
 
+    static func expenses(query: [URLQueryItem] = []) -> Endpoint { .get("/api/expenses", query: query) }
+
+    /// POST to create, PUT `/<id>` to update.
+    static func save(_ path: String, id: String?, _ body: some Encodable) -> Endpoint {
+        .json(id == nil ? .post : .put, id.map { "\(path)/\($0)" } ?? path, body)
+    }
+
     static func transactions(from: String, to: String) -> Endpoint {
         .get("/api/transactions", query: [URLQueryItem(name: "from_date", value: from), URLQueryItem(name: "to_date", value: to)])
     }

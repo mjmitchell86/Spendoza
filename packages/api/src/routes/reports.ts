@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from "express";
+import { generateReportSchema } from "@spendoza/shared";
+import { validate } from "../middleware/validate";
 import { supabaseAdmin } from "../lib/supabase";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import {
@@ -128,7 +130,7 @@ router.get("/household", requireAuth, requireHouseholdPlan("callerOrHead"), asyn
 // ---------------------------------------------------------------------------
 // POST /generate — manual trigger (max 2 per 24h in production)
 // ---------------------------------------------------------------------------
-router.post("/generate", requireAuth, async (req: Request, res: Response) => {
+router.post("/generate", requireAuth, validate(generateReportSchema), async (req: Request, res: Response) => {
   const { user, supabase: db } = req as AuthenticatedRequest;
   const now = new Date();
   const isProduction = process.env.VERCEL_ENV === "production";
@@ -152,17 +154,23 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     }
   }
 
-  // Find the latest month with transactions; skip current month if empty
-  const { data: latestTxn } = await db
-    .from("transactions")
-    .select("date")
-    .eq("user_id", user.id)
-    .order("date", { ascending: false })
-    .limit(1);
+  // A chosen month wins; otherwise the latest month with transactions (the current month if none).
+  let reportDate: Date;
+  const chosenMonth: string | undefined = req.body?.month;
+  if (chosenMonth) {
+    reportDate = midMonth(chosenMonth)!;
+  } else {
+    const { data: latestTxn } = await db
+      .from("transactions")
+      .select("date")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false })
+      .limit(1);
 
-  const reportDate = latestTxn && latestTxn.length > 0
-    ? new Date(latestTxn[0].date + "T00:00:00Z")
-    : now;
+    reportDate = latestTxn && latestTxn.length > 0
+      ? new Date(latestTxn[0].date + "T00:00:00Z")
+      : now;
+  }
 
   // Generate the personal report for the month with data (force=true to bypass cache)
   const report = await generateUserReport(user.id, reportDate, true, db);

@@ -26,6 +26,7 @@ import {
   useUpdateCategory,
 } from "@/hooks/use-categories";
 import { useHousehold } from "@/hooks/use-household";
+import { categoryDeleteMessage } from "@/lib/category-report-copy";
 import { CategoryForm } from "@/components/categories/category-form";
 
 export function CategoriesPage() {
@@ -181,9 +182,7 @@ export function CategoriesPage() {
           <DialogHeader>
             <DialogTitle>Delete Category</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &ldquo;{deleteTarget?.name}
-              &rdquo;? Expenses using this category will remain but become
-              uncategorized.
+              {categoryDeleteMessage(deleteTarget?.name ?? "")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -1,9 +1,9 @@
 import Foundation
 
 public final class APIClient: SpendozaAPI {
-    /// Measured (Task 6): the largest unauthenticated multipart body test-api accepted was 4,493,164 bytes (4,494,140 got 413).
-    /// The file limit leaves 13 KB for multipart framing and the optional bank_name/account_label fields, 8 KB more than they need.
-    public static let maxStatementBytes = 4_480_000
+    /// 4 MiB: the same number as `MAX_BANK_STATEMENT_BYTES` in packages/shared/src/constants.ts, which the web checks and
+    /// the API enforces (413). Well under Vercel's 4.5 MB request body limit, multipart framing included.
+    public static let maxStatementBytes = 4_194_304
     /// The limit in whole megabytes, rounded down. Uses MiB (the larger unit) so the figure never overstates the limit.
     public static let maxStatementMB = max(1, maxStatementBytes / 1_048_576)
     /// The `code` of the API's 403 for a disabled account.
@@ -55,7 +55,8 @@ public final class APIClient: SpendozaAPI {
         try await send(.transactions(statementID: statementID))
     }
 
-    public func uploadStatement(fileURL: URL, mimeType: String, bankName: String?) async throws -> Statement {
+    public func uploadStatement(fileURL: URL, mimeType: String, bankName: String?, shared: Bool,
+                                accountLabel: String?) async throws -> Statement {
         let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         if size > Self.maxStatementBytes { throw APIError.fileTooLarge(maxMB: Self.maxStatementMB) }
         let fileData = try Data(contentsOf: fileURL)
@@ -63,8 +64,12 @@ public final class APIClient: SpendozaAPI {
 
         let boundary = "spendoza-\(UUID().uuidString)"
         let bank = (bankName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var fields: [(name: String, value: String)] = []
+        if !bank.isEmpty { fields.append(("bank_name", bank)) }
+        fields.append(("is_shared_account", shared ? "true" : "false"))
+        if let label = accountLabel.nonEmptyTrimmed { fields.append(("account_label", label)) }
         let body = Multipart.body(boundary: boundary, fileField: "file", filename: fileURL.lastPathComponent,
-                                  mimeType: mimeType, data: fileData, fields: bank.isEmpty ? [] : [("bank_name", bank)])
+                                  mimeType: mimeType, data: fileData, fields: fields)
 
         var endpoint = Endpoint(method: .post, path: Endpoint.uploadPath)
         endpoint.body = body
@@ -219,6 +224,94 @@ public final class APIClient: SpendozaAPI {
 
     public func leaveHousehold() async throws { try await sendIgnoringBody(.household(.post, "/leave")) }
 
+    // MARK: MoneyAPI
+
+    public func expenses() async throws -> [Expense] { try await send(.expenses()) }
+
+    public func upcomingBills(from: Date) async throws -> [Expense] {
+        try await send(.expenses(query: [URLQueryItem(name: "frequency", value: "recurring"),
+                                         URLQueryItem(name: "from_date", value: Self.dayString(from))]))
+    }
+
+    public func saveExpense(_ draft: ExpenseDraft, id: String?) async throws -> Expense {
+        try await send(.save("/api/expenses", id: id, draft))
+    }
+
+    public func deleteExpense(id: String) async throws {
+        try await sendIgnoringBody(Endpoint(method: .delete, path: "/api/expenses/\(id)"))
+    }
+
+    public func incomeEntries() async throws -> [IncomeEntry] { try await send(.get("/api/income")) }
+
+    public func saveIncome(_ draft: IncomeDraft, id: String?) async throws -> IncomeEntry {
+        try await send(.save("/api/income", id: id, draft))
+    }
+
+    public func deleteIncome(id: String) async throws {
+        try await sendIgnoringBody(Endpoint(method: .delete, path: "/api/income/\(id)"))
+    }
+
+    public func createCategory(name: String, budgetClass: BudgetClass, shared: Bool) async throws -> BudgetCategory {
+        struct Body: Encodable {
+            let name: String
+            let budgetClass: BudgetClass
+            let shared: Bool
+            enum CodingKeys: String, CodingKey {
+                case name
+                case budgetClass = "budget_class"
+                case shared = "is_shared_with_household"
+            }
+        }
+        return try await send(.json(.post, "/api/categories", Body(name: name, budgetClass: budgetClass, shared: shared)))
+    }
+
+    public func updateCategory(id: String, name: String, budgetClass: BudgetClass) async throws -> BudgetCategory {
+        try await send(.json(.put, "/api/categories/\(id)", ["name": name, "budget_class": budgetClass.rawValue]))
+    }
+
+    public func deleteCategory(id: String) async throws {
+        try await sendIgnoringBody(Endpoint(method: .delete, path: "/api/categories/\(id)"))
+    }
+
+    public func generateReport(_ month: Month) async throws {
+        try await sendIgnoringBody(.json(.post, "/api/reports/generate", ["month": month.apiString]))
+    }
+
+    public func attribute(transactionID: String, to userID: String) async throws {
+        try await sendIgnoringBody(.json(.put, "/api/transactions/\(transactionID)/attribute", ["attributed_to_user_id": userID]))
+    }
+
+    public func bulkAttribute(_ pairs: [(String, String)]) async throws -> [String: String?] {
+        struct Attribution: Encodable {
+            let transactionID: String
+            let userID: String
+            enum CodingKeys: String, CodingKey {
+                case transactionID = "transaction_id"
+                case userID = "attributed_to_user_id"
+            }
+        }
+        struct Body: Encodable { let attributions: [Attribution] }
+        struct Result: Decodable {
+            let transactionID: String
+            let success: Bool
+            let error: String?
+            enum CodingKeys: String, CodingKey {
+                case transactionID = "transaction_id"
+                case success, error
+            }
+        }
+        struct Response: Decodable { let results: [Result] }
+        let body = Body(attributions: pairs.map { Attribution(transactionID: $0.0, userID: $0.1) })
+        let response: Response = try await send(.json(.post, "/api/transactions/bulk-attribute", body))
+        var errors: [String: String?] = [:]
+        for result in response.results {
+            errors[result.transactionID] = .some(result.success ? nil : (result.error ?? Self.genericErrorMessage))
+        }
+        // An id the server left out of `results` is not known to have saved.
+        for (id, _) in pairs where errors[id] == nil { errors[id] = .some(Self.genericErrorMessage) }
+        return errors
+    }
+
     // MARK: Transport
 
     private func send<T: Decodable>(_ endpoint: Endpoint) async throws -> T {
@@ -303,6 +396,9 @@ public final class APIClient: SpendozaAPI {
         throw Self.error(status: status, data: data)
     }
 
+    /// What an error with no server text says.
+    public static let genericErrorMessage = "Something went wrong. Try again."
+
     static func error(status: Int, data: Data) -> APIError {
         struct Body: Decodable {
             let error: String?
@@ -320,7 +416,14 @@ public final class APIClient: SpendozaAPI {
         default: break
         }
         if let text = body?.error, !text.isEmpty { return .message(text) }
-        return .message("Something went wrong. Try again.")
+        return .message(genericErrorMessage)
+    }
+
+    /// The start of a "YYYY-MM-DD" day in the device calendar; nil for anything else.
+    static func parseDay(_ string: String) -> Date? {
+        let parts = string.prefix(10).split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3, let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]) else { return nil }
+        return Calendar.current.date(from: DateComponents(year: year, month: month, day: day))
     }
 
     /// "YYYY-MM-DD" in the device calendar, the way the API filters transactions.

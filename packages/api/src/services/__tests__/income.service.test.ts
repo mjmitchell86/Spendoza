@@ -39,10 +39,11 @@ const mockOr = mock(() => ({ order: mockOrder }));
 const mockInsertSingle = mock(() => Promise.resolve({ data: incomeEntry, error: null }));
 const mockInsert = mock(() => ({ select: () => ({ single: mockInsertSingle }) }));
 
-// updateIncome: .from("income_entries").update({...}).eq("id",...).eq("user_id",...).select().single()
+// updateIncome: .from("income_entries").update({...}).eq("id",...).or(owner/attributed).select().single()
 const mockUpdateSingle = mock(() => Promise.resolve({ data: incomeEntry, error: null }));
+const mockUpdateOr = mock((_filter: string) => ({ select: () => ({ single: mockUpdateSingle }) }));
 const mockUpdate = mock(() => ({
-  eq: () => ({ eq: () => ({ select: () => ({ single: mockUpdateSingle }) }) }),
+  eq: () => ({ or: mockUpdateOr }),
 }));
 
 // deleteIncome: .from("income_entries").delete().eq("id",...).eq("user_id",...)
@@ -98,7 +99,7 @@ beforeEach(() => {
   mockSelectSingle.mockImplementation(() =>
     Promise.resolve({ data: { household_id: "hh-1" }, error: null })
   );
-  mockDeleteResult.mockImplementation(() => Promise.resolve({ data: null, error: null }));
+  mockDeleteResult.mockImplementation(() => Promise.resolve({ data: null, error: null, count: 1 }) as any);
 });
 
 // ---------------------------------------------------------------------------
@@ -228,6 +229,14 @@ describe("updateIncome", () => {
     expect(mockUpdate).toHaveBeenCalledTimes(1);
   });
 
+  it("matches the owner or the attributed user", async () => {
+    await updateIncome(ctx, "inc-1", { amount: 1 });
+
+    expect(mockUpdateOr).toHaveBeenCalledWith(
+      `user_id.eq.${TEST_USER_ID},attributed_to_user_id.eq.${TEST_USER_ID}`
+    );
+  });
+
   it("returns error when entry not found", async () => {
     mockUpdateSingle.mockImplementation(() =>
       Promise.resolve({ data: null, error: { message: "Not found", code: "PGRST116" } })
@@ -237,6 +246,35 @@ describe("updateIncome", () => {
 
     expect(data).toBeNull();
     expect(error).toBeDefined();
+  });
+
+  it("refuses an attribution change from someone who is not the owner, and writes nothing", async () => {
+    mockSelectSingle.mockImplementation(
+      () => Promise.resolve({ data: { user_id: "owner-9", attributed_to_user_id: TEST_USER_ID, attributed_to_name: null }, error: null }) as any
+    );
+
+    const { data, error } = await updateIncome(ctx, "inc-1", { attributed_to_user_id: null });
+
+    expect(data).toBeNull();
+    expect(error).toEqual({ message: "Only the owner can change who this income is attributed to", status: 403 });
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("treats a blank attributed name as no name when comparing", async () => {
+    mockSelectSingle.mockImplementation(
+      () => Promise.resolve({ data: { user_id: "owner-9", attributed_to_user_id: null, attributed_to_name: "Jane" }, error: null }) as any
+    );
+
+    const { error } = await updateIncome(ctx, "inc-1", { attributed_to_user_id: null, attributed_to_name: " Jane " });
+
+    expect(error).toBeNull();
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not look the entry up when no attribution is sent", async () => {
+    await updateIncome(ctx, "inc-1", { amount: 1 });
+
+    expect(mockSelect).not.toHaveBeenCalled();
   });
 });
 
@@ -260,5 +298,13 @@ describe("deleteIncome", () => {
     const { error } = await deleteIncome(ctx, "inc-1");
 
     expect(error).toBeDefined();
+  });
+
+  it("reports how many entries were deleted (0 when it is not yours)", async () => {
+    expect((await deleteIncome(ctx, "inc-1")).deleted).toBe(1);
+    expect(mockDelete).toHaveBeenCalledWith({ count: "exact" });
+
+    mockDeleteResult.mockImplementation(() => Promise.resolve({ data: null, error: null, count: 0 }) as any);
+    expect((await deleteIncome(ctx, "inc-1")).deleted).toBe(0);
   });
 });

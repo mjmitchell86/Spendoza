@@ -11,6 +11,11 @@ export class ApiError extends Error {
   }
 }
 
+/** The server's message for a failed request, or `fallback` when there is none. */
+export function errorText(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
 export const PLANS_URL = "https://www.spendoza.io/pricing";
 
 function bodyOf(err: unknown): unknown {
