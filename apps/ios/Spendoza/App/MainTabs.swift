@@ -28,6 +28,7 @@ struct MainTabs: View {
             }
             Tab("Money", systemImage: "banknote", value: "Money") {
                 MoneyView(api: store.api,
+                          selfID: { [store] in store.profile?.id },
                           onSessionEnded: { Task { await store.signOut() } },
                           onAccountDisabled: { text in Task { await store.accountDisabled(text) } })
                     .debugHidingTabBar()

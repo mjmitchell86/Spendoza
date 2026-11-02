@@ -2,10 +2,12 @@ import SpendozaKit
 import SwiftUI
 
 /// The Money tab's Bills: "Recurring expenses" with the web's type and category filters. Tap a bill to edit or
-/// delete it. (Income follows below in its own section.)
+/// delete it. Income follows below in its own section.
 struct BillsView: View {
     @Bindable var model: ExpensesModel
+    let income: IncomeModel
     @State private var target: Target?
+    @State private var incomeTarget: IncomeTarget?
 
     /// What the form sheet is for: a new bill or an existing one.
     struct Target: Identifiable {
@@ -13,13 +15,24 @@ struct BillsView: View {
         var id: String { bill?.id ?? "new" }
     }
 
+    /// What the income sheet is for: a new entry or an existing one.
+    struct IncomeTarget: Identifiable {
+        let entry: IncomeEntry?
+        var id: String { entry?.id ?? "new" }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             recurringExpenses
+            recurringIncome.padding(.top, 32)
         }
         .task { await model.load() }
+        .task { await income.load() }
         .sheet(item: $target) { target in
             ExpenseFormSheet(model: model, bill: target.bill)
+        }
+        .sheet(item: $incomeTarget) { target in
+            IncomeFormSheet(model: income, entry: target.entry)
         }
     }
 
@@ -105,6 +118,45 @@ struct BillsView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(BillRow.accessibilityLabel(row))
                     .accessibilityHint("Edit or delete")
+                }
+            }
+            .topRule()
+        }
+    }
+
+    // MARK: Recurring income
+
+    private var recurringIncome: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            MoneySectionTitle("Recurring income")
+            Button("Add income") { incomeTarget = IncomeTarget(entry: nil) }
+                .buttonStyle(SecondaryButtonStyle())
+                .padding(.top, 4)
+            incomeList.padding(.top, 8)
+        }
+    }
+
+    @ViewBuilder private var incomeList: some View {
+        if let error = income.loadError {
+            InlineError(message: error)
+            Button("Retry") { Task { await income.load() } }
+                .buttonStyle(SecondaryButtonStyle())
+                .padding(.top, 12)
+        } else if income.isLoading && income.entries.isEmpty {
+            ProgressView().tint(Theme.note)
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .accessibilityLabel("Loading income")
+        } else if income.entries.isEmpty {
+            emptyText("No income entries yet.", detail: "Add your first income source to get started.")
+        } else {
+            VStack(spacing: 0) {
+                ForEach(income.rows) { row in
+                    Button { incomeTarget = IncomeTarget(entry: income.entries.first { $0.id == row.id }) } label: {
+                        IncomeRow(row: row)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(IncomeRow.accessibilityLabel(row))
+                    .accessibilityHint("Edit")
                 }
             }
             .topRule()
@@ -205,6 +257,80 @@ private struct BillRow: View {
         parts.append(row.amountText)
         if let original = row.originalAmountText { parts.append("was \(original)") }
         parts += [row.categoryName, row.frequencyLabel, "due \(row.dueText)"]
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// One income entry: its name (and raw source name), marks, frequency and effective date, and its amount.
+private struct IncomeRow: View {
+    let row: IncomeModel.Row
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        RuledRow {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 4) {
+                        details
+                        amount
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 12) {
+                        details
+                        Spacer(minLength: 8)
+                        amount
+                    }
+                }
+            }
+            .frame(minHeight: 44)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(row.title)
+                .font(.sans(16, relativeTo: .body))
+                .foregroundStyle(Theme.ink)
+            if let raw = row.rawSourceName {
+                Text(raw)
+                    .font(.sans(12, relativeTo: .caption))
+                    .foregroundStyle(Theme.soft)
+            }
+            if !row.marks.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { marks }
+                    VStack(alignment: .leading, spacing: 4) { marks }
+                }
+            }
+            Text("\(row.frequencyLabel) · From \(row.effectiveText)")
+                .font(.sans(13, relativeTo: .footnote))
+                .foregroundStyle(Theme.soft)
+        }
+    }
+
+    private var marks: some View {
+        ForEach(row.marks, id: \.self) { text in
+            Text(text)
+                .font(.sans(11, weight: .semibold, relativeTo: .caption2))
+                .foregroundStyle(Theme.soft)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .hairlineBorder(Theme.engraving)
+        }
+    }
+
+    private var amount: some View {
+        Text(row.amountText)
+            .font(.serif(17, relativeTo: .body))
+            .foregroundStyle(Theme.ink)
+    }
+
+    static func accessibilityLabel(_ row: IncomeModel.Row) -> String {
+        var parts = [row.title]
+        if let raw = row.rawSourceName { parts.append(raw) }
+        parts += row.marks
+        parts += [row.amountText, row.frequencyLabel, "from \(row.effectiveText)"]
         return parts.joined(separator: ", ")
     }
 }

@@ -16,11 +16,12 @@ struct MoneyView: View {
     @State private var overview: OverviewModel?
     @State private var transactions: TransactionsModel?
     @State private var bills: ExpensesModel
+    @State private var income: IncomeModel
     @State private var segment = Segment.overview
     @State private var preview: URL?
     @State private var exporting = false
 
-    init(api: any SpendozaAPI, onSessionEnded: @escaping @MainActor () -> Void,
+    init(api: any SpendozaAPI, selfID: @escaping @MainActor () -> String?, onSessionEnded: @escaping @MainActor () -> Void,
          onAccountDisabled: @escaping @MainActor (String) -> Void) {
         self.api = api
         self.onSessionEnded = onSessionEnded
@@ -33,6 +34,10 @@ struct MoneyView: View {
         bills.onSessionEnded = onSessionEnded
         bills.onAccountDisabled = onAccountDisabled
         _bills = State(initialValue: bills)
+        let income = IncomeModel(api: api, selfID: selfID)
+        income.onSessionEnded = onSessionEnded
+        income.onAccountDisabled = onAccountDisabled
+        _income = State(initialValue: income)
     }
 
     var body: some View {
@@ -41,7 +46,10 @@ struct MoneyView: View {
                 .refreshable {
                     switch segment {
                     case .transactions: await transactions?.load()
-                    case .bills: await bills.load()
+                    case .bills:
+                        async let billsLoaded: Void = bills.load()
+                        async let incomeLoaded: Void = income.load()
+                        _ = await (billsLoaded, incomeLoaded)
                     default: await overview?.load()
                     }
                 }
@@ -68,8 +76,11 @@ struct MoneyView: View {
                     .frame(maxWidth: .infinity, minHeight: 240)
                     .accessibilityLabel("Loading your money")
             } else {
-                MoneyMonthMenu(model: model, canExport: overview?.report != nil, exporting: exporting) {
-                    Task { await export() }
+                // Bills and income aren't month-scoped, so a month picker there would do nothing.
+                if segment != .bills {
+                    MoneyMonthMenu(model: model, canExport: overview?.report != nil, exporting: exporting) {
+                        Task { await export() }
+                    }
                 }
                 Picker("Section", selection: $segment) {
                     ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
@@ -82,7 +93,7 @@ struct MoneyView: View {
                 case .transactions:
                     if let transactions { TransactionsView(model: transactions) }
                 case .bills:
-                    BillsView(model: bills)
+                    BillsView(model: bills, income: income)
                 }
             }
         }

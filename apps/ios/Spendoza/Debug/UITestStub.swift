@@ -95,6 +95,21 @@ enum UITestStub {
             Expense(id: "e6", categoryID: "c1", description: "Car registration", amount: 212, frequency: .oneTime,
                     nextDueDate: due(26)),
         ]
+        // Bills ▸ Income: one of yours (auto-detected), one Ann (a household member) owns and attributed to you, one with a
+        // custom name, and an AI-suggested one-time entry.
+        func income(_ id: String, _ source: String, friendly: String? = nil, _ amount: Double, _ frequency: IncomeFrequency,
+                    _ month: Int, owner: String = "ui-test-user", attributedUser: String? = nil, attributedName: String? = nil,
+                    auto: Bool = false, ai: Bool = false) -> IncomeEntry {
+            IncomeEntry(id: id, ownerID: owner, sourceName: source, friendlyName: friendly, amount: amount, frequency: frequency,
+                        effectiveDate: Calendar.current.date(from: DateComponents(year: 2026, month: month, day: 1))!,
+                        attributedToUserID: attributedUser, attributedToName: attributedName, autoDetected: auto, aiSuggested: ai)
+        }
+        api.incomeList = [
+            income("in1", "ACME CORP PAYROLL", friendly: "Salary", 4200.5, .monthly, 10, auto: true),
+            income("in2", "Freelance design", 650, .monthly, 8, owner: "u-ann", attributedUser: "ui-test-user"),
+            income("in3", "Rental income", 900, .monthly, 6, attributedName: "Jane (partner)"),
+            income("in4", "Tax refund", 1200, .oneTime, 3, ai: true),
+        ]
         // October's other transactions: pay and groceries, a refund, and one nothing has categorized yet.
         func tx(_ id: String, _ date: String, _ name: String, _ amount: Double, _ category: String?,
                 type: TransactionType = .debit) -> Transaction {

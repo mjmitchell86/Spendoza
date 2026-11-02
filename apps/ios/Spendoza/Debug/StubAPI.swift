@@ -456,10 +456,13 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     func saveIncome(_ draft: IncomeDraft, id: String?) async throws -> IncomeEntry {
         try moneyAction("saveIncome", "saveIncome(\(id ?? "new"), \(draft.sourceName))")
-        let saved = IncomeEntry(id: id ?? "i-\(calls.count)", ownerID: simulatedUserID, sourceName: draft.sourceName,
+        // An update keeps whose entry it is.
+        let existing = lock.withLock { incomeList.first { $0.id == id } }
+        let saved = IncomeEntry(id: id ?? "i-\(calls.count)", ownerID: existing?.ownerID ?? simulatedUserID, sourceName: draft.sourceName,
                                 friendlyName: draft.friendlyName, amount: draft.amount, frequency: draft.frequency,
                                 effectiveDate: draft.effectiveDate, endDate: draft.endDate,
-                                attributedToUserID: draft.attributedToUserID, attributedToName: draft.attributedToName)
+                                attributedToUserID: draft.attributedToUserID, attributedToName: draft.attributedToName,
+                                autoDetected: existing?.autoDetected ?? false, aiSuggested: existing?.aiSuggested ?? false)
         lock.withLock {
             if let index = incomeList.firstIndex(where: { $0.id == saved.id }) { incomeList[index] = saved } else { incomeList.append(saved) }
         }

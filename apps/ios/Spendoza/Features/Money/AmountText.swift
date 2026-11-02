@@ -10,7 +10,8 @@ enum AmountText {
         let decimal = locale.decimalSeparator ?? "."
         let grouping = locale.groupingSeparator ?? ","
         // Spaces never carry meaning (some locales group with one).
-        let cleaned = String(text.filter { !$0.isWhitespace })
+        // Native digits ("١٢٫٥٠" in Arabic locales, which is also how `format` writes them) read as ASCII ones.
+        let cleaned = String(text.filter { !$0.isWhitespace }.map(asciiDigit))
         guard !cleaned.isEmpty else { return nil }
         let halves = cleaned.components(separatedBy: decimal)
         guard halves.count <= 2 else { return nil }
@@ -24,12 +25,22 @@ enum AmountText {
         }
         guard isDigits(whole, allowEmpty: fraction?.isEmpty == false) else { return nil }
         if whole.isEmpty && fraction == nil { return nil }
-        return Double("\(whole.isEmpty ? "0" : whole).\(fraction.flatMap { $0.isEmpty ? nil : $0 } ?? "0")")
+        // A very long run of digits reads as infinity, which passes "above zero".
+        guard let value = Double("\(whole.isEmpty ? "0" : whole).\(fraction.flatMap { $0.isEmpty ? nil : $0 } ?? "0")"),
+              value.isFinite else { return nil }
+        return value
     }
 
-    /// "15.49" or "15,49": up to two decimals, no grouping, so it reads back with `parse`.
+    /// "15.49" or "15,49": up to two decimals, no grouping, so it reads back with `parse` (native digits included).
     static func format(_ value: Double, locale: Locale) -> String {
         value.formatted(.number.precision(.fractionLength(0...2)).grouping(.never).locale(locale))
+    }
+
+    /// The ASCII digit for any decimal digit character; other characters unchanged.
+    private static func asciiDigit(_ character: Character) -> Character {
+        guard !character.isASCII, character.isNumber, let value = character.wholeNumberValue, (0...9).contains(value),
+              let scalar = Unicode.Scalar(UInt32(48 + value)) else { return character }
+        return Character(scalar)
     }
 
     private static func isDigits(_ text: String, allowEmpty: Bool) -> Bool {

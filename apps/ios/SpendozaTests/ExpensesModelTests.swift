@@ -224,6 +224,32 @@ struct ExpensesModelTests {
         #expect(AmountText.parse("-5", locale: us) == nil)
     }
 
+    @Test func aVeryLongNumberIsRejectedNotReadAsInfinity() {
+        let huge = String(repeating: "9", count: 400)
+        #expect(AmountText.parse(huge, locale: us) == nil)
+        #expect(AmountText.parse("\(huge).5", locale: us) == nil)
+        var f = ExpenseForm(today: day(2026, 11, 1), locale: us)
+        f.amountText = huge
+        #expect(f.amount == nil)
+    }
+
+    @Test func formattedAmountsReadBackInEveryLocale() {
+        for id in ["en_US", "de_DE", "fr_FR", "ar_EG", "fa_IR", "hi_IN", "bn_BD", "ar_SA"] {
+            let locale = Locale(identifier: id)
+            for value in [15.49, 1234.5, 40, 0.07] {
+                let text = AmountText.format(value, locale: locale)
+                #expect(AmountText.parse(text, locale: locale) == value, "\(id): \(text)")
+            }
+        }
+    }
+
+    @Test func nativeDigitsAreReadToo() {
+        let ar = Locale(identifier: "ar_EG")
+        let point = ar.decimalSeparator ?? "."
+        #expect(AmountText.parse("١٢\(point)٥", locale: ar) == 12.5)
+        #expect(AmountText.parse("12\(point)5", locale: ar) == 12.5)
+    }
+
     @Test func formReadsItsAmountInTheFormsLocale() {
         var f = ExpenseForm(today: day(2026, 11, 1), locale: de)
         f.amountText = "12,50"
