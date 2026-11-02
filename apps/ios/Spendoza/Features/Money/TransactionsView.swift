@@ -29,12 +29,17 @@ struct TransactionsView: View {
     }
 
     private var searchField: some View {
-        TextField("", text: $model.search, prompt: Text("Search descriptions...").foregroundStyle(Theme.soft))
+        TextField("", text: $model.search, prompt: Text("Search descriptions...").foregroundStyle(Theme.soft), axis: .vertical)
+            // The prompt wraps at the largest text sizes instead of being clipped; Return ends the search rather than adding a line.
+            .lineLimit(1...3)
             .font(.sans(16, relativeTo: .body))
             .foregroundStyle(Theme.ink)
             .tint(Theme.note)
             .autocorrectionDisabled()
             .submitLabel(.search)
+            .onChange(of: model.search) { _, text in
+                if text.contains("\n") { model.search = text.replacingOccurrences(of: "\n", with: "") }
+            }
             .padding(.horizontal, 12)
             .frame(minHeight: 44)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.corner))
