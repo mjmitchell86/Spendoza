@@ -2,7 +2,7 @@ import QuickLook
 import SpendozaKit
 import SwiftUI
 
-/// The Money tab: a month menu and three segments. Tasks for Transactions and Bills fill their segments in.
+/// The Money tab: a month menu and three segments.
 struct MoneyView: View {
     enum Segment: String, CaseIterable, Identifiable {
         case overview = "Overview", transactions = "Transactions", bills = "Bills"
@@ -15,6 +15,7 @@ struct MoneyView: View {
     @State private var model: MoneyModel
     @State private var overview: OverviewModel?
     @State private var transactions: TransactionsModel?
+    @State private var bills: ExpensesModel
     @State private var segment = Segment.overview
     @State private var preview: URL?
     @State private var exporting = false
@@ -28,6 +29,10 @@ struct MoneyView: View {
         model.onSessionEnded = onSessionEnded
         model.onAccountDisabled = onAccountDisabled
         _model = State(initialValue: model)
+        let bills = ExpensesModel(api: api)
+        bills.onSessionEnded = onSessionEnded
+        bills.onAccountDisabled = onAccountDisabled
+        _bills = State(initialValue: bills)
     }
 
     var body: some View {
@@ -36,6 +41,7 @@ struct MoneyView: View {
                 .refreshable {
                     switch segment {
                     case .transactions: await transactions?.load()
+                    case .bills: await bills.load()
                     default: await overview?.load()
                     }
                 }
@@ -76,7 +82,7 @@ struct MoneyView: View {
                 case .transactions:
                     if let transactions { TransactionsView(model: transactions) }
                 case .bills:
-                    EmptyView()
+                    BillsView(model: bills)
                 }
             }
         }

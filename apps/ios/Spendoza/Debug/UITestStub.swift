@@ -73,16 +73,27 @@ enum UITestStub {
         func due(_ day: Int) -> Date {
             Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: day))!
         }
-        func bill(_ id: String, _ name: String, _ amount: Double, day: Int, auto: Bool = false) -> Expense {
-            Expense(id: id, categoryID: "c4", description: name, amount: amount, frequency: .recurring, interval: .monthly,
+        func bill(_ id: String, _ name: String, _ amount: Double, day: Int, auto: Bool = false, category: String = "c4") -> Expense {
+            Expense(id: id, categoryID: category, description: name, amount: amount, frequency: .recurring, interval: .monthly,
                     nextDueDate: due(day), autoDetected: auto)
         }
         api.expenseList = [
             bill("e0", "Gym", 29, day: 3),
             bill("e1", "Netflix", 15.49, day: 6, auto: true),
-            bill("e2", "Rent", 1800, day: 8),
-            bill("e3", "Phone", 62.5, day: 15),
-            bill("e4", "Car insurance", 148.2, day: 21, auto: true),
+            bill("e2", "Rent", 1800, day: 8, category: "c1"),
+            bill("e3", "Phone", 62.5, day: 15, category: "c5"),
+            bill("e4", "Car insurance", 148.2, day: 21, auto: true, category: "c1"),
+        ]
+        // What Overview's Upcoming bills lists stays these five; the Bills tab also shows the rest.
+        api.upcomingBillList = api.expenseList
+        // An AI-adjusted annual bill (its original amount struck through) and a one-time one.
+        api.expenseList += [
+            Expense(id: "e5", categoryID: "c5", description: "AMZN PRIME MEMBERSHIP", friendlyName: "Prime", amount: 139,
+                    frequency: .recurring, interval: .annually,
+                    nextDueDate: Calendar.current.date(from: DateComponents(year: 2027, month: 3, day: 14))!,
+                    autoDetected: true, isAIAdjusted: true, originalAmount: 119),
+            Expense(id: "e6", categoryID: "c1", description: "Car registration", amount: 212, frequency: .oneTime,
+                    nextDueDate: due(26)),
         ]
         // October's other transactions: pay and groceries, a refund, and one nothing has categorized yet.
         func tx(_ id: String, _ date: String, _ name: String, _ amount: Double, _ category: String?,
