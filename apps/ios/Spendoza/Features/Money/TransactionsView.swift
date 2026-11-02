@@ -16,9 +16,13 @@ struct TransactionsView: View {
             if let move = model.lastMove { undoBar(move).padding(.top, 12) }
             list.padding(.top, 8)
         }
+        .onChange(of: model.lastMove) { _, move in
+            if let move { UIAccessibility.post(notification: .announcement, argument: Self.undoText(move)) }
+        }
         .sheet(item: $moving) { transaction in
             CategoryPickerSheet(transaction: transaction, current: transaction.category ?? TransactionsModel.uncategorized,
-                                targets: model.categoryChoices) { name in
+                                targets: model.pickerTargets(for: transaction),
+                                offersUncategorized: model.offersUncategorized(for: transaction)) { name in
                 Task { await model.recategorize(transaction, to: name) }
             }
         }
@@ -133,7 +137,7 @@ struct TransactionsView: View {
     private func undoBar(_ move: TransactionsModel.Move) -> some View {
         OutlinedPanel {
             HStack {
-                Text("Moved \(move.transaction.description) to \(move.destination).")
+                Text(Self.undoText(move))
                     .font(.sans(14, relativeTo: .footnote))
                 Spacer(minLength: 8)
                 Button("Undo") { Task { await model.undo() } }
@@ -143,5 +147,9 @@ struct TransactionsView: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private static func undoText(_ move: TransactionsModel.Move) -> String {
+        "Moved \(move.transaction.description) to \(move.destination)."
     }
 }

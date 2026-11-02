@@ -123,6 +123,18 @@ struct TransactionsModelTests {
         #expect(TransactionsModel.amountText(m.all.first { $0.id == "t1" }!) == "−$212.40")
     }
 
+    @Test func pickerTargetsLeaveOutTheCurrentCategory() async {
+        let m = await model(api())
+        let dining = m.all.first { $0.id == "t1" }!
+        #expect(!m.pickerTargets(for: dining).map(\.name).contains("Dining out"))
+        #expect(m.pickerTargets(for: dining).map(\.name).contains("Groceries"))
+        #expect(m.offersUncategorized(for: dining))
+        let none = m.all.first { $0.id == "t5" }!
+        #expect(!m.pickerTargets(for: none).map(\.name).contains("Uncategorized"))
+        #expect(m.pickerTargets(for: none).count == DrillFixture.categories.count)
+        #expect(!m.offersUncategorized(for: none))
+    }
+
     @Test func aFailedLoadSaysSo() async {
         let api = api()
         api.transactionsError = .offline

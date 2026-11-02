@@ -92,6 +92,14 @@ final class TransactionsModel {
         categories.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    /// The categories a transaction can move to: all but the one it is in.
+    func pickerTargets(for transaction: Transaction) -> [BudgetCategory] {
+        categoryChoices.filter { $0.name != transaction.category }
+    }
+
+    /// Whether the picker offers Uncategorized (not when the transaction already is).
+    func offersUncategorized(for transaction: Transaction) -> Bool { transaction.category != nil }
+
     /// "+$2,400.00" for a credit, "−$212.40" for a debit (a true minus sign).
     static func amountText(_ transaction: Transaction) -> String {
         let text = Money.cents(transaction.amount)

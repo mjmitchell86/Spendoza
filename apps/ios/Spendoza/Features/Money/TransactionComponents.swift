@@ -14,8 +14,12 @@ struct TransactionRow: View {
     }
 
     private var subtitle: String {
-        let date = shortDate(transaction.date)
-        return showsSignAndCategory ? "\(date) · \(transaction.category ?? TransactionsModel.uncategorized)" : date
+        showsSignAndCategory ? (transaction.category ?? TransactionsModel.uncategorized) : shortDate(transaction.date)
+    }
+
+    /// The date is on screen once in the day header, so it is spoken once, after the category.
+    private var spoken: String {
+        showsSignAndCategory ? "\(subtitle), \(shortDate(transaction.date))" : subtitle
     }
 
     private var details: some View {
@@ -57,7 +61,7 @@ struct TransactionRow: View {
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(transaction.description), \(amountText), \(subtitle)")
+        .accessibilityLabel("\(transaction.description), \(amountText), \(spoken)")
         .accessibilityHint("Choose another category")
     }
 }
@@ -67,6 +71,8 @@ struct CategoryPickerSheet: View {
     let transaction: Transaction
     let current: String
     let targets: [BudgetCategory]
+    /// False when the transaction is already uncategorized.
+    var offersUncategorized = true
     /// Why the category list couldn't load; the sheet then offers a retry instead of a list it doesn't have.
     var error: String?
     var retry: () async -> Void = {}
@@ -106,7 +112,7 @@ struct CategoryPickerSheet: View {
                 .padding(.bottom, 12)
             }
             VStack(spacing: 0) {
-                row("Uncategorized", value: nil)
+                if offersUncategorized { row("Uncategorized", value: nil) }
                 ForEach(targets, id: \.id) { category in
                     row(category.name, value: category.name)
                 }
