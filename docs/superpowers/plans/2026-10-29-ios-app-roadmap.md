@@ -18,4 +18,6 @@ Plan 1 has no dependency on the app and can ship first.
 
 **Feature parity (owner, 2026-10-29):** every feature ships to the web and the app together. New web features get their app tasks in the same plan; plans 3–6 also list any web gaps they find. Tabs appear in the app only once their plan lands, so intermediate TestFlight builds never show placeholder screens.
 
-**Web gaps found by Plan 3 (Money):** the web has no category filter on its transactions list (the app has one); the web swallowed errors when deleting an expense, so a failed delete looked like it worked (fixed on the app only; the web still needs the same fix).
+**Web gaps found by Plan 3 (Money):** the web has no category filter on its transactions list (the app has one; still open). Fixed on the web in the same branch: a failed expense (or income) delete now shows the server's message instead of looking like it worked; Delete on an income entry shows only for its owner, and someone an entry is attributed to sees who it is attributed to read-only (the API now refuses an attribution change from them with 403, and a delete that matches nothing with 404).
+
+**MCP gap found by Plan 3 (Money):** the MCP server has no tools to create, rename or delete categories (the web and the app both can). An MCP follow-up adds them, keeping the API's rules: system defaults can't be renamed, reclassified or deleted.
