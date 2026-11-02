@@ -41,8 +41,8 @@ final class OverviewModel {
     private(set) var report: Report?
     /// Recurring bills due today or later, soonest first.
     private(set) var upcoming: [Expense] = []
-    /// This month's statements, by `statementMonth`.
-    private(set) var statements: [Statement] = []
+    /// This month's statements, by `statementMonth`, from the shared poller (so they follow it while one processes).
+    var statements: [Statement] { poller.statements.filter { $0.statementMonth == month } }
     private(set) var hasLoaded = false
     private(set) var loadError: String?
     private(set) var refreshing = false
@@ -51,12 +51,15 @@ final class OverviewModel {
     @ObservationIgnored var onSessionEnded: (@MainActor () -> Void)?
     @ObservationIgnored var onAccountDisabled: (@MainActor (String) -> Void)?
     @ObservationIgnored private let api: any SpendozaAPI
+    let poller: StatementPoller
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let calendar: Calendar
 
-    init(api: any SpendozaAPI, month: Month, now: @escaping () -> Date = { AppClock.now }, calendar: Calendar = .current) {
+    init(api: any SpendozaAPI, month: Month, poller: StatementPoller, now: @escaping () -> Date = { AppClock.now },
+         calendar: Calendar = .current) {
         self.api = api
         self.month = month
+        self.poller = poller
         self.now = now
         self.calendar = calendar
     }
@@ -66,6 +69,9 @@ final class OverviewModel {
     var isEmpty: Bool { hasLoaded && loadError == nil && report == nil }
 
     var emptyText: String { "No transactions for \(month.name)" }
+
+    /// The empty month offers "Add statement".
+    var offersAddStatement: Bool { isEmpty }
 
     var totals: Totals? {
         guard let data = report?.data else { return nil }
@@ -118,15 +124,14 @@ final class OverviewModel {
         let api = self.api, month = self.month
         async let reportResult = Self.capture { try await api.personalReport(month) }
         async let billsResult = Self.capture { try await api.upcomingBills(from: today) }
-        async let statementsResult = Self.capture { try await api.statements() }
-        let (fetchedReport, bills, allStatements) = await (reportResult, billsResult, statementsResult)
+        async let statementsLoaded: Void = poller.refresh()
+        let (fetchedReport, bills, _) = await (reportResult, billsResult, statementsLoaded)
         if Task.isCancelled { return }
 
         // The bills and statements are extras: when they fail the report still shows.
         upcoming = ((try? bills.get()) ?? [])
             .filter { $0.nextDueDate >= today }
             .sorted { $0.nextDueDate < $1.nextDueDate }
-        statements = ((try? allStatements.get()) ?? []).filter { $0.statementMonth == month }
         switch fetchedReport {
         case .success(let fetched):
             report = fetched.flatMap { $0.data.hasNoData ? nil : $0 }

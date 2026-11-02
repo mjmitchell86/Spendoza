@@ -305,8 +305,10 @@ public final class APIClient: SpendozaAPI {
         let response: Response = try await send(.json(.post, "/api/transactions/bulk-attribute", body))
         var errors: [String: String?] = [:]
         for result in response.results {
-            errors[result.transactionID] = .some(result.success ? nil : (result.error ?? "Something went wrong. Try again."))
+            errors[result.transactionID] = .some(result.success ? nil : (result.error ?? Self.genericErrorMessage))
         }
+        // An id the server left out of `results` is not known to have saved.
+        for (id, _) in pairs where errors[id] == nil { errors[id] = .some(Self.genericErrorMessage) }
         return errors
     }
 
@@ -394,6 +396,9 @@ public final class APIClient: SpendozaAPI {
         throw Self.error(status: status, data: data)
     }
 
+    /// What an error with no server text says.
+    public static let genericErrorMessage = "Something went wrong. Try again."
+
     static func error(status: Int, data: Data) -> APIError {
         struct Body: Decodable {
             let error: String?
@@ -411,7 +416,7 @@ public final class APIClient: SpendozaAPI {
         default: break
         }
         if let text = body?.error, !text.isEmpty { return .message(text) }
-        return .message("Something went wrong. Try again.")
+        return .message(genericErrorMessage)
     }
 
     /// The start of a "YYYY-MM-DD" day in the device calendar; nil for anything else.

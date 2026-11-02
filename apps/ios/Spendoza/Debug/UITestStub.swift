@@ -123,12 +123,43 @@ enum UITestStub {
             tx("m5", "2026-10-09", "Venmo J. Alvarez", 45, nil),
             tx("m6", "2026-10-01", "Netflix", 15.49, "Entertainment"),
         ]
+        configureStatements(api)
+    }
+
+    /// Statements in every state, as a live list (uploads, retries and removals change it): two parsed ones for
+    /// October (a shared joint account with transactions to assign, and a personal one), one just uploaded, two
+    /// processing (one on its first retry) and two that failed (with and without the server's reason).
+    private static func configureStatements(_ api: StubAPI) {
         let uploaded = Date(timeIntervalSince1970: 1_792_000_000)
-        api.statementScript = [[
-            Statement(id: "s1", status: .parsed, fileType: "pdf", bankName: "Chase", accountLabel: "Checking", createdAt: uploaded,
-                      statementMonth: DrillFixture.oct),
-            Statement(id: "s2", status: .parsed, fileType: "csv", bankName: "Amex", createdAt: uploaded, statementMonth: DrillFixture.oct),
-        ]]
+        let oct = DrillFixture.oct
+        api.statementStore = [
+            Statement(id: "s1", status: .parsed, fileType: "pdf", bankName: "Chase", accountLabel: "Joint Checking", createdAt: uploaded,
+                      statementMonth: oct, isShared: true),
+            Statement(id: "s2", status: .parsed, fileType: "csv", bankName: "Amex", createdAt: uploaded, statementMonth: oct),
+            Statement(id: "s3", status: .uploaded, fileType: "pdf", createdAt: uploaded),
+            Statement(id: "s4", status: .processing, fileType: "csv", bankName: "Wells Fargo", createdAt: uploaded,
+                      pipelineStep: "classify_transactions", retryCount: 1),
+            Statement(id: "s5", status: .processing, fileType: "pdf", bankName: "Capital One", createdAt: uploaded,
+                      pipelineStep: "extract_text"),
+            Statement(id: "s6", status: .failed, fileType: "pdf", bankName: "Citi", createdAt: uploaded,
+                      failure: StatementFailure(reason: "Could not find any transactions in this PDF", step: "extract_transactions", retryCount: 2),
+                      retryCount: 2),
+            Statement(id: "s7", status: .failed, fileType: "pdf", createdAt: uploaded,
+                      failure: StatementFailure(reason: "", step: "match_and_insert", retryCount: 0)),
+        ]
+        func tx(_ id: String, _ date: String, _ name: String, _ amount: Double, _ category: String?,
+                type: TransactionType = .debit, by: String? = nil) -> Transaction {
+            Transaction(id: id, date: date, description: name, amount: amount, type: type, category: category,
+                        statementID: "s1", attributedTo: by)
+        }
+        api.statementTransactions["s1"] = [
+            tx("a1", "2026-10-28", "Whole Foods Market", 142.88, "Groceries", by: "ui-test-user"),
+            tx("a2", "2026-10-28", "Shell gas station", 48.2, "Transportation"),
+            tx("a3", "2026-10-21", "Landlord rent", 1800, "Housing", by: "u-ann"),
+            tx("a4", "2026-10-15", "Amazon refund", 34.99, "Personal", type: .credit),
+            tx("a5", "2026-10-09", "Venmo J. Alvarez", 45, nil),
+            tx("a6", "2026-10-01", "Netflix", 15.49, "Entertainment"),
+        ]
     }
 
     /// `-uiTestHousehold head|member|none|invited`: the signed-in user heads a household of three (with an

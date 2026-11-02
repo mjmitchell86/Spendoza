@@ -6,6 +6,17 @@ struct MainTabs: View {
     let store: SessionStore
     let lock: AppLock
     @State private var selection = Self.initialTab
+    /// The one statement poller of this signed-in session; it stops when the signed-in screens go away.
+    @State private var poller: StatementPoller
+
+    init(store: SessionStore, lock: AppLock) {
+        self.store = store
+        self.lock = lock
+        let poller = StatementPoller(api: store.api)
+        poller.onSessionEnded = { [store] in Task { await store.signOut() } }
+        poller.onAccountDisabled = { [store] text in Task { await store.accountDisabled(text) } }
+        _poller = State(initialValue: poller)
+    }
 
     /// `-uiTestStartOnMe` (Debug builds only, with the stub API) opens on Me (`-uiTestStartOnMoney` on Money, and `-uiTestHousehold` on Home): with the tab bar hidden for an audit
     /// there is nothing to tap to get there.
@@ -28,6 +39,7 @@ struct MainTabs: View {
             }
             Tab("Money", systemImage: "banknote", value: "Money") {
                 MoneyView(api: store.api,
+                          poller: poller,
                           selfID: { [store] in store.profile?.id },
                           onSessionEnded: { Task { await store.signOut() } },
                           onAccountDisabled: { text in Task { await store.accountDisabled(text) } })
@@ -43,6 +55,7 @@ struct MainTabs: View {
             }
         }
         .tint(Theme.note)
+        .onDisappear { poller.stop() }
         // After sign-up with a household code, open on Home where the result is told.
         .onChange(of: store.signUpNotice != nil, initial: true) { _, hasNotice in
             if hasNotice { selection = "Home" }

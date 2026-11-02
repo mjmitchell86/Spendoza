@@ -7,6 +7,8 @@ struct TransactionRow: View {
     let transaction: Transaction
     /// The Money tab shows "+$…" / "−$…" and the category under the date; Health's debit-only list shows neither.
     var showsSignAndCategory = false
+    /// False while the row selects instead of opening the category picker.
+    var showsChevron = true
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var amountText: String {
@@ -48,21 +50,21 @@ struct TransactionRow: View {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 4) {
                     details
-                    HStack { amount; Spacer(minLength: 8); chevron }
+                    HStack { amount; Spacer(minLength: 8); if showsChevron { chevron } }
                 }
             } else {
                 HStack(alignment: .center, spacing: 8) {
                     details
                     Spacer(minLength: 12)
                     amount
-                    chevron
+                    if showsChevron { chevron }
                 }
             }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(transaction.description), \(amountText), \(spoken)")
-        .accessibilityHint("Choose another category")
+        .accessibilityHint(showsChevron ? "Choose another category" : "")
     }
 }
 

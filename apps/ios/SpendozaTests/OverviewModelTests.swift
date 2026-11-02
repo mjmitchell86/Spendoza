@@ -24,8 +24,9 @@ struct OverviewModelTests {
                 interval: frequency == .recurring ? .monthly : nil, nextDueDate: due, autoDetected: auto)
     }
 
-    private func model(_ api: StubAPI, month: Month? = nil) -> OverviewModel {
-        OverviewModel(api: api, month: month ?? sep, now: { now }, calendar: calendar)
+    private func model(_ api: StubAPI, month: Month? = nil, poller: StatementPoller? = nil) -> OverviewModel {
+        OverviewModel(api: api, month: month ?? sep, poller: poller ?? StatementPoller(api: api, sleep: SleepLog().sleeper),
+                      now: { now }, calendar: calendar)
     }
 
     private func report(_ month: Month, income: Double = 5000, expenses: Double = 4000, rate: Double = 20,
@@ -182,6 +183,37 @@ struct OverviewModelTests {
         let m = model(api)
         await m.load()
         #expect(m.statements.map(\.id) == ["s1", "s3"])
+    }
+
+    @Test func statementsComeFromTheSharedPollerAndFollowItsUpdates() async {
+        let api = StubAPI()
+        api.statementScript = [[Statement(id: "s1", status: .processing, fileType: "pdf", createdAt: now, statementMonth: sep)],
+                               [Statement(id: "s1", status: .parsed, fileType: "pdf", createdAt: now, statementMonth: sep)]]
+        let poller = StatementPoller(api: api, sleep: SleepLog().sleeper)
+        let m = model(api, poller: poller)
+        await m.load()
+        #expect(m.statements.map(\.status) == [.processing])
+        await poller.waitUntilIdle()
+        #expect(m.statements.map(\.status) == [.parsed])
+        // One poller, one request per poll: the model never asks for the list itself.
+        #expect(api.calls.filter { $0 == "statements" }.count == 2)
+    }
+
+    @Test func theEmptyMonthOffersToAddAStatement() async {
+        let api = StubAPI()
+        let m = model(api)
+        await m.load()
+        #expect(m.isEmpty)
+        #expect(m.emptyText == "No transactions for September")
+        #expect(m.offersAddStatement)
+    }
+
+    @Test func aMonthWithAReportDoesNotOfferTheEmptyStateAction() async {
+        let api = StubAPI()
+        api.reports[sep] = report(sep)
+        let m = model(api)
+        await m.load()
+        #expect(!m.offersAddStatement)
     }
 
     // MARK: Refresh

@@ -10,6 +10,8 @@ struct MoneyView: View {
     }
 
     let api: any SpendozaAPI
+    let poller: StatementPoller
+    let selfID: @MainActor () -> String?
     let onSessionEnded: @MainActor () -> Void
     let onAccountDisabled: @MainActor (String) -> Void
     @State private var model: MoneyModel
@@ -17,15 +19,20 @@ struct MoneyView: View {
     @State private var transactions: TransactionsModel?
     @State private var bills: ExpensesModel
     @State private var income: IncomeModel
+    @State private var statements: StatementsModel
     @State private var segment = Segment.overview
     @State private var preview: URL?
     @State private var exporting = false
     @State private var showingCategories = false
+    @State private var showingStatements = false
+    @State private var addingStatement = false
     @State private var categoriesChanged = false
 
-    init(api: any SpendozaAPI, selfID: @escaping @MainActor () -> String?, onSessionEnded: @escaping @MainActor () -> Void,
-         onAccountDisabled: @escaping @MainActor (String) -> Void) {
+    init(api: any SpendozaAPI, poller: StatementPoller, selfID: @escaping @MainActor () -> String?,
+         onSessionEnded: @escaping @MainActor () -> Void, onAccountDisabled: @escaping @MainActor (String) -> Void) {
         self.api = api
+        self.poller = poller
+        self.selfID = selfID
         self.onSessionEnded = onSessionEnded
         self.onAccountDisabled = onAccountDisabled
         let model = MoneyModel(api: api)
@@ -40,11 +47,19 @@ struct MoneyView: View {
         income.onSessionEnded = onSessionEnded
         income.onAccountDisabled = onAccountDisabled
         _income = State(initialValue: income)
+        let statements = StatementsModel(api: api, poller: poller)
+        statements.onSessionEnded = onSessionEnded
+        statements.onAccountDisabled = onAccountDisabled
+        _statements = State(initialValue: statements)
     }
 
     var body: some View {
         NavigationStack {
             ScrollView { page }
+                // On the Overview's own page, so the screens pushed over it don't carry the button.
+                .overlay(alignment: .bottomTrailing) {
+                    if segment == .overview, model.selected != nil, overview?.offersAddStatement != true { addStatementButton }
+                }
                 .refreshable {
                     switch segment {
                     case .transactions: await transactions?.load()
@@ -63,7 +78,12 @@ struct MoneyView: View {
                         categoriesChanged = true
                     }
                 }
+                .navigationDestination(isPresented: $showingStatements) {
+                    StatementsView(model: statements, api: api, selfID: selfID,
+                                   onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
+                }
         }
+        .sheet(isPresented: $addingStatement) { UploadStatementSheet(model: statements) }
         .task { await model.open() }
         .task(id: model.selected) { await showSelectedMonth() }
         .onChange(of: showingCategories) { _, showing in
@@ -78,8 +98,8 @@ struct MoneyView: View {
     private var page: some View {
         VStack(alignment: .leading, spacing: 0) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline) { title; Spacer(minLength: 8); categoriesLink }
-                VStack(alignment: .leading, spacing: 4) { title; categoriesLink }
+                HStack(alignment: .firstTextBaseline, spacing: 16) { title; Spacer(minLength: 8); statementsLink; categoriesLink }
+                VStack(alignment: .leading, spacing: 4) { title; statementsLink; categoriesLink }
             }
             if model.selected == nil {
                 ProgressView().tint(Theme.note)
@@ -99,7 +119,7 @@ struct MoneyView: View {
                 .padding(.bottom, 4)
                 switch segment {
                 case .overview:
-                    if let overview { OverviewView(model: overview) }
+                    if let overview { OverviewView(model: overview) { addingStatement = true } }
                 case .transactions:
                     if let transactions { TransactionsView(model: transactions) }
                 case .bills:
@@ -109,8 +129,24 @@ struct MoneyView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 24)
-        .padding(.bottom, 32)
+        // The floating button sits over the end of the Overview.
+        .padding(.bottom, segment == .overview ? 96 : 32)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var addStatementButton: some View {
+        Button { addingStatement = true } label: {
+            Label("Add statement", systemImage: "plus")
+                .font(.sans(15, weight: .semibold, relativeTo: .callout))
+                .foregroundStyle(Theme.onNote)
+                .padding(.horizontal, 18)
+                .frame(minHeight: 48)
+                .background(Theme.note, in: Capsule())
+                .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 20)
+        .padding(.bottom, 16)
     }
 
     private var title: some View {
@@ -118,6 +154,21 @@ struct MoneyView: View {
             .font(.serif(28, relativeTo: .largeTitle))
             .foregroundStyle(Theme.ink)
             .accessibilityAddTraits(.isHeader)
+    }
+
+    private var statementsLink: some View {
+        Button { showingStatements = true } label: {
+            HStack(spacing: 4) {
+                Text("Statements")
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).accessibilityHidden(true)
+            }
+            .font(.sans(15, weight: .semibold, relativeTo: .callout))
+            .foregroundStyle(Theme.note)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Upload, review and retry bank statements")
     }
 
     private var categoriesLink: some View {
@@ -154,7 +205,7 @@ struct MoneyView: View {
             _ = await (overviewLoaded, listLoaded)
             return
         }
-        let next = OverviewModel(api: api, month: month)
+        let next = OverviewModel(api: api, month: month, poller: poller)
         next.onSessionEnded = onSessionEnded
         next.onAccountDisabled = onAccountDisabled
         overview = next

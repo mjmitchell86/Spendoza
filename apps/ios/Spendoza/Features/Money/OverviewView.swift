@@ -4,6 +4,8 @@ import SwiftUI
 /// The Money tab's Overview: money in against money out, spending by category, upcoming bills and the month's statements.
 struct OverviewView: View {
     let model: OverviewModel
+    /// Opens the upload sheet (the empty month's "Add statement").
+    var addStatement: () -> Void = {}
     @State private var refreshMessage: String?
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -23,6 +25,11 @@ struct OverviewView: View {
                     .font(.sans(15, relativeTo: .subheadline))
                     .foregroundStyle(Theme.soft)
                     .padding(.top, 16)
+                if model.offersAddStatement {
+                    Button("Add statement", action: addStatement)
+                        .buttonStyle(SecondaryButtonStyle())
+                        .padding(.top, 12)
+                }
                 // Bills and statements are not tied to the report: a month with no transactions can still have them.
                 extras
             } else {

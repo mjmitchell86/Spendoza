@@ -33,8 +33,14 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     var statementScript: [[Statement]] = []
     /// The next this-many `statements()` calls throw `.offline`.
     var statementFailures = 0
+    /// Every `statements()` call throws this.
+    var statementError: APIError?
     var updateProfileError: APIError?
     var reprocessError: APIError?
+    var removeError: APIError?
+    /// When set, `statements()` answers this list and uploads, retries and removals change it (the UI-test stub's
+    /// live list); `statementScript` is then ignored.
+    var statementStore: [Statement]?
     private var pollIndex = 0
 
     var calls: [String] { lock.withLock { _calls } }
@@ -119,10 +125,12 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
                + (shared ? " shared" : "") + (accountLabel.map { " label=\($0)" } ?? ""))
         let result: Result<Statement, APIError> = lock.withLock {
             uploadResults.isEmpty
-                ? .success(StubAPI.statement(id: "s-\(_calls.count)", status: .uploaded))
+                ? .success(StubAPI.statement(id: "s-\(_calls.count)", status: statementStore == nil ? .uploaded : .processing))
                 : uploadResults.removeFirst()
         }
-        return try result.get()
+        let uploaded = try result.get()
+        lock.withLock { if statementStore != nil { statementStore?.insert(uploaded, at: 0) } }
+        return uploaded
     }
 
     func statements() async throws -> [Statement] {
@@ -133,7 +141,9 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
             return true
         }
         if fail { throw APIError.offline }
+        if let statementError { throw statementError }
         return lock.withLock {
+            if let statementStore { return statementStore }
             guard !statementScript.isEmpty else { return [] }
             let entry = statementScript[min(pollIndex, statementScript.count - 1)]
             pollIndex += 1
@@ -144,9 +154,19 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     func reprocessStatement(id: String) async throws {
         record("reprocess(\(id))")
         if let reprocessError { throw reprocessError }
+        lock.withLock {
+            guard let index = statementStore?.firstIndex(where: { $0.id == id }), let old = statementStore?[index] else { return }
+            statementStore?[index] = Statement(id: old.id, status: .processing, fileType: old.fileType, bankName: old.bankName,
+                                               accountLabel: old.accountLabel, createdAt: old.createdAt, pipelineStep: "extract_text",
+                                               statementMonth: old.statementMonth, isShared: old.isShared)
+        }
     }
 
-    func removeStatement(id: String) async throws { record("remove(\(id))") }
+    func removeStatement(id: String) async throws {
+        record("remove(\(id))")
+        if let removeError { throw removeError }
+        lock.withLock { statementStore?.removeAll { $0.id == id } }
+    }
     func signUp(email: String, password: String, displayName: String, inviteCode: String) async throws -> SignUpResult { SignUpResult() }
     func joinWaitlist(name: String, email: String) async throws {}
 
@@ -414,6 +434,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     var moneyErrors: [String: APIError] = [:]
     /// Per-transaction errors `bulkAttribute` answers with; a transaction not listed saved.
     var bulkAttributeErrors: [String: String] = [:]
+    /// Transaction ids `bulkAttribute` leaves out of its answer, as a short server response would.
+    var bulkAttributeOmits: Set<String> = []
     /// What `createCategory` and `updateCategory` answer (nil builds one from the arguments).
     var savedCategory: BudgetCategory?
 
@@ -507,7 +529,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
         try moneyAction("bulkAttribute", "bulkAttribute(\(pairs.map { "\($0.0)>\($0.1)" }.joined(separator: ",")))")
         let errors = lock.withLock { bulkAttributeErrors }
         var results: [String: String?] = [:]
-        for (id, _) in pairs { results[id] = .some(errors[id]) }
+        let omitted = lock.withLock { bulkAttributeOmits }
+        for (id, _) in pairs where !omitted.contains(id) { results[id] = .some(errors[id]) }
         return results
     }
 

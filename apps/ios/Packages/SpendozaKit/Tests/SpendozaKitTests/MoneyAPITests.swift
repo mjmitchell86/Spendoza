@@ -237,6 +237,14 @@ extension APIClientTests {
         #expect(results["t2"] == .some("Failed to update transaction"))
     }
 
+    @Test func bulkAttributeCountsAnIdTheServerOmittedAsFailed() async throws {
+        stub(body: #"{"results":[{"transaction_id":"t1","success":true}]}"#)
+        let results = try await client().bulkAttribute([("t1", "u2"), ("t2", "u2")])
+        #expect(results.count == 2)
+        #expect(results["t1"] == .some(nil))
+        #expect(results["t2"] == .some("Something went wrong. Try again."))
+    }
+
     // MARK: statements and transactions
 
     @Test func failedStatementDecodesItsReason() throws {
