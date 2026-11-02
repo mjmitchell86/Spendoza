@@ -265,7 +265,7 @@ export function IncomeForm({
             {!canAttribute && income ? (
               <>
                 <p className="text-sm">
-                  {attributionText(income, householdMembers)}
+                  {attributionText(income, householdMembers, user?.id)}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {OWNER_ONLY_ATTRIBUTION}

@@ -22,27 +22,74 @@ describe("ownsIncome", () => {
 
 describe("attributionText", () => {
   it("names the member, the custom name, or the owner", () => {
-    expect(attributionText({ attributed_to_user_id: "u-2", attributed_to_name: null }, members)).toBe("Jane");
-    expect(attributionText({ attributed_to_user_id: "u-9", attributed_to_name: null }, members)).toBe("Household member");
-    expect(attributionText({ attributed_to_user_id: null, attributed_to_name: " Partner " }, members)).toBe("Partner");
-    expect(attributionText({ attributed_to_user_id: null, attributed_to_name: null }, members)).toBe("Me (default)");
+    expect(
+      attributionText(
+        { attributed_to_user_id: "u-2", attributed_to_name: null },
+        members
+      )
+    ).toBe("Jane");
+    expect(
+      attributionText(
+        { attributed_to_user_id: "u-9", attributed_to_name: null },
+        members
+      )
+    ).toBe("Household member");
+    expect(
+      attributionText(
+        { attributed_to_user_id: null, attributed_to_name: " Partner " },
+        members
+      )
+    ).toBe("Partner");
+    expect(
+      attributionText(
+        { attributed_to_user_id: null, attributed_to_name: null },
+        members
+      )
+    ).toBe("Me (default)");
+  });
+
+  it("says You when it is attributed to the person looking", () => {
+    expect(
+      attributionText(
+        { attributed_to_user_id: "u-2", attributed_to_name: null },
+        members,
+        "u-2"
+      )
+    ).toBe("You");
+    expect(
+      attributionText(
+        { attributed_to_user_id: "u-2", attributed_to_name: null },
+        members,
+        "u-1"
+      )
+    ).toBe("Jane");
   });
 });
 
 describe("incomeSaveBody", () => {
-  const data = { source_name: "Acme", amount: 10, attributed_to_user_id: null, attributed_to_name: "Jane" };
+  const data = {
+    source_name: "Acme",
+    amount: 10,
+    attributed_to_user_id: null,
+    attributed_to_name: "Jane",
+  };
 
   it("keeps the attribution for the owner", () => {
     expect(incomeSaveBody(data, true)).toEqual(data);
   });
 
   it("leaves the attribution out for someone the entry is only attributed to", () => {
-    expect(incomeSaveBody(data, false)).toEqual({ source_name: "Acme", amount: 10 });
+    expect(incomeSaveBody(data, false)).toEqual({
+      source_name: "Acme",
+      amount: 10,
+    });
   });
 });
 
 describe("owner-only note", () => {
   it("matches the server's refusal", () => {
-    expect(OWNER_ONLY_ATTRIBUTION).toBe("Only the owner can change who this income is attributed to.");
+    expect(OWNER_ONLY_ATTRIBUTION).toBe(
+      "Only the owner can change who this income is attributed to."
+    );
   });
 });
