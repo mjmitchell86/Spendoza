@@ -35,6 +35,8 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
     var statementFailures = 0
     /// Every `statements()` call throws this.
     var statementError: APIError?
+    /// Runs inside `statements()` before it answers (tests hold a fetch open with it).
+    var statementsHook: @Sendable () async -> Void = {}
     var updateProfileError: APIError?
     var reprocessError: APIError?
     var removeError: APIError?
@@ -135,6 +137,7 @@ final class StubAPI: SpendozaAPI, @unchecked Sendable {
 
     func statements() async throws -> [Statement] {
         record("statements")
+        await statementsHook()
         let fail: Bool = lock.withLock {
             guard statementFailures > 0 else { return false }
             statementFailures -= 1

@@ -25,6 +25,7 @@ struct MoneyView: View {
     @State private var exporting = false
     @State private var showingCategories = false
     @State private var showingStatements = false
+    @State private var openedStatement: String?
     @State private var addingStatement = false
     @State private var categoriesChanged = false
 
@@ -78,6 +79,10 @@ struct MoneyView: View {
                         categoriesChanged = true
                     }
                 }
+                .navigationDestination(item: $openedStatement) { id in
+                    StatementDetailView(api: api, statementID: id, statements: statements, selfID: selfID,
+                                        onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
+                }
                 .navigationDestination(isPresented: $showingStatements) {
                     StatementsView(model: statements, api: api, selfID: selfID,
                                    onSessionEnded: onSessionEnded, onAccountDisabled: onAccountDisabled)
@@ -119,7 +124,10 @@ struct MoneyView: View {
                 .padding(.bottom, 4)
                 switch segment {
                 case .overview:
-                    if let overview { OverviewView(model: overview) { addingStatement = true } }
+                    if let overview {
+                        OverviewView(model: overview, addStatement: { addingStatement = true },
+                                     openStatement: { openedStatement = $0 })
+                    }
                 case .transactions:
                     if let transactions { TransactionsView(model: transactions) }
                 case .bills:

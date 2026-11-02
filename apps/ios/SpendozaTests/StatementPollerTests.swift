@@ -16,6 +16,32 @@ final class SleepLog: @unchecked Sendable {
     }
 }
 
+/// Holds callers until `open()`.
+final class Gate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            let resume = lock.withLock { () -> Bool in
+                if !isOpen { waiting.append(continuation) }
+                return isOpen
+            }
+            if resume { continuation.resume() }
+        }
+    }
+
+    func open() {
+        let toResume = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            isOpen = true
+            defer { waiting = [] }
+            return waiting
+        }
+        toResume.forEach { $0.resume() }
+    }
+}
+
 @MainActor
 struct StatementPollerTests {
     private let when = Date(timeIntervalSince1970: 1_792_000_000)
@@ -97,6 +123,28 @@ struct StatementPollerTests {
         #expect(!poller.isPolling)
         await poller.waitUntilIdle()
         #expect(api.calls.filter { $0 == "statements" }.count == 1)
+    }
+
+    @Test func aRefreshFinishingAfterStopDoesNotStartPolling() async {
+        let api = StubAPI()
+        api.statementScript = [[statement("s1", .processing)]]
+        let gate = Gate()
+        api.statementsHook = { await gate.wait() }
+        let log = SleepLog()
+        let poller = StatementPoller(api: api, sleep: log.sleeper)
+        let refreshing = Task { await poller.refresh() }
+        while !api.calls.contains("statements") { await Task.yield() }
+        // Sign-out: the screens go away while the fetch is still in flight.
+        poller.stop()
+        gate.open()
+        await refreshing.value
+        #expect(!poller.isPolling)
+        await poller.waitUntilIdle()
+        #expect(log.durations.isEmpty)
+        #expect(api.calls.filter { $0 == "statements" }.count == 1)
+        // A later refresh on the stopped poller does nothing more either.
+        await poller.refresh()
+        #expect(!poller.isPolling)
     }
 
     @Test func anEndedSessionStopsPollingAndSaysSo() async {

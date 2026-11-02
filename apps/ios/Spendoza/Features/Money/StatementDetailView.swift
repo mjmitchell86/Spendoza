@@ -180,32 +180,36 @@ struct StatementDetailView: View {
         }
     }
 
+    /// One ruled row: the transaction, then its "Assign to" line and any error, all above the row's rule.
     private func transactionRow(_ transaction: Transaction) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                if model.isSelecting { model.toggle(transaction) } else { moving = transaction }
-            } label: {
-                HStack(spacing: 8) {
-                    if model.isSelecting {
-                        Image(systemName: model.selected.contains(transaction.id) ? "checkmark.square.fill" : "square")
-                            .font(.system(size: 22))
-                            .foregroundStyle(model.selected.contains(transaction.id) ? Theme.note : Theme.soft)
-                            .frame(minWidth: 28)
-                            .accessibilityHidden(true)
+        RuledRow {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    if model.isSelecting { model.toggle(transaction) } else { moving = transaction }
+                } label: {
+                    HStack(spacing: 8) {
+                        if model.isSelecting {
+                            Image(systemName: model.selected.contains(transaction.id) ? "checkmark.square.fill" : "square")
+                                .font(.system(size: 22))
+                                .foregroundStyle(model.selected.contains(transaction.id) ? Theme.note : Theme.soft)
+                                .frame(minWidth: 28)
+                                .accessibilityHidden(true)
+                        }
+                        TransactionRow(transaction: transaction, showsSignAndCategory: true, showsChevron: !model.isSelecting,
+                                       ruled: false)
                     }
-                    TransactionRow(transaction: transaction, showsSignAndCategory: true, showsChevron: !model.isSelecting)
                 }
-            }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(model.isSelecting && model.selected.contains(transaction.id) ? .isSelected : [])
-            if model.canAssign, !model.isSelecting {
-                assignMenu(transaction)
-            }
-            if let error = model.rowErrors[transaction.id] {
-                Text(error)
-                    .font(.sans(13, relativeTo: .footnote))
-                    .foregroundStyle(Theme.oxblood)
-                    .padding(.bottom, 8)
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(model.isSelecting && model.selected.contains(transaction.id) ? .isSelected : [])
+                if model.canAssign, !model.isSelecting {
+                    assignMenu(transaction)
+                }
+                if let error = model.rowErrors[transaction.id] {
+                    Text(error)
+                        .font(.sans(13, relativeTo: .footnote))
+                        .foregroundStyle(Theme.oxblood)
+                        .padding(.bottom, 4)
+                }
             }
         }
     }

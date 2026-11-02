@@ -16,6 +16,7 @@ struct UploadStatementSheet: View {
     @State private var accountLabel = ""
     @State private var problems: [String: String] = [:]
     @State private var uploading = false
+    @State private var uploadTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
@@ -45,7 +46,11 @@ struct UploadStatementSheet: View {
             guard case .success(let urls) = result else { return }
             add(urls.filter { $0.startAccessingSecurityScopedResource() }, picked: urls)
         }
-        .onDisappear { held.forEach { $0.stopAccessingSecurityScopedResource() } }
+        .onDisappear {
+            // Closed (or signed out) mid-upload: the rest of the files are not sent.
+            uploadTask?.cancel()
+            held.forEach { $0.stopAccessingSecurityScopedResource() }
+        }
     }
 
     // MARK: Pieces
@@ -193,7 +198,7 @@ struct UploadStatementSheet: View {
         uploading = true
         problems = [:]
         let queued = files
-        Task {
+        uploadTask = Task {
             let failed = await model.upload(files: queued, bankName: bankName, shared: shared, accountLabel: accountLabel)
             problems = failed
             // Files that went are done with; the ones that failed stay for another try.

@@ -6,6 +6,8 @@ struct OverviewView: View {
     let model: OverviewModel
     /// Opens the upload sheet (the empty month's "Add statement").
     var addStatement: () -> Void = {}
+    /// Opens a statement from "Statements this month".
+    var openStatement: (String) -> Void = { _ in }
     @State private var refreshMessage: String?
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -58,7 +60,7 @@ struct OverviewView: View {
 
     @ViewBuilder private var extras: some View {
         UpcomingBillsSection(rows: model.upcomingRows)
-        MonthStatementsSection(statements: model.statements)
+        MonthStatementsSection(rows: model.statementRows, open: openStatement)
     }
 
     /// Two engraved bars, income and spending, with their figures under them.

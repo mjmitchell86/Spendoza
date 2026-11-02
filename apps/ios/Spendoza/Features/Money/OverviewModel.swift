@@ -42,7 +42,15 @@ final class OverviewModel {
     /// Recurring bills due today or later, soonest first.
     private(set) var upcoming: [Expense] = []
     /// This month's statements, by `statementMonth`, from the shared poller (so they follow it while one processes).
-    var statements: [Statement] { poller.statements.filter { $0.statementMonth == month } }
+    /// One still being read has no month yet; it shows here until it gets one.
+    var statements: [Statement] {
+        poller.statements.filter {
+            $0.statementMonth == month || ($0.statementMonth == nil && ($0.status == .uploaded || $0.status == .processing))
+        }
+    }
+
+    /// The same rows, words and statuses as the Statements list.
+    var statementRows: [StatementRow] { statements.map(StatementsModel.row) }
     private(set) var hasLoaded = false
     private(set) var loadError: String?
     private(set) var refreshing = false

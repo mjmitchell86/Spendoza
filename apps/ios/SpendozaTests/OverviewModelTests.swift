@@ -182,7 +182,36 @@ struct OverviewModelTests {
         ]]
         let m = model(api)
         await m.load()
-        #expect(m.statements.map(\.id) == ["s1", "s3"])
+        // s4 is still being read, so it has no month yet: it shows until it gets one.
+        #expect(m.statements.map(\.id) == ["s1", "s3", "s4"])
+    }
+
+    @Test func aStatementWithNoMonthShowsOnlyWhileItIsBeingRead() async {
+        let api = StubAPI()
+        api.statementScript = [[
+            Statement(id: "up", status: .uploaded, fileType: "pdf", createdAt: now),
+            Statement(id: "pr", status: .processing, fileType: "csv", createdAt: now),
+            Statement(id: "fa", status: .failed, fileType: "pdf", createdAt: now),
+            Statement(id: "ok", status: .parsed, fileType: "pdf", createdAt: now),
+            Statement(id: "oct", status: .processing, fileType: "pdf", createdAt: now, statementMonth: oct),
+        ]]
+        let m = model(api)
+        await m.load()
+        #expect(m.statements.map(\.id) == ["up", "pr"])
+    }
+
+    @Test func overviewStatementRowsUseTheListsWords() async {
+        let api = StubAPI()
+        api.statementScript = [[
+            Statement(id: "s1", status: .parsed, fileType: "pdf", createdAt: now, statementMonth: sep),
+            Statement(id: "s2", status: .processing, fileType: "csv", bankName: "Amex", createdAt: now,
+                      pipelineStep: "classify_transactions"),
+        ]]
+        let m = model(api)
+        await m.load()
+        #expect(m.statementRows.map(\.title) == ["Unknown bank", "Amex"])
+        #expect(m.statementRows.map(\.statusText) == ["Parsed", "Processing"])
+        #expect(m.statementRows[1].progress == "Classifying")
     }
 
     @Test func statementsComeFromTheSharedPollerAndFollowItsUpdates() async {

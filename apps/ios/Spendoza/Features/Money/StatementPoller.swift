@@ -20,6 +20,8 @@ final class StatementPoller {
     @ObservationIgnored private let interval: Duration
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private var loop: Task<Void, Never>?
+    /// `stop()` is final: a refresh still in flight when the session ended must not start polling again.
+    @ObservationIgnored private var isStopped = false
 
     init(api: any SpendozaAPI, interval: Duration = StatementPoller.interval,
          sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
@@ -40,8 +42,9 @@ final class StatementPoller {
         ensurePolling()
     }
 
-    /// Ends polling (sign-out, the signed-in screens went away).
+    /// Ends polling for good (sign-out, the signed-in screens went away).
     func stop() {
+        isStopped = true
         loop?.cancel()
         loop = nil
     }
@@ -50,7 +53,7 @@ final class StatementPoller {
     func waitUntilIdle() async { await loop?.value }
 
     private func ensurePolling() {
-        guard loop == nil, isProcessing else { return }
+        guard !isStopped, !Task.isCancelled, loop == nil, isProcessing else { return }
         loop = Task { [weak self] in await self?.run() }
     }
 

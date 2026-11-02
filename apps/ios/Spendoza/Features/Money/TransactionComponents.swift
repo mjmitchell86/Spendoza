@@ -9,6 +9,8 @@ struct TransactionRow: View {
     var showsSignAndCategory = false
     /// False while the row selects instead of opening the category picker.
     var showsChevron = true
+    /// False when the caller draws the row's rule (it adds more lines inside the same row).
+    var ruled = true
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var amountText: String {
@@ -44,8 +46,12 @@ struct TransactionRow: View {
             .accessibilityHidden(true)
     }
 
-    var body: some View {
-        RuledRow {
+    @ViewBuilder var body: some View {
+        if ruled { RuledRow { content } } else { content }
+    }
+
+    private var content: some View {
+        Group {
             // At accessibility sizes the amount goes under the description, so the description keeps the full width.
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 4) {
